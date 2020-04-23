@@ -125,6 +125,7 @@ static void
 pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 {
   fprintf (asm_out_file, "\t.section\t.pdb, \"ndr\"\n");
+  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
 
   while (funcs) {
     struct pdb_func *n;
