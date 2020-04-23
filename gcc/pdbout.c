@@ -3,6 +3,11 @@
 #include "coretypes.h"
 #include "tree.h"
 #include "debug.h"
+#include "pdbout.h"
+#include "function.h"
+#include "output.h"
+#include "target.h"
+#include "defaults.h"
 
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
@@ -18,7 +23,7 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   debug_nothing_int_int,	         /* end_block */
   debug_true_const_tree,	         /* ignore_block */
   debug_nothing_int_int_charstar_int_bool, /* source_line */
-  debug_nothing_int_int_charstar,	 /* begin_prologue */
+  pdbout_begin_prologue,
   debug_nothing_int_charstar,	         /* end_prologue */
   debug_nothing_int_charstar,	         /* begin_epilogue */
   debug_nothing_int_charstar,	         /* end_epilogue */
@@ -44,3 +49,14 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   0,                                     /* start_end_main_source_file */
   TYPE_SYMTAB_IS_ADDRESS                 /* tree_type_symtab_field */
 };
+
+void
+pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
+		       unsigned int column ATTRIBUTE_UNUSED,
+		       const char *file ATTRIBUTE_UNUSED)
+{
+  // FIXME
+
+  ASM_OUTPUT_DEBUG_LABEL (asm_out_file, "testfunc",
+			  current_function_funcdef_no);
+}
