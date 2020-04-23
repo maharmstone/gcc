@@ -11,14 +11,14 @@
 
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
-  debug_nothing_charstar,
-  debug_nothing_charstar,
+  debug_nothing_charstar,		 /* init */
+  debug_nothing_charstar,		 /* finish */
   debug_nothing_charstar,			/* early_finish */
-  debug_nothing_void,
-  debug_nothing_int_charstar,
-  debug_nothing_int_charstar,
-  debug_nothing_int_charstar,
-  debug_nothing_int,
+  debug_nothing_void,			 /* assembly_start */
+  debug_nothing_int_charstar,		 /* define */
+  debug_nothing_int_charstar,		 /* undef */
+  debug_nothing_int_charstar,		 /* start_source_file */
+  debug_nothing_int,			 /* end_source_file */
   debug_nothing_int_int,	         /* begin_block */
   debug_nothing_int_int,	         /* end_block */
   debug_true_const_tree,	         /* ignore_block */
