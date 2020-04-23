@@ -9,6 +9,9 @@
 #include "target.h"
 #include "defaults.h"
 
+#define FUNC_BEGIN_LABEL	"LFB"
+#define FUNC_END_LABEL		"LFE"
+
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
   debug_nothing_charstar,		 /* init */
@@ -26,7 +29,7 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   pdbout_begin_prologue,
   debug_nothing_int_charstar,	         /* end_prologue */
   debug_nothing_int_charstar,	         /* begin_epilogue */
-  debug_nothing_int_charstar,	         /* end_epilogue */
+  pdbout_end_epilogue,		         /* end_epilogue */
   debug_nothing_tree,		         /* begin_function */
   debug_nothing_int,		         /* end_function */
   debug_nothing_tree,		         /* register_main_translation_unit */
@@ -55,8 +58,14 @@ pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 		       unsigned int column ATTRIBUTE_UNUSED,
 		       const char *file ATTRIBUTE_UNUSED)
 {
-  // FIXME
+  ASM_OUTPUT_DEBUG_LABEL (asm_out_file, FUNC_BEGIN_LABEL,
+			  current_function_funcdef_no);
+}
 
-  ASM_OUTPUT_DEBUG_LABEL (asm_out_file, "testfunc",
+void
+pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
+		     const char *file ATTRIBUTE_UNUSED)
+{
+  ASM_OUTPUT_DEBUG_LABEL (asm_out_file, FUNC_END_LABEL,
 			  current_function_funcdef_no);
 }
