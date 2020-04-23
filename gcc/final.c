@@ -231,7 +231,7 @@ static int alter_cond (rtx);
 static int align_fuzz (rtx, rtx, int, unsigned);
 static void collect_fn_hard_reg_usage (void);
 static tree get_call_fndecl (rtx_insn *);
-
+
 /* Initialize data in final at the beginning of a compilation.  */
 
 void
@@ -292,7 +292,7 @@ app_disable (void)
       app_on = 0;
     }
 }
-
+
 /* Return the number of slots filled in the current
    delayed branch sequence (we don't count the insn needing the
    delay slot).   Zero if not in a delayed branch sequence.  */
@@ -305,7 +305,7 @@ dbr_sequence_length (void)
   else
     return 0;
 }
-
+
 /* The next two pages contain routines used to compute the length of an insn
    and to shorten branches.  */
 
@@ -434,7 +434,7 @@ get_attr_min_length (rtx_insn *insn)
 {
   return get_attr_length_1 (insn, insn_min_length);
 }
-
+
 /* Code to handle alignment inside shorten_branches.  */
 
 /* Here is an explanation how the algorithm in align_fuzz can give
@@ -630,7 +630,7 @@ insn_current_reference_address (rtx_insn *branch)
 	      + align_fuzz (dest, seq, length_unit_log, ~0));
     }
 }
-
+
 /* Compute branch alignments based on CFG profile.  */
 
 unsigned int
@@ -834,7 +834,7 @@ make_pass_compute_alignments (gcc::context *ctxt)
   return new pass_compute_alignments (ctxt);
 }
 
-
+
 /* Make a pass over all insns and compute their actual lengths by shortening
    any branches of variable length if possible.  */
 
@@ -1436,7 +1436,7 @@ asm_str_count (const char *templ)
 
   return count;
 }
-
+
 /* Return true if DWARF2 debug info can be emitted for DECL.  */
 
 static bool
@@ -1896,7 +1896,7 @@ final_end_function (void)
 
   some_local_dynamic_name = 0;
 }
-
+
 
 /* Dumper helper for basic block information. FILE is the assembly
    output file, and INSN is the instruction being emitted.  */
@@ -2056,7 +2056,7 @@ final (rtx_insn *first, FILE *file, int optimize_p)
 
   final_1 (first, file, 0, optimize_p);
 }
-
+
 const char *
 get_insn_template (int code, rtx_insn *insn)
 {
@@ -3158,7 +3158,7 @@ final_scan_insn (rtx_insn *insn, FILE *file, int optimize_p,
   return ret;
 }
 
-
+
 
 /* Map DECLs to instance discriminators.  This is allocated and
    defined in ada/gcc-interfaces/trans.c, when compiling with -gnateS.
@@ -3301,7 +3301,7 @@ notice_source_line (rtx_insn *insn, bool *is_stmt)
 
   return false;
 }
-
+
 /* For each operand in INSN, simplify (subreg (reg)) so that it refers
    directly to the desired hard register.  */
 
@@ -3425,7 +3425,7 @@ walk_alter_subreg (rtx *xp, bool *changed)
 
   return *xp;
 }
-
+
 #if HAVE_cc0
 
 /* Given BODY, the body of a jump instruction, alter the jump condition
@@ -3586,7 +3586,7 @@ alter_cond (rtx cond)
   return value;
 }
 #endif
-
+
 /* Report inconsistency between the assembler template and the operands.
    In an `asm', it's the user's fault; otherwise, the compiler's fault.  */
 
@@ -3613,7 +3613,7 @@ output_operand_lossage (const char *cmsgid, ...)
   free (new_message);
   va_end (ap);
 }
-
+
 /* Output of assembler code from a template, and its subroutines.  */
 
 /* Annotate the assembly with a comment describing the pattern and
@@ -3995,7 +3995,7 @@ output_asm_insn (const char *templ, rtx *operands)
 
   putc ('\n', asm_out_file);
 }
-
+
 /* Output a LABEL_REF, or a bare CODE_LABEL, as an assembler symbol.  */
 
 void
@@ -4067,7 +4067,7 @@ output_address (machine_mode mode, rtx x)
   walk_alter_subreg (&x, &changed);
   targetm.asm_out.print_operand_address (asm_out_file, mode, x);
 }
-
+
 /* Print an integer constant expression in assembler syntax.
    Addition and subtraction are the only arithmetic
    that may appear in these expressions.  */
@@ -4207,7 +4207,7 @@ output_addr_const (FILE *file, rtx x)
       output_operand_lossage ("invalid expression as operand");
     }
 }
-
+
 /* Output a quoted string.  */
 
 void
@@ -4233,7 +4233,7 @@ output_quoted_string (FILE *asm_file, const char *string)
   putc ('\"', asm_file);
 #endif
 }
-
+
 /* Write a HOST_WIDE_INT number in hex form 0x1234, fast. */
 
 void
@@ -4462,7 +4462,7 @@ asm_fprintf (FILE *file, const char *p, ...)
       }
   va_end (argptr);
 }
-
+
 /* Return nonzero if this function has no function calls.  */
 
 int
@@ -4640,7 +4640,7 @@ leaf_renumber_regs_insn (rtx in_rtx)
       }
 }
 #endif
-
+
 /* Turn the RTL into assembly.  */
 static unsigned int
 rest_of_handle_final (void)

@@ -466,7 +466,7 @@ compile_file (void)
 
   if (flag_syntax_only || flag_wpa)
     return;
- 
+
   /* Reset maximum_field_alignment, it can be adjusted by #pragma pack
      and this shouldn't influence any types built by the middle-end
      from now on (like gcov_info_type).  */
@@ -1334,7 +1334,7 @@ process_options (void)
       global_dc->edit_context_ptr = new edit_context ();
 
   /* Avoid any informative notes in the second run of -fcompare-debug.  */
-  if (flag_compare_debug) 
+  if (flag_compare_debug)
     diagnostic_inhibit_notes (global_dc);
 
   if (flag_section_anchors && !target_supports_section_anchors_p ())
@@ -1530,6 +1530,9 @@ process_options (void)
   else if (write_symbols == DWARF2_DEBUG)
     debug_hooks = &dwarf2_lineno_debug_hooks;
 #endif
+  // FIXME - add a compiler definition for this
+  else if (write_symbols == PDB_DEBUG)
+    debug_hooks = &pdb_debug_hooks;
   else
     error_at (UNKNOWN_LOCATION,
 	      "target system does not support the %qs debug format",
@@ -1993,7 +1996,7 @@ target_reinit (void)
      to allow target_reinit being called even after prepare_function_start.  */
   saved_regno_reg_rtx = regno_reg_rtx;
   if (saved_regno_reg_rtx)
-    {  
+    {
       saved_x_rtl = *crtl;
       memset (crtl, '\0', sizeof (*crtl));
       regno_reg_rtx = NULL;

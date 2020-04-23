@@ -1011,7 +1011,7 @@ PLUGIN_VERSION_H = plugin-version.h configargs.h
 CONTEXT_H = context.h
 GENSUPPORT_H = gensupport.h read-md.h optabs.def
 
-#
+#
 # Now figure out from those variables how to compile and link.
 
 # IN_GCC distinguishes between code compiled into GCC itself and other
@@ -1116,7 +1116,7 @@ endif
 	$(COMPILE) $<
 	$(POSTCOMPILE)
 
-#
+#
 # Support for additional languages (other than C).
 # C can be supported this way too (leave for later).
 
@@ -1181,7 +1181,7 @@ FLAGS_TO_PASS = \
 	"datadir=$(datadir)" \
 	"libsubdir=$(libsubdir)" \
 	"localedir=$(localedir)"
-#
+#
 # Lists of files for various purposes.
 
 # All option source files
@@ -1442,6 +1442,7 @@ OBJS = \
 	options-save.o \
 	opts-global.o \
 	passes.o \
+	pdbout.o \
 	plugin.o \
 	postreload-gcse.o \
 	postreload.o \
@@ -1686,7 +1687,7 @@ $(FULL_DRIVER_NAME): ./xgcc
 	rm -f $@
 	$(LN_S) $< $@
 
-#
+#
 # Language makefile fragments.
 
 # The following targets define the interface between us and the languages.
@@ -1742,7 +1743,7 @@ s-alltree: Makefile
 # no front end should ever look at (e.g. everything RTL related).
 $(foreach file,$(ALL_HOST_FRONTEND_OBJS),$(eval CFLAGS-$(file) += -DIN_GCC_FRONTEND))
 
-#
+#
 
 # -----------------------------
 # Rebuilding this configuration
@@ -2024,7 +2025,7 @@ checksum-options:
 	echo "$(LINKER) $(ALL_LINKERFLAGS) $(LDFLAGS)" > checksum-options.tmp \
 	&& $(srcdir)/../move-if-change checksum-options.tmp checksum-options
 
-#
+#
 # Build libgcc.a.
 
 libgcc-support: libgcc.mvars stmp-int-hdrs $(TCONFIG_H) \
@@ -2071,7 +2072,7 @@ s-mlib: $(srcdir)/genmultilib Makefile
 	fi
 	$(SHELL) $(srcdir)/../move-if-change tmp-mlib.h multilib.h
 	$(STAMP) s-mlib
-#
+#
 # Compiling object files from source files.
 
 # Note that dependencies on obstack.h are not written
@@ -2249,7 +2250,7 @@ $(out_object_file): $(out_file)
 $(common_out_object_file): $(common_out_file)
 	$(COMPILE) $<
 	$(POSTCOMPILE)
-#
+#
 # Generate header and source files from the machine description,
 # and compile them.
 
@@ -2582,6 +2583,7 @@ GTFILES = $(CPPLIB_H) $(srcdir)/input.h $(srcdir)/coretypes.h \
   $(srcdir)/hsa-common.c \
   $(srcdir)/calls.c \
   $(srcdir)/omp-general.h \
+  $(srcdir)/pdbout.c \
   @all_gtfiles@
 
 # Compute the list of GT header files from the corresponding C sources,
@@ -2606,7 +2608,7 @@ ALL_GTFILES_H := $(sort $(GTFILES_H) $(GTFILES_LANG_H))
 $(ALL_GTFILES_H) gtype-desc.c gtype-desc.h gtype.state: s-gtype ; @true
 
 ### Common flags to gengtype [e.g. -v or -B backupdir]
-GENGTYPE_FLAGS= 
+GENGTYPE_FLAGS=
 
 gtyp-input.list: s-gtyp-input ; @true
 s-gtyp-input: Makefile
@@ -2637,7 +2639,7 @@ generated_files = config.h tm.h $(TM_P_H) $(TM_D_H) $(TM_H) multilib.h \
        params.list params.options case-cfn-macros.h \
        cfn-operators.pd
 
-#
+#
 # How to compile object files to run on the build machine.
 
 build/%.o :  # dependencies provided by explicit rule later
@@ -2858,11 +2860,11 @@ gengtype-lex.c : gengtype-lex.l
 	  mv $@.tmp $@; \
 	}
 
-#
+#
 # Remake internationalization support.
 CFLAGS-intl.o += -DLOCALEDIR=\"$(localedir)\"
 
-#
+#
 # Remake cpp.
 
 PREPROCESSOR_DEFINES = \
@@ -2931,7 +2933,7 @@ libgcov-merge-tool.o: $(srcdir)/../libgcc/libgcov-merge.c $(GCOV_TOOL_DEP_FILES)
 GCOV_TOOL_OBJS = gcov-tool.o libgcov-util.o libgcov-driver-tool.o libgcov-merge-tool.o
 gcov-tool$(exeext): $(GCOV_TOOL_OBJS) $(LIBDEPS)
 	+$(LINKER) $(ALL_LINKERFLAGS) $(LDFLAGS) $(GCOV_TOOL_OBJS) $(LIBS) -o $@
-#
+#
 # Build the include directories.  The stamp files are stmp-* rather than
 # s-* so that mostlyclean does not force the include directory to
 # be rebuilt.
@@ -3101,7 +3103,7 @@ stmp-fixinc: gsyslimits.h macro_list fixinc_list \
 	  done; \
 	fi
 	$(STAMP) stmp-fixinc
-#
+#
 
 # Install with the gcc headers files, not the fixed include files, which we
 # are typically not allowed to distribute.  The general idea is to:
@@ -3325,7 +3327,7 @@ gpl.pod: gpl_v3.texi
 	$(STAMP) $@
 	-$(TEXI2POD) $< > $@
 
-#
+#
 # Deletion of files made during compilation.
 # There are four levels of this:
 #   `mostlyclean', `clean', `distclean' and `maintainer-clean'.
@@ -3427,7 +3429,7 @@ maintainer-clean:
 	-rm -f cpp.??s cpp.*aux
 	-rm -f gcc.??s gcc.*aux
 	-rm -f $(gcc_docdir)/*.info $(gcc_docdir)/*.1 $(gcc_docdir)/*.7 $(gcc_docdir)/*.dvi $(gcc_docdir)/*.pdf
-#
+#
 # Entry points `install', `install-strip', and `uninstall'.
 # Also use `install-collect2' to install collect2 when the config files don't.
 
@@ -3864,7 +3866,7 @@ uninstall: lang.uninstall
 	  rm -f $(DESTDIR)$(bindir)/$$install_name ; \
 	  rm -f $(DESTDIR)$(bindir)/$$target_install_name ; \
 	done
-#
+#
 # These targets are for the dejagnu testsuites. The file site.exp
 # contains global variables that all the testsuites will use.
 
@@ -4241,7 +4243,7 @@ po/gcc.pot: force
 	AWK=$(AWK) $(SHELL) $(srcdir)/po/exgettext \
 		$(XGETTEXT) gcc $(srcdir)
 
-#
+#
 
 # Dependency information.
 
