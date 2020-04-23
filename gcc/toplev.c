@@ -1589,6 +1589,9 @@ process_options (void)
   else if (write_symbols == DWARF2_DEBUG)
     debug_hooks = &dwarf2_lineno_debug_hooks;
 #endif
+  // FIXME - add a compiler definition for this
+  else if (write_symbols == PDB_DEBUG)
+    debug_hooks = &pdb_debug_hooks;
   else
     error_at (UNKNOWN_LOCATION,
 	      "target system does not support the %qs debug format",

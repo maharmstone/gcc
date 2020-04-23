@@ -2730,6 +2730,10 @@ common_handle_option (struct gcc_options *opts,
       set_debug_level (NO_DEBUG, 2, arg, opts, opts_set, loc);
       break;
 
+    case OPT_gpdb:
+      set_debug_level (PDB_DEBUG, false, "", opts, opts_set, loc);
+      break;
+
     case OPT_gstabs:
     case OPT_gstabs_:
       set_debug_level (DBX_DEBUG, code == OPT_gstabs_, arg, opts, opts_set,

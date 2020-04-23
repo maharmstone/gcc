@@ -1476,6 +1476,7 @@ OBJS = \
 	opts-global.o \
 	ordered-hash-map-tests.o \
 	passes.o \
+	pdbout.o \
 	plugin.o \
 	postreload-gcse.o \
 	postreload.o \
@@ -2637,6 +2638,7 @@ GTFILES = $(CPPLIB_H) $(srcdir)/input.h $(srcdir)/coretypes.h \
   $(srcdir)/hsa-common.c \
   $(srcdir)/calls.c \
   $(srcdir)/omp-general.h \
+  $(srcdir)/pdbout.c \
   @all_gtfiles@
 
 # Compute the list of GT header files from the corresponding C sources,
