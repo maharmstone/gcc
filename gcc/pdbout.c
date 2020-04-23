@@ -12,11 +12,20 @@
 #define FUNC_BEGIN_LABEL	"LFB"
 #define FUNC_END_LABEL		"LFE"
 
+static void pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
+				   unsigned int column ATTRIBUTE_UNUSED,
+				   const char *file ATTRIBUTE_UNUSED);
+
+static void pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
+				 const char *file ATTRIBUTE_UNUSED);
+
+static void pdbout_finish (const char *filename);
+
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
   debug_nothing_charstar,		 /* init */
-  debug_nothing_charstar,		 /* finish */
-  debug_nothing_charstar,			/* early_finish */
+  pdbout_finish,			 /* finish */
+  debug_nothing_charstar,		 /* early_finish */
   debug_nothing_void,			 /* assembly_start */
   debug_nothing_int_charstar,		 /* define */
   debug_nothing_int_charstar,		 /* undef */
@@ -68,4 +77,12 @@ pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 {
   ASM_OUTPUT_DEBUG_LABEL (asm_out_file, FUNC_END_LABEL,
 			  current_function_funcdef_no);
+}
+
+void
+pdbout_finish (const char *filename)
+{
+  fprintf (asm_out_file, "\t.section\t.pdb, \"ndr\"\n");
+
+  // FIXME
 }
