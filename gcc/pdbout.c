@@ -94,7 +94,7 @@ pdbout_lproc32 (struct pdb_func *func)
   fprintf (asm_out_file, "\t.short\t[cvprocstarta%u]-[cvprocstart%u]-2\n", func->num, func->num); // reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_LPROC32); // rectyp (FIXME - GPROC32 if appropriate)
   fprintf (asm_out_file, "\t.long\t0\n"); // pParent
-  fprintf (asm_out_file, "\t.long\t[cvprocend%u]-[cvprocstart%u]\n", func->num, func->num); // pEnd
+  fprintf (asm_out_file, "\t.long\t[cvprocend%u]-[.pdb]\n", func->num); // pEnd
   fprintf (asm_out_file, "\t.long\t0\n"); // pNext
   fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num); // len
   fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - DbgStart
