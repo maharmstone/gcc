@@ -87,15 +87,11 @@ pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 static void
 pdbout_lproc32 (struct pdb_func *func)
 {
-  size_t name_len = strlen (func->name);
-
   // start procedure
-
-  fprintf (asm_out_file, "\t.balign\t4\n");
 
   ASM_OUTPUT_DEBUG_LABEL (asm_out_file, "cvprocstart", func->num);
 
-  fprintf (asm_out_file, "\t.short\t0x%lx\n", 37 + name_len + 1); // reclen
+  fprintf (asm_out_file, "\t.short\t[cvprocstarta%u]-[cvprocstart%u]-2\n", func->num, func->num); // reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_LPROC32); // rectyp (FIXME - GPROC32 if appropriate)
   fprintf (asm_out_file, "\t.long\t0\n"); // pParent
   fprintf (asm_out_file, "\t.long\t[cvprocend%u]-[cvprocstart%u]\n", func->num, func->num); // pEnd
@@ -109,11 +105,13 @@ pdbout_lproc32 (struct pdb_func *func)
   fprintf (asm_out_file, "\t.byte\t0\n"); // FIXME - flags
   ASM_OUTPUT_ASCII (asm_out_file, func->name, strlen (func->name) + 1);
 
+  fprintf (asm_out_file, "\t.balign\t4\n");
+
+  ASM_OUTPUT_DEBUG_LABEL (asm_out_file, "cvprocstarta", func->num);
+
   // FIXME - S_FRAMEPROC, S_BPREL32, S_CALLSITEINFO, etc.
 
   // end procedure
-
-  fprintf (asm_out_file, "\t.balign\t4\n");
 
   ASM_OUTPUT_DEBUG_LABEL (asm_out_file, "cvprocend", func->num);
 
