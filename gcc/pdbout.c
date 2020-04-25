@@ -92,7 +92,7 @@ pdbout_lproc32 (struct pdb_func *func)
   ASM_OUTPUT_DEBUG_LABEL (asm_out_file, "cvprocstart", func->num);
 
   fprintf (asm_out_file, "\t.short\t[cvprocstarta%u]-[cvprocstart%u]-2\n", func->num, func->num); // reclen
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_LPROC32); // rectyp (FIXME - GPROC32 if appropriate)
+  fprintf (asm_out_file, "\t.short\t0x%x\n", func->public_flag ? CODEVIEW_S_GPROC32 : CODEVIEW_S_LPROC32);
   fprintf (asm_out_file, "\t.long\t0\n"); // pParent
   fprintf (asm_out_file, "\t.long\t[cvprocend%u]-[.pdb]\n", func->num); // pEnd
   fprintf (asm_out_file, "\t.long\t0\n"); // pNext
@@ -150,6 +150,7 @@ pdbout_begin_function (tree func)
   f->next = funcs;
   f->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(func)));
   f->num = current_function_funcdef_no;
+  f->public_flag = func->base.public_flag;
 
   funcs = f;
 }
