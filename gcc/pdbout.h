@@ -20,6 +20,7 @@ struct pdb_global_var {
   struct pdb_global_var *next;
   char *name;
   char *asm_name;
+  unsigned int public_flag;
 };
 
 #endif

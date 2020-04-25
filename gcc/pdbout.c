@@ -134,7 +134,7 @@ pdbout_ldata32 (struct pdb_global_var *v)
     len += 4 - (len % 4);
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_LDATA32); // FIXME - S_GDATA32 if not static
+  fprintf (asm_out_file, "\t.short\t0x%x\n", v->public_flag ? CODEVIEW_S_GDATA32 : CODEVIEW_S_LDATA32);
   fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - type
 
   fprintf (asm_out_file, "\t.long\t["); // off
@@ -210,9 +210,9 @@ static void pdbout_late_global_decl(tree var)
   v->next = global_vars;
   v->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(var)));
   v->asm_name = xstrdup((const char*)var->var_decl.common.assembler_name->identifier.id.str); // FIXME - is this guaranteed to be null-terminated?
+  v->public_flag = var->base.public_flag;
 
   // FIXME - record type
-  // FIXME - record whether static or not
 
   global_vars = v;
 }
