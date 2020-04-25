@@ -16,15 +16,14 @@
 static void pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 				   unsigned int column ATTRIBUTE_UNUSED,
 				   const char *file ATTRIBUTE_UNUSED);
-
 static void pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 				 const char *file ATTRIBUTE_UNUSED);
-
 static void pdbout_finish (const char *filename);
-
 static void pdbout_begin_function(tree func);
+static void pdbout_late_global_decl(tree var);
 
 static struct pdb_func *funcs = NULL;
+static struct pdb_global_var *global_vars = NULL;
 
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
@@ -48,8 +47,8 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   debug_nothing_int,		         /* end_function */
   debug_nothing_tree,		         /* register_main_translation_unit */
   debug_nothing_tree,		         /* function_decl */
-  debug_nothing_tree,	         	 /* early_global_decl */
-  debug_nothing_tree,	         	 /* late_global_decl */
+  debug_nothing_tree,		         /* early_global_decl */
+  pdbout_late_global_decl,
   debug_nothing_tree_int,		 /* type_decl */
   debug_nothing_tree_tree_tree_bool_bool,/* imported_module_or_decl */
   debug_false_tree_charstarstar_uhwistar,/* die_ref_for_decl */
@@ -58,7 +57,7 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   debug_nothing_tree,		         /* outlining_inline_function */
   debug_nothing_rtx_code_label,	         /* label */
   debug_nothing_int,		         /* handle_pch */
-  debug_nothing_rtx_insn,	         /* var_location */
+  debug_nothing_rtx_insn,		 /* var_location */
   debug_nothing_tree,	         	 /* inline_entry */
   debug_nothing_tree,			 /* size_function */
   debug_nothing_void,                    /* switch_text_section */
@@ -88,6 +87,8 @@ static void
 pdbout_lproc32 (struct pdb_func *func)
 {
   // start procedure
+
+  // FIXME - don't use labels to do alignment
 
   ASM_OUTPUT_DEBUG_LABEL (asm_out_file, "cvprocstart", func->num);
 
@@ -120,10 +121,55 @@ pdbout_lproc32 (struct pdb_func *func)
 }
 
 static void
+pdbout_ldata32 (struct pdb_global_var *v)
+{
+  size_t name_len = strlen(v->name);
+  uint16_t len;
+
+  // Outputs DATASYM32 struct
+
+  len = 15 + name_len;
+
+  if (len % 4 != 0)
+    len += 4 - (len % 4);
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_LDATA32); // FIXME - S_GDATA32 if not static
+  fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - type
+
+  fprintf (asm_out_file, "\t.long\t["); // off
+  ASM_OUTPUT_LABELREF (asm_out_file, v->asm_name);
+  fprintf (asm_out_file, "]\n");
+
+  fprintf (asm_out_file, "\t.short\t0\n"); // seg (will get set by the linker)
+  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+
+  fprintf (asm_out_file, "\t.balign\t4\n");
+}
+
+static void
 pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 {
   fprintf (asm_out_file, "\t.section\t.pdb, \"ndr\"\n");
   fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
+
+  while (global_vars) {
+    struct pdb_global_var *n;
+
+    pdbout_ldata32(global_vars);
+
+    n = global_vars->next;
+
+    if (global_vars->name)
+      free (global_vars->name);
+
+    if (global_vars->asm_name)
+      free (global_vars->asm_name);
+
+    free(global_vars);
+
+    global_vars = n;
+  }
 
   while (funcs) {
     struct pdb_func *n;
@@ -139,7 +185,6 @@ pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 
     funcs = n;
   }
-
 }
 
 static void
@@ -153,4 +198,21 @@ pdbout_begin_function (tree func)
   f->public_flag = func->base.public_flag;
 
   funcs = f;
+}
+
+static void pdbout_late_global_decl(tree var)
+{
+  if (TREE_CODE (var) != VAR_DECL)
+    return;
+
+  struct pdb_global_var *v = (struct pdb_global_var*)xmalloc(sizeof(struct pdb_global_var));
+
+  v->next = global_vars;
+  v->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(var)));
+  v->asm_name = xstrdup((const char*)var->var_decl.common.assembler_name->identifier.id.str); // FIXME - is this guaranteed to be null-terminated?
+
+  // FIXME - record type
+  // FIXME - record whether static or not
+
+  global_vars = v;
 }
