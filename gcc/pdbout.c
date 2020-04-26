@@ -236,11 +236,29 @@ write_fieldlist(struct pdb_fieldlist *fl)
     fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].cv_type);
 
     if (fl->entries[i].cv_type == CODEVIEW_LF_MEMBER) {
+      size_t name_len = strlen(fl->entries[i].name);
+      unsigned int align;
+
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].fld_attr);
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].type);
       fprintf (asm_out_file, "\t.short\t0\n"); // padding
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].offset);
-      ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name, strlen(fl->entries[i].name) + 1);
+      ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name, name_len + 1);
+
+      // handle alignment padding
+
+      align = 4 - ((3 + name_len) % 4);
+
+      if (align != 4) {
+	if (align == 3)
+	  fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+	if (align >= 2)
+	  fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+	fprintf (asm_out_file, "\t.byte\t0xf1\n");
+      }
+
       fprintf (asm_out_file, "\t.balign\t4\n");
     }
   }
