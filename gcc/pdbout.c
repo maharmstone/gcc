@@ -236,7 +236,7 @@ write_fieldlist(struct pdb_fieldlist *fl)
     fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].cv_type);
 
     if (fl->entries[i].cv_type == CODEVIEW_LF_MEMBER) {
-      fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - attributes
+      fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].fld_attr);
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].type);
       fprintf (asm_out_file, "\t.short\t0\n"); // padding
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].offset);
@@ -369,6 +369,7 @@ find_type_struct(tree t)
     ent->cv_type = CODEVIEW_LF_MEMBER;
     ent->type = find_type(f->common.typed.type);
     ent->offset = bit_offset / 8; // FIXME - what about bit fields?
+    ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
     ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
 
     f = f->common.chain;
