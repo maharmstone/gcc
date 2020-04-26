@@ -25,22 +25,27 @@ struct pdb_global_var {
   unsigned int public_flag;
 };
 
-struct pdb_struct_fieldlist_entry {
-  uint32_t offset;
-  uint16_t type;
-  char *name;
-};
-
-struct pdb_struct_fieldlist {
-  uint16_t num;
-  unsigned int count;
-  struct pdb_struct_fieldlist_entry entries[1];
-};
+// CV_fldattr_t in cvinfo
+#define CV_FLDATTR_PRIVATE	0x0001
+#define CV_FLDATTR_PROTECTED	0x0002
+#define CV_FLDATTR_PUBLIC	0x0003
+#define CV_FLDATTR_VIRTUAL	0x0004
+#define CV_FLDATTR_STATIC	0x0008
+#define CV_FLDATTR_FRIEND	0x000C
+#define CV_FLDATTR_INTRO	0x0010
+#define CV_FLDATTR_PUREVIRT	0x0014
+#define CV_FLDATTR_PUREINTRO	0x0018
+#define CV_FLDATTR_PSEUDO	0x0020
+#define CV_FLDATTR_NOINHERIT	0x0040
+#define CV_FLDATTR_NOCONSTRUCT	0x0080
+#define CV_FLDATTR_COMPGENX	0x0100
+#define CV_FLDATTR_SEALED	0x0200
 
 struct pdb_fieldlist_entry {
   uint16_t cv_type;
   uint16_t type;
   uint16_t offset;
+  uint16_t fld_attr;
   char* name;
 };
 
