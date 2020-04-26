@@ -198,7 +198,7 @@ free_type(struct pdb_type *t)
   switch (t->cv_type) {
     case CODEVIEW_LF_FIELDLIST:
     {
-      struct pdb_fieldlist* fl = (struct pdb_fieldlist*)t->data;
+      struct pdb_fieldlist *fl = (struct pdb_fieldlist*)t->data;
 
       for (unsigned int i = 0; i < fl->count; i++) {
 	if (fl->entries[i].name)
@@ -206,6 +206,17 @@ free_type(struct pdb_type *t)
       }
 
       free(fl->entries);
+
+      break;
+    }
+
+    case CODEVIEW_LF_CLASS:
+    case CODEVIEW_LF_STRUCTURE:
+    {
+      struct pdb_struct *str = (struct pdb_struct*)t->data;
+
+      if (str->name)
+	free(str->name);
 
       break;
     }
@@ -258,12 +269,47 @@ write_fieldlist(struct pdb_fieldlist *fl)
 
 	fprintf (asm_out_file, "\t.byte\t0xf1\n");
       }
-
-      fprintf (asm_out_file, "\t.balign\t4\n");
     }
   }
+}
 
-  fprintf (asm_out_file, "\t.balign\t4\n");
+static void
+write_struct(uint16_t type, struct pdb_struct *str)
+{
+  size_t name_len = strlen(str->name);
+  unsigned int len = 23 + name_len, align;
+
+  if (len % 4 != 0)
+    len += 4 - (len % 4);
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
+  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - property
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->field);
+  fprintf (asm_out_file, "\t.short\t0\n"); // derived
+  fprintf (asm_out_file, "\t.short\t0\n"); // vshape
+
+  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME
+  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME
+  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->size);
+
+  ASM_OUTPUT_ASCII (asm_out_file, str->name, name_len + 1);
+
+  // FIXME - unique name?
+
+  align = 4 - ((3 + name_len) % 4);
+
+  if (align != 4) {
+    if (align == 3)
+      fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+    if (align >= 2)
+      fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+    fprintf (asm_out_file, "\t.byte\t0xf1\n");
+  }
 }
 
 static void
@@ -272,6 +318,13 @@ write_type(struct pdb_type *t)
   switch (t->cv_type) {
     case CODEVIEW_LF_FIELDLIST:
       write_fieldlist((struct pdb_fieldlist*)t->data);
+      break;
+
+    case CODEVIEW_LF_CLASS:
+    case CODEVIEW_LF_STRUCTURE:
+      write_struct(t->cv_type, (struct pdb_struct*)t->data);
+      break;
+
     break;
   }
 }
@@ -335,15 +388,13 @@ static uint16_t
 find_type_struct(tree t)
 {
   tree f;
-  struct pdb_type *fltype;
+  struct pdb_type *fltype, *strtype;
   struct pdb_fieldlist *fieldlist;
   struct pdb_fieldlist_entry *ent;
+  struct pdb_struct *str;
   unsigned int num_entries = 0;
 
   // FIXME - what about self-referencing structs?
-
-  printf("STRUCT %s\n", IDENTIFIER_POINTER(TYPE_NAME(t)));
-  // FIXME - size
 
   f = t->type_non_common.values;
 
@@ -394,9 +445,34 @@ find_type_struct(tree t)
     ent++;
   }
 
-  // FIXME - add type for struct
+  // add type for struct
 
-  return 0;
+  strtype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_struct));
+
+  strtype->next = NULL;
+
+  strtype->id = type_num;
+  type_num++;
+
+  strtype->tree = t;
+  strtype->cv_type = CODEVIEW_LF_STRUCTURE; // FIXME - LF_CLASS if C++ class?
+
+  if (last_type)
+    last_type->next = strtype;
+
+  if (!types)
+    types = strtype;
+
+  last_type = strtype;
+
+  str = (struct pdb_struct*)strtype->data;
+  str->count = num_entries;
+  str->field = fltype->id;
+  str->size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
+
+  str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
+
+  return strtype->id;
 }
 
 static uint16_t
