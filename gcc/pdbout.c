@@ -8,7 +8,7 @@
 #include "output.h"
 #include "target.h"
 #include "defaults.h"
-#include "print-tree.h"
+#include "print-tree.h" // FIXME - remove this
 
 #define FUNC_BEGIN_LABEL	"LFB"
 #define FUNC_END_LABEL		"LFE"
@@ -21,9 +21,14 @@ static void pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 static void pdbout_finish (const char *filename);
 static void pdbout_begin_function(tree func);
 static void pdbout_late_global_decl(tree var);
+static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED);
+
+static uint16_t find_type(tree t);
 
 static struct pdb_func *funcs = NULL;
 static struct pdb_global_var *global_vars = NULL;
+static struct pdb_type *types = NULL, *last_type = NULL;
+static uint16_t type_num = 0x1000;
 
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
@@ -49,7 +54,7 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   debug_nothing_tree,		         /* function_decl */
   debug_nothing_tree,		         /* early_global_decl */
   pdbout_late_global_decl,
-  debug_nothing_tree_int,		 /* type_decl */
+  pdbout_type_decl,
   debug_nothing_tree_tree_tree_bool_bool,/* imported_module_or_decl */
   debug_false_tree_charstarstar_uhwistar,/* die_ref_for_decl */
   debug_nothing_tree_charstar_uhwi,      /* register_external_die */
@@ -148,7 +153,7 @@ pdbout_ldata32 (struct pdb_global_var *v)
 }
 
 static void
-pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
+write_pdb_section()
 {
   fprintf (asm_out_file, "\t.section\t.pdb, \"ndr\"\n");
   fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
@@ -188,6 +193,97 @@ pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 }
 
 static void
+free_type(struct pdb_type *t)
+{
+  switch (t->cv_type) {
+    case CODEVIEW_LF_FIELDLIST:
+    {
+      struct pdb_fieldlist* fl = (struct pdb_fieldlist*)t->data;
+
+      for (unsigned int i = 0; i < fl->count; i++) {
+	if (fl->entries[i].name)
+	  free(fl->entries[i].name);
+      }
+
+      free(fl->entries);
+
+      break;
+    }
+  }
+
+  free(t);
+}
+
+static void
+write_fieldlist(struct pdb_fieldlist *fl)
+{
+  unsigned int len = 4;
+
+  for (unsigned int i = 0; i < fl->count; i++) {
+    len += 2;
+
+    if (fl->entries[i].cv_type == CODEVIEW_LF_MEMBER)
+      len += 9 + strlen(fl->entries[i].name);
+
+    if (len % 4 != 0)
+      len += 4 - (len % 4);
+  }
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_FIELDLIST);
+
+  for (unsigned int i = 0; i < fl->count; i++) {
+    fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].cv_type);
+
+    if (fl->entries[i].cv_type == CODEVIEW_LF_MEMBER) {
+      fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - attributes
+      fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].type);
+      fprintf (asm_out_file, "\t.short\t0\n"); // padding
+      fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].offset);
+      ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name, strlen(fl->entries[i].name) + 1);
+      fprintf (asm_out_file, "\t.balign\t4\n");
+    }
+  }
+
+  fprintf (asm_out_file, "\t.balign\t4\n");
+}
+
+static void
+write_type(struct pdb_type *t)
+{
+  switch (t->cv_type) {
+    case CODEVIEW_LF_FIELDLIST:
+      write_fieldlist((struct pdb_fieldlist*)t->data);
+    break;
+  }
+}
+
+static void
+write_pdb_type_section()
+{
+  fprintf (asm_out_file, "\t.section\t.pdb$typ, \"ndr\"\n");
+
+  while (types) {
+    struct pdb_type *n;
+
+    write_type(types);
+
+    n = types->next;
+
+    free_type(types);
+
+    types = n;
+  }
+}
+
+static void
+pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
+{
+  write_pdb_section();
+  write_pdb_type_section();
+}
+
+static void
 pdbout_begin_function (tree func)
 {
   struct pdb_func *f = (struct pdb_func*)xmalloc(sizeof(struct pdb_func));
@@ -215,4 +311,105 @@ static void pdbout_late_global_decl(tree var)
   // FIXME - record type
 
   global_vars = v;
+}
+
+static uint16_t
+find_type_struct(tree t)
+{
+  tree f;
+  struct pdb_type *fltype;
+  struct pdb_fieldlist *fieldlist;
+  struct pdb_fieldlist_entry *ent;
+  unsigned int num_entries = 0;
+
+  // FIXME - what about self-referencing structs?
+
+  printf("STRUCT %s\n", IDENTIFIER_POINTER(TYPE_NAME(t)));
+  // FIXME - size
+
+  f = t->type_non_common.values;
+
+  while (f) {
+    num_entries++;
+    f = f->common.chain;
+  }
+
+  // FIXME - check fieldlist doesn't already exist
+
+  // add fieldlist type
+
+  fltype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_fieldlist));
+
+  fltype->next = NULL;
+
+  fltype->id = type_num;
+  type_num++;
+
+  fltype->tree = NULL;
+  fltype->cv_type = CODEVIEW_LF_FIELDLIST;
+
+  if (last_type)
+    last_type->next = fltype;
+
+  if (!types)
+    types = fltype;
+
+  last_type = fltype;
+
+  fieldlist = (struct pdb_fieldlist*)fltype->data;
+  fieldlist->count = num_entries;
+  fieldlist->entries = (struct pdb_fieldlist_entry*)xmalloc(sizeof(struct pdb_fieldlist_entry) * num_entries);
+
+  ent = fieldlist->entries;
+  f = t->type_non_common.values;
+
+  while (f) {
+    unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
+
+    ent->cv_type = CODEVIEW_LF_MEMBER;
+    ent->type = find_type(f->common.typed.type);
+    ent->offset = bit_offset / 8; // FIXME - what about bit fields?
+    ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
+
+    f = f->common.chain;
+    ent++;
+  }
+
+  // FIXME - add type for struct
+
+  return 0;
+}
+
+static uint16_t
+find_type(tree t)
+{
+  // FIXME - identify builtins
+
+  // FIXME - look for pointer in existing list
+
+  // FIXME - only add new if told to
+
+  // FIXME - integer_type
+  // FIXME - real_type
+  // FIXME - void_type
+  // FIXME - unions
+  // FIXME - enums
+  // FIXME - pointers
+  // FIXME - constness etc.
+  // FIXME - any others?
+
+  if (t->base.code == RECORD_TYPE)
+    return find_type_struct(t);
+  else
+    return 0;
+}
+
+static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
+{
+  if (DECL_IN_SYSTEM_HEADER(t)) // ignoring system headers for now (FIXME)
+    return;
+
+  // FIXME - if from file in /usr/include or wherever, only include in output if used
+
+  find_type(t->typed.type);
 }
