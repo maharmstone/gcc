@@ -213,6 +213,7 @@ free_type(struct pdb_type *t)
 
     case CODEVIEW_LF_CLASS:
     case CODEVIEW_LF_STRUCTURE:
+    case CODEVIEW_LF_UNION:
     {
       struct pdb_struct *str = (struct pdb_struct*)t->data;
 
@@ -314,6 +315,40 @@ write_struct(uint16_t type, struct pdb_struct *str)
 }
 
 static void
+write_union(struct pdb_struct *str)
+{
+  size_t name_len = strlen(str->name);
+  unsigned int len = 15 + name_len, align;
+
+  if (len % 4 != 0)
+    len += 4 - (len % 4);
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_UNION);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
+  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - property
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->field);
+  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->size);
+
+  ASM_OUTPUT_ASCII (asm_out_file, str->name, name_len + 1);
+
+  // FIXME - unique name?
+
+  align = 4 - ((3 + name_len) % 4);
+
+  if (align != 4) {
+    if (align == 3)
+      fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+    if (align >= 2)
+      fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+    fprintf (asm_out_file, "\t.byte\t0xf1\n");
+  }
+}
+
+static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
@@ -326,7 +361,9 @@ write_type(struct pdb_type *t)
       write_struct(t->cv_type, (struct pdb_struct*)t->data);
       break;
 
-    break;
+    case CODEVIEW_LF_UNION:
+      write_union((struct pdb_struct*)t->data);
+      break;
   }
 }
 
@@ -485,6 +522,104 @@ find_type_struct(tree t)
 }
 
 static uint16_t
+find_type_union(tree t)
+{
+  tree f;
+  struct pdb_type *fltype, *uniontype;
+  struct pdb_fieldlist *fieldlist;
+  struct pdb_fieldlist_entry *ent;
+  struct pdb_struct *str;
+  unsigned int num_entries = 0;
+
+  f = t->type_non_common.values;
+
+  while (f) {
+    if (TREE_CODE(f) == FIELD_DECL)
+      num_entries++;
+
+    f = f->common.chain;
+  }
+
+  // FIXME - check fieldlist doesn't already exist
+
+  // add fieldlist type
+
+  fltype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_fieldlist));
+
+  fltype->next = NULL;
+
+  fltype->id = type_num;
+  type_num++;
+
+  fltype->tree = NULL;
+  fltype->cv_type = CODEVIEW_LF_FIELDLIST;
+
+  if (last_type)
+    last_type->next = fltype;
+
+  if (!types)
+    types = fltype;
+
+  last_type = fltype;
+
+  fieldlist = (struct pdb_fieldlist*)fltype->data;
+  fieldlist->count = num_entries;
+  fieldlist->entries = (struct pdb_fieldlist_entry*)xmalloc(sizeof(struct pdb_fieldlist_entry) * num_entries);
+
+  ent = fieldlist->entries;
+  f = t->type_non_common.values;
+
+  while (f) {
+    if (TREE_CODE(f) == FIELD_DECL) {
+      unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
+
+      ent->cv_type = CODEVIEW_LF_MEMBER;
+      ent->type = find_type(f->common.typed.type, false);
+      ent->offset = bit_offset / 8; // FIXME - what about bit fields?
+      ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
+      ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
+    }
+
+    f = f->common.chain;
+    ent++;
+  }
+
+  // add type for union
+
+  uniontype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_struct));
+
+  uniontype->next = NULL;
+
+  uniontype->id = type_num;
+  type_num++;
+
+  uniontype->tree = t;
+  uniontype->cv_type = CODEVIEW_LF_UNION;
+
+  if (last_type)
+    last_type->next = uniontype;
+
+  if (!types)
+    types = uniontype;
+
+  last_type = uniontype;
+
+  str = (struct pdb_struct*)uniontype->data;
+  str->count = num_entries;
+  str->field = fltype->id;
+  str->size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
+
+  if (TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
+    str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
+  else if (TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
+    str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
+  else
+    str->name = NULL;
+
+  return uniontype->id;
+}
+
+static uint16_t
 find_type(tree t, bool decl)
 {
   struct pdb_type *type;
@@ -550,7 +685,6 @@ find_type(tree t, bool decl)
   // FIXME - complex types
   // FIXME - booleans
   // FIXME - void_type
-  // FIXME - unions
   // FIXME - enums
   // FIXME - pointers (what about C++ references?)
   // FIXME - constness etc.
@@ -558,6 +692,8 @@ find_type(tree t, bool decl)
 
   if (t->base.code == RECORD_TYPE)
     return find_type_struct(t);
+  else if (t->base.code == UNION_TYPE)
+    return find_type_union(t);
   else
     return 0;
 }
