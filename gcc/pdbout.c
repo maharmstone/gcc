@@ -23,7 +23,7 @@ static void pdbout_begin_function(tree func);
 static void pdbout_late_global_decl(tree var);
 static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED);
 
-static uint16_t find_type(tree t);
+static uint16_t find_type(tree t, bool decl);
 
 static struct pdb_func *funcs = NULL;
 static struct pdb_global_var *global_vars = NULL;
@@ -140,7 +140,8 @@ pdbout_ldata32 (struct pdb_global_var *v)
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n", v->public_flag ? CODEVIEW_S_GDATA32 : CODEVIEW_S_LDATA32);
-  fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - type
+  fprintf (asm_out_file, "\t.short\t0x%x\n", v->type);
+  fprintf (asm_out_file, "\t.short\t0\n");
 
   fprintf (asm_out_file, "\t.long\t["); // off
   ASM_OUTPUT_LABELREF (asm_out_file, v->asm_name);
@@ -378,8 +379,7 @@ static void pdbout_late_global_decl(tree var)
   v->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(var)));
   v->asm_name = xstrdup((const char*)var->var_decl.common.assembler_name->identifier.id.str); // FIXME - is this guaranteed to be null-terminated?
   v->public_flag = var->base.public_flag;
-
-  // FIXME - record type
+  v->type = find_type(TREE_TYPE(var), false);
 
   global_vars = v;
 }
@@ -439,7 +439,7 @@ find_type_struct(tree t)
       unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
       ent->cv_type = CODEVIEW_LF_MEMBER;
-      ent->type = find_type(f->common.typed.type);
+      ent->type = find_type(f->common.typed.type, false);
       ent->offset = bit_offset / 8; // FIXME - what about bit fields?
       ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
       ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
@@ -485,13 +485,27 @@ find_type_struct(tree t)
 }
 
 static uint16_t
-find_type(tree t)
+find_type(tree t, bool decl)
 {
+  struct pdb_type *type;
+
   // FIXME - identify builtins
 
-  // FIXME - look for pointer in existing list
+  if (!t)
+    return 0;
 
-  // FIXME - only add new if told to
+  // search through existing types
+
+  type = types;
+  while (type) {
+    if (type->tree == t)
+      return type->id;
+
+    type = type->next;
+  }
+
+  if (!decl)
+    return 0;
 
   // FIXME - integer_type
   // FIXME - real_type
@@ -515,5 +529,5 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 
   // FIXME - if from file in /usr/include or wherever, only include in output if used
 
-  find_type(t->typed.type);
+  find_type(t->typed.type, true);
 }

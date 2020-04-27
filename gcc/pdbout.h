@@ -25,6 +25,7 @@ struct pdb_global_var {
   char *name;
   char *asm_name;
   unsigned int public_flag;
+  uint16_t type;
 };
 
 // CV_fldattr_t in cvinfo
