@@ -399,7 +399,9 @@ find_type_struct(tree t)
   f = t->type_non_common.values;
 
   while (f) {
-    num_entries++;
+    if (TREE_CODE(f) == FIELD_DECL)
+      num_entries++;
+
     f = f->common.chain;
   }
 
@@ -433,13 +435,15 @@ find_type_struct(tree t)
   f = t->type_non_common.values;
 
   while (f) {
-    unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
+    if (TREE_CODE(f) == FIELD_DECL) {
+      unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
-    ent->cv_type = CODEVIEW_LF_MEMBER;
-    ent->type = find_type(f->common.typed.type);
-    ent->offset = bit_offset / 8; // FIXME - what about bit fields?
-    ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
-    ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
+      ent->cv_type = CODEVIEW_LF_MEMBER;
+      ent->type = find_type(f->common.typed.type);
+      ent->offset = bit_offset / 8; // FIXME - what about bit fields?
+      ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
+      ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
+    }
 
     f = f->common.chain;
     ent++;
@@ -470,7 +474,12 @@ find_type_struct(tree t)
   str->field = fltype->id;
   str->size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
 
-  str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
+  if (TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
+    str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
+  else if (TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
+    str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
+  else
+    str->name = NULL;
 
   return strtype->id;
 }
