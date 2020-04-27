@@ -493,9 +493,28 @@ find_type(tree t, bool decl)
     return 0;
 
   if (t->base.code == INTEGER_TYPE) {
-    unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
+    unsigned int size;
 
     // FIXME - constness?
+
+    if (t == char_type_node)
+      return CV_BUILTIN_TYPE_NARROW_CHARACTER;
+    else if (t == signed_char_type_node)
+      return CV_BUILTIN_TYPE_SIGNED_CHARACTER;
+    else if (t == unsigned_char_type_node)
+      return CV_BUILTIN_TYPE_UNSIGNED_CHARACTER;
+    else if (t == short_integer_type_node)
+      return CV_BUILTIN_TYPE_INT16SHORT;
+    else if (t == short_unsigned_type_node)
+      return CV_BUILTIN_TYPE_UINT16SHORT;
+    else if (t == long_integer_type_node)
+      return CV_BUILTIN_TYPE_INT32LONG;
+    else if (t == long_unsigned_type_node)
+      return CV_BUILTIN_TYPE_UINT32LONG;
+
+    // FIXME - should we be mapping long long to Int64Quad? (What does MSVC do?)
+
+    size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
     if (size == 8)
       return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
@@ -506,8 +525,6 @@ find_type(tree t, bool decl)
     else if (size == 64)
       return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
 
-    // FIXME - chars?
-    // FIXME - distinguish longs from ints (and shorts etc.)?
     // FIXME - HRESULT
     // FIXME - 128-bit integers?
 
@@ -528,7 +545,7 @@ find_type(tree t, bool decl)
     return 0;
 
   // FIXME - pointers to builtins
-  // FIXME - chars (and wchar_t, char16_t, char32_t, char8_t)
+  // FIXME - wchar_t, char16_t, char32_t, char8_t
   // FIXME - real_type
   // FIXME - complex types
   // FIXME - booleans
