@@ -222,6 +222,16 @@ free_type(struct pdb_type *t)
 
       break;
     }
+
+    case CODEVIEW_LF_ENUM:
+    {
+      struct pdb_enum *en = (struct pdb_enum*)t->data;
+
+      if (en->name)
+	free(en->name);
+
+      break;
+    }
   }
 
   free(t);
@@ -237,6 +247,8 @@ write_fieldlist(struct pdb_fieldlist *fl)
 
     if (fl->entries[i].cv_type == CODEVIEW_LF_MEMBER)
       len += 9 + strlen(fl->entries[i].name);
+    else if (fl->entries[i].cv_type == CODEVIEW_LF_ENUMERATE)
+      len += 5 + strlen(fl->entries[i].name);
 
     if (len % 4 != 0)
       len += 4 - (len % 4);
@@ -256,6 +268,27 @@ write_fieldlist(struct pdb_fieldlist *fl)
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].type);
       fprintf (asm_out_file, "\t.short\t0\n"); // padding
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].offset);
+      ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name, name_len + 1);
+
+      // handle alignment padding
+
+      align = 4 - ((3 + name_len) % 4);
+
+      if (align != 4) {
+	if (align == 3)
+	  fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+	if (align >= 2)
+	  fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+	fprintf (asm_out_file, "\t.byte\t0xf1\n");
+      }
+    } else if (fl->entries[i].cv_type == CODEVIEW_LF_ENUMERATE) {
+      size_t name_len = strlen(fl->entries[i].name);
+      unsigned int align;
+
+      fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].fld_attr);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].value);
       ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name, name_len + 1);
 
       // handle alignment padding
@@ -349,6 +382,39 @@ write_union(struct pdb_struct *str)
 }
 
 static void
+write_enum(struct pdb_enum *en)
+{
+  size_t name_len = strlen(en->name);
+  unsigned int len = 17 + name_len, align;
+
+  if (len % 4 != 0)
+    len += 4 - (len % 4);
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_ENUM);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", en->count);
+  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - property
+  fprintf (asm_out_file, "\t.short\t0x%x\n", en->type);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n", en->field);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+
+  ASM_OUTPUT_ASCII (asm_out_file, en->name, name_len + 1);
+
+  align = 4 - ((1 + name_len) % 4);
+
+  if (align != 4) {
+    if (align == 3)
+      fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+    if (align >= 2)
+      fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+    fprintf (asm_out_file, "\t.byte\t0xf1\n");
+  }
+}
+
+static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
@@ -363,6 +429,10 @@ write_type(struct pdb_type *t)
 
     case CODEVIEW_LF_UNION:
       write_union((struct pdb_struct*)t->data);
+      break;
+
+    case CODEVIEW_LF_ENUM:
+      write_enum((struct pdb_enum*)t->data);
       break;
   }
 }
@@ -620,6 +690,108 @@ find_type_union(tree t)
 }
 
 static uint16_t
+find_type_enum(tree t)
+{
+  tree v;
+  struct pdb_type *fltype, *enumtype;
+  struct pdb_fieldlist *fieldlist;
+  struct pdb_fieldlist_entry *ent;
+  struct pdb_enum *en;
+  unsigned int num_entries, size;
+
+  v = TYPE_VALUES(t);
+  num_entries = 0;
+
+  while (v) {
+    num_entries++;
+
+    v = v->common.chain;
+  }
+
+  // add fieldlist type (FIXME - check doesn't already exist?)
+
+  fltype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_fieldlist));
+
+  fltype->next = NULL;
+
+  fltype->id = type_num;
+  type_num++;
+
+  fltype->tree = NULL;
+  fltype->cv_type = CODEVIEW_LF_FIELDLIST;
+
+  if (last_type)
+    last_type->next = fltype;
+
+  if (!types)
+    types = fltype;
+
+  last_type = fltype;
+
+  fieldlist = (struct pdb_fieldlist*)fltype->data;
+  fieldlist->count = num_entries;
+  fieldlist->entries = (struct pdb_fieldlist_entry*)xmalloc(sizeof(struct pdb_fieldlist_entry) * num_entries);
+
+  ent = fieldlist->entries;
+  v = TYPE_VALUES(t);
+
+  while (v) {
+    ent->cv_type = CODEVIEW_LF_ENUMERATE;
+    ent->value = TREE_INT_CST_ELT(TREE_VALUE(v), 0);
+    ent->name = xstrdup(IDENTIFIER_POINTER(TREE_PURPOSE(v)));
+
+    v = v->common.chain;
+    ent++;
+  }
+
+  // add type for enum
+
+  enumtype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_enum));
+
+  enumtype->next = NULL;
+
+  enumtype->id = type_num;
+  type_num++;
+
+  enumtype->tree = t;
+  enumtype->cv_type = CODEVIEW_LF_ENUM;
+
+  if (last_type)
+    last_type->next = enumtype;
+
+  if (!types)
+    types = enumtype;
+
+  last_type = enumtype;
+
+  en = (struct pdb_enum*)enumtype->data;
+  en->count = num_entries;
+  en->field = fltype->id;
+
+  size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
+
+  if (size == 8)
+    en->type = TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
+  else if (size == 16)
+    en->type = TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
+  else if (size == 32)
+    en->type = TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
+  else if (size == 64)
+    en->type = TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
+  else
+    en->type = 0;
+
+  if (TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
+    en->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
+  else if (TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
+    en->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
+  else
+    en->name = NULL;
+
+  return enumtype->id;
+}
+
+static uint16_t
 find_type(tree t, bool decl)
 {
   struct pdb_type *type;
@@ -676,6 +848,8 @@ find_type(tree t, bool decl)
     type = type->next;
   }
 
+  // FIXME - arrays
+
   if (!decl)
     return 0;
 
@@ -685,7 +859,6 @@ find_type(tree t, bool decl)
   // FIXME - complex types
   // FIXME - booleans
   // FIXME - void_type
-  // FIXME - enums
   // FIXME - pointers (what about C++ references?)
   // FIXME - constness etc.
   // FIXME - any others?
@@ -694,6 +867,8 @@ find_type(tree t, bool decl)
     return find_type_struct(t);
   else if (t->base.code == UNION_TYPE)
     return find_type_union(t);
+  else if (t->base.code == ENUMERAL_TYPE)
+    return find_type_enum(t);
   else
     return 0;
 }

@@ -7,9 +7,11 @@
 #define CODEVIEW_S_LPROC32	0x110f
 #define CODEVIEW_S_GPROC32	0x1110
 #define CODEVIEW_LF_FIELDLIST	0x1203
+#define CODEVIEW_LF_ENUMERATE	0x1502
 #define CODEVIEW_LF_CLASS	0x1504
 #define CODEVIEW_LF_STRUCTURE	0x1505
 #define CODEVIEW_LF_UNION	0x1506
+#define CODEVIEW_LF_ENUM	0x1507
 #define CODEVIEW_LF_MEMBER	0x150d
 
 #define CV_SIGNATURE_C13	4
@@ -50,6 +52,7 @@ struct pdb_fieldlist_entry {
   uint16_t type;
   uint16_t offset;
   uint16_t fld_attr;
+  unsigned int value;
   char* name;
 };
 
@@ -62,6 +65,13 @@ struct pdb_struct {
   unsigned int count;
   uint16_t field;
   uint16_t size;
+  char *name;
+};
+
+struct pdb_enum {
+  unsigned int count;
+  uint16_t type;
+  uint16_t field;
   char *name;
 };
 
