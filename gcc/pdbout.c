@@ -489,10 +489,30 @@ find_type(tree t, bool decl)
 {
   struct pdb_type *type;
 
-  // FIXME - identify builtins
-
   if (!t)
     return 0;
+
+  if (t->base.code == INTEGER_TYPE) {
+    unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
+
+    // FIXME - constness?
+
+    if (size == 8)
+      return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
+    else if (size == 16)
+      return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
+    else if (size == 32)
+      return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
+    else if (size == 64)
+      return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
+
+    // FIXME - chars?
+    // FIXME - distinguish longs from ints (and shorts etc.)?
+    // FIXME - HRESULT
+    // FIXME - 128-bit integers?
+
+    return 0;
+  }
 
   // search through existing types
 
@@ -507,12 +527,15 @@ find_type(tree t, bool decl)
   if (!decl)
     return 0;
 
-  // FIXME - integer_type
+  // FIXME - pointers to builtins
+  // FIXME - chars (and wchar_t, char16_t, char32_t, char8_t)
   // FIXME - real_type
+  // FIXME - complex types
+  // FIXME - booleans
   // FIXME - void_type
   // FIXME - unions
   // FIXME - enums
-  // FIXME - pointers
+  // FIXME - pointers (what about C++ references?)
   // FIXME - constness etc.
   // FIXME - any others?
 
