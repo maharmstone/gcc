@@ -7,6 +7,7 @@
 #define CODEVIEW_S_GDATA32	0x110d
 #define CODEVIEW_S_LPROC32	0x110f
 #define CODEVIEW_S_GPROC32	0x1110
+#define CODEVIEW_LF_ARGLIST	0x1201
 #define CODEVIEW_LF_FIELDLIST	0x1203
 #define CODEVIEW_LF_ENUMERATE	0x1502
 #define CODEVIEW_LF_ARRAY	0x1503
@@ -106,6 +107,11 @@ struct pdb_array {
   uint16_t type;
   uint16_t index_type;
   unsigned int length;
+};
+
+struct pdb_arglist {
+  unsigned int count;
+  uint16_t args[1];
 };
 
 struct pdb_type {
