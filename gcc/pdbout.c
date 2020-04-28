@@ -11,8 +11,8 @@
 #include "config/i386/i386-protos.h"
 #include "print-tree.h" // FIXME - remove this
 
-#define FUNC_BEGIN_LABEL	"LFB"
-#define FUNC_END_LABEL		"LFE"
+#define FUNC_BEGIN_LABEL	".LFB"
+#define FUNC_END_LABEL		".LFE"
 
 #define FIRST_TYPE_NUM		0x1000
 
@@ -79,31 +79,31 @@ pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 		       unsigned int column ATTRIBUTE_UNUSED,
 		       const char *file ATTRIBUTE_UNUSED)
 {
-  ASM_OUTPUT_DEBUG_LABEL (asm_out_file, FUNC_BEGIN_LABEL,
-			  current_function_funcdef_no);
+  fprintf (asm_out_file, FUNC_BEGIN_LABEL "%u:\n", current_function_funcdef_no);
 }
 
 static void
 pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 		     const char *file ATTRIBUTE_UNUSED)
 {
-  ASM_OUTPUT_DEBUG_LABEL (asm_out_file, FUNC_END_LABEL,
-			  current_function_funcdef_no);
+  fprintf (asm_out_file, FUNC_END_LABEL "%u:\n", current_function_funcdef_no);
 }
 
 static void
-pdbout_lproc32 (struct pdb_func *func)
+pdbout_proc32 (struct pdb_func *func)
 {
+  size_t name_len = strlen(func->name);
+  uint16_t len = 40 + name_len;
+
   // start procedure
 
-  // FIXME - don't use labels to do alignment
+  if (len % 4 != 0)
+    len += 4 - (len % 4);
 
-  ASM_OUTPUT_DEBUG_LABEL (asm_out_file, "cvprocstart", func->num);
-
-  fprintf (asm_out_file, "\t.short\t[cvprocstarta%u]-[cvprocstart%u]-2\n", func->num, func->num); // reclen
+  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n", func->public_flag ? CODEVIEW_S_GPROC32 : CODEVIEW_S_LPROC32);
   fprintf (asm_out_file, "\t.long\t0\n"); // pParent
-  fprintf (asm_out_file, "\t.long\t[cvprocend%u]-[.pdb]\n", func->num); // pEnd
+  fprintf (asm_out_file, "\t.long\t[.cvprocend%u]-[.pdb]\n", func->num); // pEnd
   fprintf (asm_out_file, "\t.long\t0\n"); // pNext
   fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num); // len
   fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - DbgStart
@@ -113,17 +113,15 @@ pdbout_lproc32 (struct pdb_func *func)
   fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n", func->num); // off
   fprintf (asm_out_file, "\t.short\t0\n"); // seg (will get set by the linker)
   fprintf (asm_out_file, "\t.byte\t0\n"); // FIXME - flags
-  ASM_OUTPUT_ASCII (asm_out_file, func->name, strlen (func->name) + 1);
+  ASM_OUTPUT_ASCII (asm_out_file, func->name, name_len + 1);
 
   fprintf (asm_out_file, "\t.balign\t4\n");
-
-  ASM_OUTPUT_DEBUG_LABEL (asm_out_file, "cvprocstarta", func->num);
 
   // FIXME - S_FRAMEPROC, S_BPREL32, S_CALLSITEINFO, etc.
 
   // end procedure
 
-  ASM_OUTPUT_DEBUG_LABEL (asm_out_file, "cvprocend", func->num);
+  fprintf (asm_out_file, ".cvprocend%u:\n", func->num);
 
   fprintf (asm_out_file, "\t.short\t0x2\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_END);
@@ -184,7 +182,7 @@ write_pdb_section()
   while (funcs) {
     struct pdb_func *n;
 
-    pdbout_lproc32(funcs);
+    pdbout_proc32(funcs);
 
     n = funcs->next;
 
