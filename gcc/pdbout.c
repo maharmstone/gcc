@@ -815,6 +815,9 @@ find_type_pointer(tree t, bool decl)
   unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
   uint16_t type = find_type(TREE_TYPE(t), decl);
 
+  if (type == 0)
+    return 0;
+
   if (type < FIRST_TYPE_NUM) { // pointers to builtins have their own constants
     if (size == 4)
       return (CV_TM_NPTR32 << 8) | type;
@@ -902,7 +905,8 @@ find_type(tree t, bool decl)
     // FIXME - 128-bit integers?
 
     return 0;
-  }
+  } else if (t->base.code == VOID_TYPE)
+    return CV_BUILTIN_TYPE_VOID;
 
   // search through existing types
 
