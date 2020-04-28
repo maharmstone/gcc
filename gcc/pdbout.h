@@ -9,6 +9,7 @@
 #define CODEVIEW_S_GPROC32	0x1110
 #define CODEVIEW_LF_FIELDLIST	0x1203
 #define CODEVIEW_LF_ENUMERATE	0x1502
+#define CODEVIEW_LF_ARRAY	0x1503
 #define CODEVIEW_LF_CLASS	0x1504
 #define CODEVIEW_LF_STRUCTURE	0x1505
 #define CODEVIEW_LF_UNION	0x1506
@@ -99,6 +100,12 @@ struct pdb_pointer {
     } s;
     uint32_t num;
   } attr;
+};
+
+struct pdb_array {
+  uint16_t type;
+  uint16_t index_type;
+  unsigned int length;
 };
 
 struct pdb_type {
