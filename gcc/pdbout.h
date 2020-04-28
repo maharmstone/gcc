@@ -2,6 +2,7 @@
 #define GCC_PDBOUT_H 1
 
 #define CODEVIEW_S_END		0x0006
+#define CODEVIEW_LF_POINTER	0x1002
 #define CODEVIEW_S_LDATA32	0x110c
 #define CODEVIEW_S_GDATA32	0x110d
 #define CODEVIEW_S_LPROC32	0x110f
@@ -73,6 +74,31 @@ struct pdb_enum {
   uint16_t type;
   uint16_t field;
   char *name;
+};
+
+// from CV_ptrtype_e in cvdump
+#define CV_PTR_NEAR32		0x0a
+#define CV_PTR_64		0x0c
+
+struct pdb_pointer {
+  uint16_t type;
+  union {
+    struct {
+      uint32_t ptrtype : 5;
+      uint32_t ptrmode : 3;
+      uint32_t isflat32 : 1;
+      uint32_t isvolatile : 1;
+      uint32_t isconst : 1;
+      uint32_t isunaligned : 1;
+      uint32_t isrestrict : 1;
+      uint32_t size : 6;
+      uint32_t ismocom : 1;
+      uint32_t islref : 1;
+      uint32_t isrref : 1;
+      uint32_t unused : 10;
+    } s;
+    uint32_t num;
+  } attr;
 };
 
 struct pdb_type {
