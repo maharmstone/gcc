@@ -3,6 +3,7 @@
 
 #define CODEVIEW_S_END		0x0006
 #define CODEVIEW_LF_POINTER	0x1002
+#define CODEVIEW_LF_PROCEDURE	0x1008
 #define CODEVIEW_S_LDATA32	0x110c
 #define CODEVIEW_S_GDATA32	0x110d
 #define CODEVIEW_S_LPROC32	0x110f
@@ -112,6 +113,14 @@ struct pdb_array {
 struct pdb_arglist {
   unsigned int count;
   uint16_t args[1];
+};
+
+struct pdb_proc {
+  uint16_t return_type;
+  uint8_t calling_convention;
+  uint8_t attributes;
+  uint16_t num_args;
+  uint16_t arg_list;
 };
 
 struct pdb_type {

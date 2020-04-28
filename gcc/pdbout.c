@@ -467,6 +467,20 @@ write_arglist(struct pdb_arglist *arglist)
 }
 
 static void
+write_procedure(struct pdb_proc *proc)
+{
+  fprintf (asm_out_file, "\t.short\t0xe\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_PROCEDURE);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->return_type);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->calling_convention);
+  fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->attributes);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->num_args);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->arg_list);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+}
+
+static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
@@ -497,6 +511,10 @@ write_type(struct pdb_type *t)
 
     case CODEVIEW_LF_ARGLIST:
       write_arglist((struct pdb_arglist*)t->data);
+      break;
+
+    case CODEVIEW_LF_PROCEDURE:
+      write_procedure((struct pdb_proc*)t->data);
       break;
   }
 }
@@ -951,8 +969,9 @@ find_type_array(tree t)
 static uint16_t
 find_type_function(tree t)
 {
-  struct pdb_type *arglisttype;
+  struct pdb_type *arglisttype, *proctype;
   struct pdb_arglist *arglist;
+  struct pdb_proc *proc;
   tree arg;
   unsigned int num_args = 0;
   uint16_t *argptr;
@@ -1001,9 +1020,35 @@ find_type_function(tree t)
     arg = arg->common.chain;
   }
 
-  // FIXME - create LF_PROCEDURE
+  // create procedure
 
-  return 0;
+  proctype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_proc));
+
+  proctype->next = NULL;
+
+  proctype->id = type_num;
+  type_num++;
+
+  proctype->tree = t;
+  proctype->cv_type = CODEVIEW_LF_PROCEDURE;
+
+  if (last_type)
+    last_type->next = proctype;
+
+  if (!types)
+    types = proctype;
+
+  last_type = proctype;
+
+  proc = (struct pdb_proc*)proctype->data;
+
+  proc->return_type = find_type(TREE_TYPE(t));
+  proc->calling_convention = 0; // FIXME
+  proc->attributes = 0;
+  proc->num_args = num_args;
+  proc->arg_list = arglisttype->id;
+
+  return proctype->id;
 }
 
 static uint16_t
