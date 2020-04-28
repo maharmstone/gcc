@@ -107,7 +107,8 @@ pdbout_lproc32 (struct pdb_func *func)
   fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num); // len
   fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - DbgStart
   fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - DbgEnd
-  fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - typeind
+  fprintf (asm_out_file, "\t.short\t0x%x\n", func->type);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
   fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n", func->num); // off
   fprintf (asm_out_file, "\t.short\t0\n"); // seg (will get set by the linker)
   fprintf (asm_out_file, "\t.byte\t0\n"); // FIXME - flags
@@ -553,6 +554,7 @@ pdbout_begin_function (tree func)
   f->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(func)));
   f->num = current_function_funcdef_no;
   f->public_flag = func->base.public_flag;
+  f->type = find_type(TREE_TYPE(func));
 
   funcs = f;
 }
