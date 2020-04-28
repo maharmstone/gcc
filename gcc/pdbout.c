@@ -576,7 +576,67 @@ static void pdbout_late_global_decl(tree var)
 
 static uint16_t
 add_type(struct pdb_type *t) {
-  // FIXME - check for dupes
+  struct pdb_type *t2 = types;
+
+  // check for dupes
+
+  while (t2) {
+    if (t2->cv_type == t->cv_type) {
+      // FIXME - pdb_struct, pdb_enum, pdb_pointer, pdb_array, pdb_arglist, pdb_proc
+
+      switch (t2->cv_type) {
+	case CODEVIEW_LF_FIELDLIST:
+	{
+	  struct pdb_fieldlist *fl1 = (struct pdb_fieldlist*)t->data;
+	  struct pdb_fieldlist *fl2 = (struct pdb_fieldlist*)t2->data;
+
+	  if (fl1->count == fl2->count) {
+	    bool same = true;
+
+	    for (unsigned int i = 0; i < fl1->count; i++) {
+	      if (fl1->entries[i].cv_type != fl2->entries[i].cv_type) {
+		same = false;
+		break;
+	      }
+
+	      if (fl1->entries[i].cv_type == CODEVIEW_LF_MEMBER) {
+		if (fl1->entries[i].type != fl2->entries[i].type ||
+		    fl1->entries[i].offset != fl2->entries[i].offset ||
+		    fl1->entries[i].fld_attr != fl2->entries[i].fld_attr ||
+		    strcmp(fl1->entries[i].name, fl2->entries[i].name)) {
+		  same = false;
+		  break;
+		}
+	      } else if (fl1->entries[i].cv_type == CODEVIEW_LF_ENUMERATE) {
+		if (fl1->entries[i].value != fl2->entries[i].value ||
+		    strcmp(fl1->entries[i].name, fl2->entries[i].name)) {
+		  same = false;
+		  break;
+		}
+	      }
+	    }
+
+	    if (same) {
+	      for (unsigned int i = 0; i < fl1->count; i++) {
+		if (fl1->entries[i].name)
+		  free(fl1->entries[i].name);
+	      }
+
+	      free(t);
+
+	      return t2->id;
+	    }
+	  }
+
+	  break;
+	}
+      }
+    }
+
+    t2 = t2->next;
+  }
+
+  // add new
 
   t->next = NULL;
 
