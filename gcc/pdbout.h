@@ -25,6 +25,7 @@ struct pdb_func {
   char *name;
   int num;
   unsigned int public_flag;
+  uint16_t type;
 };
 
 struct pdb_global_var {
