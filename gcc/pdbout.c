@@ -93,12 +93,15 @@ static void
 pdbout_proc32 (struct pdb_func *func)
 {
   size_t name_len = strlen(func->name);
-  uint16_t len = 40 + name_len;
+  uint16_t len = 40 + name_len, align;
 
   // start procedure
 
-  if (len % 4 != 0)
+  if (len % 4 != 0) {
+    align = 4 - (len % 4);
     len += 4 - (len % 4);
+  } else
+    align = 0;
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n", func->public_flag ? CODEVIEW_S_GPROC32 : CODEVIEW_S_LPROC32);
@@ -115,7 +118,14 @@ pdbout_proc32 (struct pdb_func *func)
   fprintf (asm_out_file, "\t.byte\t0\n"); // FIXME - flags
   ASM_OUTPUT_ASCII (asm_out_file, func->name, name_len + 1);
 
-  fprintf (asm_out_file, "\t.balign\t4\n");
+  if (align == 3)
+    fprintf (asm_out_file, "\t.byte\t0\n");
+
+  if (align >= 2)
+    fprintf (asm_out_file, "\t.byte\t0\n");
+
+  if (align >= 1)
+    fprintf (asm_out_file, "\t.byte\t0\n");
 
   // FIXME - S_FRAMEPROC, S_BPREL32, S_CALLSITEINFO, etc.
 
