@@ -582,7 +582,7 @@ add_type(struct pdb_type *t) {
 
   while (t2) {
     if (t2->cv_type == t->cv_type) {
-      // FIXME - pdb_arglist, pdb_proc
+      // FIXME - pdb_proc
 
       switch (t2->cv_type) {
 	case CODEVIEW_LF_FIELDLIST:
@@ -699,6 +699,31 @@ add_type(struct pdb_type *t) {
 	    free(t);
 
 	    return t2->id;
+	  }
+
+	  break;
+	}
+
+	case CODEVIEW_LF_ARGLIST:
+	{
+	  struct pdb_arglist *arglist1 = (struct pdb_arglist*)t->data;
+	  struct pdb_arglist *arglist2 = (struct pdb_arglist*)t2->data;
+
+	  if (arglist1->count == arglist2->count) {
+	    bool same = true;
+
+	    for (unsigned int i = 0; i < arglist1->count; i++) {
+	      if (arglist1->args[i] != arglist2->args[i]) {
+		same = false;
+		break;
+	      }
+	    }
+
+	    if (same) {
+	      free(t);
+
+	      return t2->id;
+	    }
 	  }
 
 	  break;
