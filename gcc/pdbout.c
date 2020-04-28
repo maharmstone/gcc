@@ -415,6 +415,16 @@ write_enum(struct pdb_enum *en)
 }
 
 static void
+write_pointer(struct pdb_pointer *ptr)
+{
+  fprintf (asm_out_file, "\t.short\t0xa\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_POINTER);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", ptr->type);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  fprintf (asm_out_file, "\t.long\t0x%x\n", ptr->attr.num);
+}
+
+static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
@@ -433,6 +443,10 @@ write_type(struct pdb_type *t)
 
     case CODEVIEW_LF_ENUM:
       write_enum((struct pdb_enum*)t->data);
+      break;
+
+    case CODEVIEW_LF_POINTER:
+      write_pointer((struct pdb_pointer*)t->data);
       break;
   }
 }
@@ -792,6 +806,49 @@ find_type_enum(tree t)
 }
 
 static uint16_t
+find_type_pointer(tree t, bool decl)
+{
+  struct pdb_type *ptrtype;
+  struct pdb_pointer *ptr;
+
+  // FIXME - pointers to builtins
+
+  ptrtype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_pointer));
+
+  ptrtype->next = NULL;
+
+  ptrtype->id = type_num;
+  type_num++;
+
+  ptrtype->tree = t;
+  ptrtype->cv_type = CODEVIEW_LF_POINTER;
+
+  if (last_type)
+    last_type->next = ptrtype;
+
+  if (!types)
+    types = ptrtype;
+
+  last_type = ptrtype;
+
+  ptr = (struct pdb_pointer*)ptrtype->data;
+  ptr->type = find_type(TREE_TYPE(t), decl);
+  ptr->attr.num = 0;
+
+  ptr->attr.s.size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
+
+  if (ptr->attr.s.size == 8)
+    ptr->attr.s.ptrtype = CV_PTR_64;
+  else if (ptr->attr.s.size == 4)
+    ptr->attr.s.ptrtype = CV_PTR_NEAR32;
+
+  // FIXME - const and volatile pointers
+  // FIXME - C++ references
+
+  return ptrtype->id;
+}
+
+static uint16_t
 find_type(tree t, bool decl)
 {
   struct pdb_type *type;
@@ -848,18 +905,20 @@ find_type(tree t, bool decl)
     type = type->next;
   }
 
+  if (t->base.code == POINTER_TYPE)
+    return find_type_pointer(t, decl);
+
   // FIXME - arrays
 
   if (!decl)
     return 0;
 
-  // FIXME - pointers to builtins
   // FIXME - wchar_t, char16_t, char32_t, char8_t
   // FIXME - real_type
   // FIXME - complex types
   // FIXME - booleans
   // FIXME - void_type
-  // FIXME - pointers (what about C++ references?)
+  // FIXME - C++ references
   // FIXME - constness etc.
   // FIXME - any others?
 
