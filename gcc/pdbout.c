@@ -575,6 +575,28 @@ static void pdbout_late_global_decl(tree var)
 }
 
 static uint16_t
+add_type(struct pdb_type *t) {
+  // FIXME - check for dupes
+
+  t->next = NULL;
+
+  t->id = type_num;
+  type_num++;
+
+  t->tree = NULL;
+
+  if (last_type)
+    last_type->next = t;
+
+  if (!types)
+    types = t;
+
+  last_type = t;
+
+  return t->id;
+}
+
+static uint16_t
 find_type_struct(tree t)
 {
   tree f;
@@ -583,6 +605,7 @@ find_type_struct(tree t)
   struct pdb_fieldlist_entry *ent;
   struct pdb_struct *str;
   unsigned int num_entries = 0;
+  uint16_t fltypenum;
 
   // FIXME - what about self-referencing structs?
 
@@ -595,27 +618,11 @@ find_type_struct(tree t)
     f = f->common.chain;
   }
 
-  // FIXME - check fieldlist doesn't already exist
-
   // add fieldlist type
 
   fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
-
-  fltype->next = NULL;
-
-  fltype->id = type_num;
-  type_num++;
-
-  fltype->tree = NULL;
   fltype->cv_type = CODEVIEW_LF_FIELDLIST;
-
-  if (last_type)
-    last_type->next = fltype;
-
-  if (!types)
-    types = fltype;
-
-  last_type = fltype;
+  fltype->tree = NULL;
 
   fieldlist = (struct pdb_fieldlist*)fltype->data;
   fieldlist->count = num_entries;
@@ -639,29 +646,17 @@ find_type_struct(tree t)
     ent++;
   }
 
+  fltypenum = add_type(fltype);
+
   // add type for struct
 
   strtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
-
-  strtype->next = NULL;
-
-  strtype->id = type_num;
-  type_num++;
-
-  strtype->tree = t;
   strtype->cv_type = CODEVIEW_LF_STRUCTURE; // FIXME - LF_CLASS if C++ class?
-
-  if (last_type)
-    last_type->next = strtype;
-
-  if (!types)
-    types = strtype;
-
-  last_type = strtype;
+  strtype->tree = t;
 
   str = (struct pdb_struct*)strtype->data;
   str->count = num_entries;
-  str->field = fltype->id;
+  str->field = fltypenum;
   str->size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
 
   if (TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
@@ -671,7 +666,7 @@ find_type_struct(tree t)
   else
     str->name = NULL;
 
-  return strtype->id;
+  return add_type(strtype);
 }
 
 static uint16_t
@@ -683,6 +678,7 @@ find_type_union(tree t)
   struct pdb_fieldlist_entry *ent;
   struct pdb_struct *str;
   unsigned int num_entries = 0;
+  uint16_t fltypenum;
 
   f = t->type_non_common.values;
 
@@ -693,27 +689,11 @@ find_type_union(tree t)
     f = f->common.chain;
   }
 
-  // FIXME - check fieldlist doesn't already exist
-
   // add fieldlist type
 
   fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
-
-  fltype->next = NULL;
-
-  fltype->id = type_num;
-  type_num++;
-
-  fltype->tree = NULL;
   fltype->cv_type = CODEVIEW_LF_FIELDLIST;
-
-  if (last_type)
-    last_type->next = fltype;
-
-  if (!types)
-    types = fltype;
-
-  last_type = fltype;
+  fltype->tree = NULL;
 
   fieldlist = (struct pdb_fieldlist*)fltype->data;
   fieldlist->count = num_entries;
@@ -737,29 +717,17 @@ find_type_union(tree t)
     ent++;
   }
 
+  fltypenum = add_type(fltype);
+
   // add type for union
 
   uniontype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
-
-  uniontype->next = NULL;
-
-  uniontype->id = type_num;
-  type_num++;
-
-  uniontype->tree = t;
   uniontype->cv_type = CODEVIEW_LF_UNION;
-
-  if (last_type)
-    last_type->next = uniontype;
-
-  if (!types)
-    types = uniontype;
-
-  last_type = uniontype;
+  uniontype->tree = t;
 
   str = (struct pdb_struct*)uniontype->data;
   str->count = num_entries;
-  str->field = fltype->id;
+  str->field = fltypenum;
   str->size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
 
   if (TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
@@ -769,7 +737,7 @@ find_type_union(tree t)
   else
     str->name = NULL;
 
-  return uniontype->id;
+  return add_type(uniontype);
 }
 
 static uint16_t
@@ -781,6 +749,7 @@ find_type_enum(tree t)
   struct pdb_fieldlist_entry *ent;
   struct pdb_enum *en;
   unsigned int num_entries, size;
+  uint16_t fltypenum;
 
   v = TYPE_VALUES(t);
   num_entries = 0;
@@ -791,25 +760,11 @@ find_type_enum(tree t)
     v = v->common.chain;
   }
 
-  // add fieldlist type (FIXME - check doesn't already exist?)
+  // add fieldlist type
 
   fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
-
-  fltype->next = NULL;
-
-  fltype->id = type_num;
-  type_num++;
-
-  fltype->tree = NULL;
   fltype->cv_type = CODEVIEW_LF_FIELDLIST;
-
-  if (last_type)
-    last_type->next = fltype;
-
-  if (!types)
-    types = fltype;
-
-  last_type = fltype;
+  fltype->tree = NULL;
 
   fieldlist = (struct pdb_fieldlist*)fltype->data;
   fieldlist->count = num_entries;
@@ -827,29 +782,17 @@ find_type_enum(tree t)
     ent++;
   }
 
+  fltypenum = add_type(fltype);
+
   // add type for enum
 
   enumtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_enum));
-
-  enumtype->next = NULL;
-
-  enumtype->id = type_num;
-  type_num++;
-
-  enumtype->tree = t;
   enumtype->cv_type = CODEVIEW_LF_ENUM;
-
-  if (last_type)
-    last_type->next = enumtype;
-
-  if (!types)
-    types = enumtype;
-
-  last_type = enumtype;
+  enumtype->tree = t;
 
   en = (struct pdb_enum*)enumtype->data;
   en->count = num_entries;
-  en->field = fltype->id;
+  en->field = fltypenum;
 
   size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
@@ -871,7 +814,7 @@ find_type_enum(tree t)
   else
     en->name = NULL;
 
-  return enumtype->id;
+  return add_type(enumtype);
 }
 
 static uint16_t
@@ -892,25 +835,9 @@ find_type_pointer(tree t)
       return (CV_TM_NPTR64 << 8) | type;
   }
 
-  // FIXME - make sure doesn't already exist
-
   ptrtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_pointer));
-
-  ptrtype->next = NULL;
-
-  ptrtype->id = type_num;
-  type_num++;
-
-  ptrtype->tree = t;
   ptrtype->cv_type = CODEVIEW_LF_POINTER;
-
-  if (last_type)
-    last_type->next = ptrtype;
-
-  if (!types)
-    types = ptrtype;
-
-  last_type = ptrtype;
+  ptrtype->tree = t;
 
   ptr = (struct pdb_pointer*)ptrtype->data;
   ptr->type = type;
@@ -926,7 +853,7 @@ find_type_pointer(tree t)
   // FIXME - const and volatile pointers
   // FIXME - C++ references
 
-  return ptrtype->id;
+  return add_type(ptrtype);
 }
 
 static uint16_t
@@ -939,32 +866,16 @@ find_type_array(tree t)
   if (type == 0)
     return 0;
 
-  // FIXME - make sure doesn't already exist
-
   arrtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_array));
-
-  arrtype->next = NULL;
-
-  arrtype->id = type_num;
-  type_num++;
-
-  arrtype->tree = t;
   arrtype->cv_type = CODEVIEW_LF_ARRAY;
-
-  if (last_type)
-    last_type->next = arrtype;
-
-  if (!types)
-    types = arrtype;
-
-  last_type = arrtype;
+  arrtype->tree = t;
 
   arr = (struct pdb_array*)arrtype->data;
   arr->type = type;
   arr->index_type = CV_BUILTIN_TYPE_UINT32LONG; // FIXME?
   arr->length = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
 
-  return arrtype->id;
+  return add_type(arrtype);
 }
 
 static uint16_t
@@ -976,6 +887,7 @@ find_type_function(tree t)
   tree arg;
   unsigned int num_args = 0;
   uint16_t *argptr;
+  uint16_t arglisttypenum;
 
   // create arglist
 
@@ -987,25 +899,9 @@ find_type_function(tree t)
     arg = arg->common.chain;
   }
 
-  // FIXME - make sure doesn't already exist
-
   arglisttype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + offsetof(struct pdb_arglist, args) + (num_args * sizeof(uint16_t)));
-
-  arglisttype->next = NULL;
-
-  arglisttype->id = type_num;
-  type_num++;
-
-  arglisttype->tree = t;
   arglisttype->cv_type = CODEVIEW_LF_ARGLIST;
-
-  if (last_type)
-    last_type->next = arglisttype;
-
-  if (!types)
-    types = arglisttype;
-
-  last_type = arglisttype;
+  arglisttype->tree = NULL;
 
   arglist = (struct pdb_arglist*)arglisttype->data;
   arglist->count = num_args;
@@ -1021,32 +917,20 @@ find_type_function(tree t)
     arg = arg->common.chain;
   }
 
+  arglisttypenum = add_type(arglisttype);
+
   // create procedure
 
   proctype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_proc));
-
-  proctype->next = NULL;
-
-  proctype->id = type_num;
-  type_num++;
-
-  proctype->tree = t;
   proctype->cv_type = CODEVIEW_LF_PROCEDURE;
-
-  if (last_type)
-    last_type->next = proctype;
-
-  if (!types)
-    types = proctype;
-
-  last_type = proctype;
+  proctype->tree = t;
 
   proc = (struct pdb_proc*)proctype->data;
 
   proc->return_type = find_type(TREE_TYPE(t));
   proc->attributes = 0;
   proc->num_args = num_args;
-  proc->arg_list = arglisttype->id;
+  proc->arg_list = arglisttypenum;
 
   if (TARGET_64BIT)
     proc->calling_convention = CV_CALL_NEAR_C;
@@ -1073,7 +957,7 @@ find_type_function(tree t)
     }
   }
 
-  return proctype->id;
+  return add_type(proctype);
 }
 
 static uint16_t
