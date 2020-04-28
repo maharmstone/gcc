@@ -582,7 +582,7 @@ add_type(struct pdb_type *t) {
 
   while (t2) {
     if (t2->cv_type == t->cv_type) {
-      // FIXME - pdb_array, pdb_arglist, pdb_proc
+      // FIXME - pdb_arglist, pdb_proc
 
       switch (t2->cv_type) {
 	case CODEVIEW_LF_FIELDLIST:
@@ -680,6 +680,22 @@ add_type(struct pdb_type *t) {
 
 	  if (ptr1->type == ptr2->type &&
 	      ptr1->attr.num == ptr2->attr.num) {
+	    free(t);
+
+	    return t2->id;
+	  }
+
+	  break;
+	}
+
+	case CODEVIEW_LF_ARRAY:
+	{
+	  struct pdb_array *arr1 = (struct pdb_array*)t->data;
+	  struct pdb_array *arr2 = (struct pdb_array*)t2->data;
+
+	  if (arr1->type == arr2->type &&
+	      arr1->index_type == arr2->index_type &&
+	      arr1->length == arr2->length) {
 	    free(t);
 
 	    return t2->id;
