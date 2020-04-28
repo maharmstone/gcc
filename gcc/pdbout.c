@@ -8,6 +8,7 @@
 #include "output.h"
 #include "target.h"
 #include "defaults.h"
+#include "config/i386/i386-protos.h"
 #include "print-tree.h" // FIXME - remove this
 
 #define FUNC_BEGIN_LABEL	"LFB"
@@ -1045,10 +1046,34 @@ find_type_function(tree t)
   proc = (struct pdb_proc*)proctype->data;
 
   proc->return_type = find_type(TREE_TYPE(t));
-  proc->calling_convention = 0; // FIXME
   proc->attributes = 0;
   proc->num_args = num_args;
   proc->arg_list = arglisttype->id;
+
+  if (TARGET_64BIT)
+    proc->calling_convention = CV_CALL_NEAR_C;
+  else {
+    switch (ix86_get_callcvt(t)) {
+      case IX86_CALLCVT_CDECL:
+	proc->calling_convention = CV_CALL_NEAR_C;
+      break;
+
+      case IX86_CALLCVT_STDCALL:
+	proc->calling_convention = CV_CALL_NEAR_STD;
+      break;
+
+      case IX86_CALLCVT_FASTCALL:
+	proc->calling_convention = CV_CALL_NEAR_FAST;
+      break;
+
+      case IX86_CALLCVT_THISCALL:
+	proc->calling_convention = CV_CALL_THISCALL;
+      break;
+
+      default:
+	proc->calling_convention = CV_CALL_NEAR_C;
+    }
+  }
 
   return proctype->id;
 }
