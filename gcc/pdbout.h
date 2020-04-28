@@ -125,4 +125,8 @@ struct pdb_type {
 #define CV_BUILTIN_TYPE_INT64			0x0076
 #define CV_BUILTIN_TYPE_UINT64			0x0077
 
+// from CV_prmode_e in cvdump
+#define CV_TM_NPTR32			4
+#define CV_TM_NPTR64			6
+
 #endif

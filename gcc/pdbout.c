@@ -13,6 +13,8 @@
 #define FUNC_BEGIN_LABEL	"LFB"
 #define FUNC_END_LABEL		"LFE"
 
+#define FIRST_TYPE_NUM		0x1000
+
 static void pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 				   unsigned int column ATTRIBUTE_UNUSED,
 				   const char *file ATTRIBUTE_UNUSED);
@@ -28,7 +30,7 @@ static uint16_t find_type(tree t, bool decl);
 static struct pdb_func *funcs = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
-static uint16_t type_num = 0x1000;
+static uint16_t type_num = FIRST_TYPE_NUM;
 
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
@@ -810,8 +812,15 @@ find_type_pointer(tree t, bool decl)
 {
   struct pdb_type *ptrtype;
   struct pdb_pointer *ptr;
+  unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
+  uint16_t type = find_type(TREE_TYPE(t), decl);
 
-  // FIXME - pointers to builtins
+  if (type < FIRST_TYPE_NUM) { // pointers to builtins have their own constants
+    if (size == 4)
+      return (CV_TM_NPTR32 << 8) | type;
+    else if (size == 8)
+      return (CV_TM_NPTR64 << 8) | type;
+  }
 
   ptrtype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_pointer));
 
@@ -832,14 +841,14 @@ find_type_pointer(tree t, bool decl)
   last_type = ptrtype;
 
   ptr = (struct pdb_pointer*)ptrtype->data;
-  ptr->type = find_type(TREE_TYPE(t), decl);
+  ptr->type = type;
   ptr->attr.num = 0;
 
-  ptr->attr.s.size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
+  ptr->attr.s.size = size;
 
-  if (ptr->attr.s.size == 8)
+  if (size == 8)
     ptr->attr.s.ptrtype = CV_PTR_64;
-  else if (ptr->attr.s.size == 4)
+  else if (size == 4)
     ptr->attr.s.ptrtype = CV_PTR_NEAR32;
 
   // FIXME - const and volatile pointers
