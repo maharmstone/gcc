@@ -582,8 +582,6 @@ add_type(struct pdb_type *t) {
 
   while (t2) {
     if (t2->cv_type == t->cv_type) {
-      // FIXME - pdb_proc
-
       switch (t2->cv_type) {
 	case CODEVIEW_LF_FIELDLIST:
 	{
@@ -724,6 +722,24 @@ add_type(struct pdb_type *t) {
 
 	      return t2->id;
 	    }
+	  }
+
+	  break;
+	}
+
+	case CODEVIEW_LF_PROCEDURE:
+	{
+	  struct pdb_proc *proc1 = (struct pdb_proc*)t->data;
+	  struct pdb_proc *proc2 = (struct pdb_proc*)t2->data;
+
+	  if (proc1->return_type == proc2->return_type &&
+	      proc1->calling_convention == proc2->calling_convention &&
+	      proc1->attributes == proc2->attributes &&
+	      proc1->num_args == proc2->num_args &&
+	      proc1->arg_list == proc2->arg_list) {
+	    free(t);
+
+	    return t2->id;
 	  }
 
 	  break;
