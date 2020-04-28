@@ -25,7 +25,7 @@ static void pdbout_begin_function(tree func);
 static void pdbout_late_global_decl(tree var);
 static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED);
 
-static uint16_t find_type(tree t, bool decl);
+static uint16_t find_type(tree t);
 
 static struct pdb_func *funcs = NULL;
 static struct pdb_global_var *global_vars = NULL;
@@ -443,6 +443,30 @@ write_array(struct pdb_array *arr)
 }
 
 static void
+write_arglist(struct pdb_arglist *arglist)
+{
+  unsigned int len = 8 + (4 * arglist->count);
+
+  if (arglist->count == 0) // zero-length arglist has dummy entry
+    len += 4;
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_ARGLIST);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", arglist->count);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+
+  for (unsigned int i = 0; i < arglist->count; i++) {
+    fprintf (asm_out_file, "\t.short\t0x%x\n", arglist->args[i]);
+    fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  }
+
+  if (arglist->count == 0) {
+    fprintf (asm_out_file, "\t.short\t0\n"); // empty type
+    fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  }
+}
+
+static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
@@ -469,6 +493,10 @@ write_type(struct pdb_type *t)
 
     case CODEVIEW_LF_ARRAY:
       write_array((struct pdb_array*)t->data);
+      break;
+
+    case CODEVIEW_LF_ARGLIST:
+      write_arglist((struct pdb_arglist*)t->data);
       break;
   }
 }
@@ -522,7 +550,7 @@ static void pdbout_late_global_decl(tree var)
   v->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(var)));
   v->asm_name = xstrdup((const char*)var->var_decl.common.assembler_name->identifier.id.str); // FIXME - is this guaranteed to be null-terminated?
   v->public_flag = var->base.public_flag;
-  v->type = find_type(TREE_TYPE(var), false);
+  v->type = find_type(TREE_TYPE(var));
 
   global_vars = v;
 }
@@ -552,7 +580,7 @@ find_type_struct(tree t)
 
   // add fieldlist type
 
-  fltype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_fieldlist));
+  fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
 
   fltype->next = NULL;
 
@@ -582,7 +610,7 @@ find_type_struct(tree t)
       unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
       ent->cv_type = CODEVIEW_LF_MEMBER;
-      ent->type = find_type(f->common.typed.type, false);
+      ent->type = find_type(f->common.typed.type);
       ent->offset = bit_offset / 8; // FIXME - what about bit fields?
       ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
       ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
@@ -594,7 +622,7 @@ find_type_struct(tree t)
 
   // add type for struct
 
-  strtype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_struct));
+  strtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
 
   strtype->next = NULL;
 
@@ -650,7 +678,7 @@ find_type_union(tree t)
 
   // add fieldlist type
 
-  fltype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_fieldlist));
+  fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
 
   fltype->next = NULL;
 
@@ -680,7 +708,7 @@ find_type_union(tree t)
       unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
       ent->cv_type = CODEVIEW_LF_MEMBER;
-      ent->type = find_type(f->common.typed.type, false);
+      ent->type = find_type(f->common.typed.type);
       ent->offset = bit_offset / 8; // FIXME - what about bit fields?
       ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
       ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
@@ -692,7 +720,7 @@ find_type_union(tree t)
 
   // add type for union
 
-  uniontype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_struct));
+  uniontype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
 
   uniontype->next = NULL;
 
@@ -746,7 +774,7 @@ find_type_enum(tree t)
 
   // add fieldlist type (FIXME - check doesn't already exist?)
 
-  fltype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_fieldlist));
+  fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
 
   fltype->next = NULL;
 
@@ -782,7 +810,7 @@ find_type_enum(tree t)
 
   // add type for enum
 
-  enumtype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_enum));
+  enumtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_enum));
 
   enumtype->next = NULL;
 
@@ -828,12 +856,12 @@ find_type_enum(tree t)
 }
 
 static uint16_t
-find_type_pointer(tree t, bool decl)
+find_type_pointer(tree t)
 {
   struct pdb_type *ptrtype;
   struct pdb_pointer *ptr;
   unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
-  uint16_t type = find_type(TREE_TYPE(t), decl);
+  uint16_t type = find_type(TREE_TYPE(t));
 
   if (type == 0)
     return 0;
@@ -847,7 +875,7 @@ find_type_pointer(tree t, bool decl)
 
   // FIXME - make sure doesn't already exist
 
-  ptrtype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_pointer));
+  ptrtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_pointer));
 
   ptrtype->next = NULL;
 
@@ -883,18 +911,18 @@ find_type_pointer(tree t, bool decl)
 }
 
 static uint16_t
-find_type_array(tree t, bool decl)
+find_type_array(tree t)
 {
   struct pdb_type *arrtype;
   struct pdb_array *arr;
-  uint16_t type = find_type(TREE_TYPE(t), decl);
+  uint16_t type = find_type(TREE_TYPE(t));
 
   if (type == 0)
     return 0;
 
   // FIXME - make sure doesn't already exist
 
-  arrtype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_array));
+  arrtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_array));
 
   arrtype->next = NULL;
 
@@ -921,7 +949,65 @@ find_type_array(tree t, bool decl)
 }
 
 static uint16_t
-find_type(tree t, bool decl)
+find_type_function(tree t)
+{
+  struct pdb_type *arglisttype;
+  struct pdb_arglist *arglist;
+  tree arg;
+  unsigned int num_args = 0;
+  uint16_t *argptr;
+
+  // create arglist
+
+  arg = TYPE_ARG_TYPES(t);
+  while (arg) {
+    if (TREE_VALUE(arg)->base.code != VOID_TYPE)
+      num_args++;
+
+    arg = arg->common.chain;
+  }
+
+  // FIXME - make sure doesn't already exist
+
+  arglisttype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + offsetof(struct pdb_arglist, args) + (num_args * sizeof(uint16_t)));
+
+  arglisttype->next = NULL;
+
+  arglisttype->id = type_num;
+  type_num++;
+
+  arglisttype->tree = t;
+  arglisttype->cv_type = CODEVIEW_LF_ARGLIST;
+
+  if (last_type)
+    last_type->next = arglisttype;
+
+  if (!types)
+    types = arglisttype;
+
+  last_type = arglisttype;
+
+  arglist = (struct pdb_arglist*)arglisttype->data;
+  arglist->count = num_args;
+
+  argptr = arglist->args;
+  arg = TYPE_ARG_TYPES(t);
+  while (arg) {
+    if (TREE_VALUE(arg)->base.code != VOID_TYPE) {
+      *argptr = find_type(TREE_VALUE(arg));
+      argptr++;
+    }
+
+    arg = arg->common.chain;
+  }
+
+  // FIXME - create LF_PROCEDURE
+
+  return 0;
+}
+
+static uint16_t
+find_type(tree t)
 {
   struct pdb_type *type;
 
@@ -978,31 +1064,36 @@ find_type(tree t, bool decl)
     type = type->next;
   }
 
-  if (t->base.code == POINTER_TYPE)
-    return find_type_pointer(t, decl);
-  else if (t->base.code == ARRAY_TYPE)
-    return find_type_array(t, decl);
-
-  if (!decl)
-    return 0;
-
   // FIXME - wchar_t, char16_t, char32_t, char8_t
   // FIXME - real_type
   // FIXME - complex types
   // FIXME - booleans
-  // FIXME - void_type
   // FIXME - C++ references
   // FIXME - constness etc.
   // FIXME - any others?
 
-  if (t->base.code == RECORD_TYPE)
-    return find_type_struct(t);
-  else if (t->base.code == UNION_TYPE)
-    return find_type_union(t);
-  else if (t->base.code == ENUMERAL_TYPE)
-    return find_type_enum(t);
-  else
-    return 0;
+  switch (t->base.code) {
+    case POINTER_TYPE:
+      return find_type_pointer(t);
+
+    case ARRAY_TYPE:
+      return find_type_array(t);
+
+    case RECORD_TYPE:
+      return find_type_struct(t);
+
+    case UNION_TYPE:
+      return find_type_union(t);
+
+    case ENUMERAL_TYPE:
+      return find_type_enum(t);
+
+    case FUNCTION_TYPE:
+      return find_type_function(t);
+
+    default:
+      return 0;
+  }
 }
 
 static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
@@ -1012,5 +1103,5 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 
   // FIXME - if from file in /usr/include or wherever, only include in output if used
 
-  find_type(t->typed.type, true);
+  find_type(t->typed.type);
 }
