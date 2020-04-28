@@ -427,6 +427,22 @@ write_pointer(struct pdb_pointer *ptr)
 }
 
 static void
+write_array(struct pdb_array *arr)
+{
+  fprintf (asm_out_file, "\t.short\t0xe\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_ARRAY);
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->type);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->index_type);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->length);
+
+  fprintf (asm_out_file, "\t.byte\t0\n"); // empty string
+  fprintf (asm_out_file, "\t.byte\t0xf1\n");
+}
+
+static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
@@ -449,6 +465,10 @@ write_type(struct pdb_type *t)
 
     case CODEVIEW_LF_POINTER:
       write_pointer((struct pdb_pointer*)t->data);
+      break;
+
+    case CODEVIEW_LF_ARRAY:
+      write_array((struct pdb_array*)t->data);
       break;
   }
 }
@@ -825,6 +845,8 @@ find_type_pointer(tree t, bool decl)
       return (CV_TM_NPTR64 << 8) | type;
   }
 
+  // FIXME - make sure doesn't already exist
+
   ptrtype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_pointer));
 
   ptrtype->next = NULL;
@@ -858,6 +880,44 @@ find_type_pointer(tree t, bool decl)
   // FIXME - C++ references
 
   return ptrtype->id;
+}
+
+static uint16_t
+find_type_array(tree t, bool decl)
+{
+  struct pdb_type *arrtype;
+  struct pdb_array *arr;
+  uint16_t type = find_type(TREE_TYPE(t), decl);
+
+  if (type == 0)
+    return 0;
+
+  // FIXME - make sure doesn't already exist
+
+  arrtype = (struct pdb_type *)xmalloc(offsetof(pdb_type, data) + sizeof(struct pdb_array));
+
+  arrtype->next = NULL;
+
+  arrtype->id = type_num;
+  type_num++;
+
+  arrtype->tree = t;
+  arrtype->cv_type = CODEVIEW_LF_ARRAY;
+
+  if (last_type)
+    last_type->next = arrtype;
+
+  if (!types)
+    types = arrtype;
+
+  last_type = arrtype;
+
+  arr = (struct pdb_array*)arrtype->data;
+  arr->type = type;
+  arr->index_type = CV_BUILTIN_TYPE_UINT32LONG; // FIXME?
+  arr->length = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
+
+  return arrtype->id;
 }
 
 static uint16_t
@@ -920,8 +980,8 @@ find_type(tree t, bool decl)
 
   if (t->base.code == POINTER_TYPE)
     return find_type_pointer(t, decl);
-
-  // FIXME - arrays
+  else if (t->base.code == ARRAY_TYPE)
+    return find_type_array(t, decl);
 
   if (!decl)
     return 0;
