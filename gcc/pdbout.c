@@ -453,7 +453,7 @@ write_arglist(struct pdb_arglist *arglist)
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
   fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_ARGLIST);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", arglist->count);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", arglist->count == 0 ? 1 : arglist->count);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
 
   for (unsigned int i = 0; i < arglist->count; i++) {
