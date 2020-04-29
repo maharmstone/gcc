@@ -519,6 +519,18 @@ write_string_id(struct pdb_type *t)
 }
 
 static void
+write_udt_src_line(struct pdb_udt_src_line *t)
+{
+  fprintf (asm_out_file, "\t.short\t0xe\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_UDT_SRC_LINE);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->type);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->source_file);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  fprintf (asm_out_file, "\t.long\t0x%x\n", t->line);
+}
+
+static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
@@ -557,6 +569,10 @@ write_type(struct pdb_type *t)
 
     case CODEVIEW_LF_STRING_ID:
       write_string_id(t);
+      break;
+
+    case CODEVIEW_LF_UDT_SRC_LINE:
+      write_udt_src_line((struct pdb_udt_src_line*)t->data);
       break;
   }
 }
@@ -788,13 +804,20 @@ add_type(struct pdb_type *t) {
 	}
 
 	case CODEVIEW_LF_STRING_ID:
-	{
 	  if (!strcmp((const char*)t->data, (const char*)t2->data)) {
 	    free(t);
 
 	    return t2->id;
 	  }
-	}
+	break;
+
+	case CODEVIEW_LF_UDT_SRC_LINE:
+	  if (!memcmp(t->data, t2->data, sizeof(struct pdb_udt_src_line))) {
+	    free(t);
+
+	    return t2->id;
+	  }
+	break;
       }
     }
 
@@ -1275,16 +1298,35 @@ find_type(tree t)
   }
 }
 
-static uint16_t add_string_type(const char *s)
+static uint16_t
+add_string_type(const char *s)
 {
   struct pdb_type *type;
   size_t len = strlen(s);
 
   type = (struct pdb_type*)xmalloc(offsetof(struct pdb_type, data) + len + 1);
-
-  type->tree = NULL;
   type->cv_type = CODEVIEW_LF_STRING_ID;
+  type->tree = NULL;
+
   memcpy(type->data, s, len + 1);
+
+  return add_type(type);
+}
+
+static uint16_t
+add_udt_src_line_type(uint16_t type_id, uint16_t source_file, uint32_t line)
+{
+  struct pdb_type *type;
+  struct pdb_udt_src_line *pusl;
+
+  type = (struct pdb_type*)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_udt_src_line));
+  type->cv_type = CODEVIEW_LF_UDT_SRC_LINE;
+  type->tree = NULL;
+
+  pusl = (struct pdb_udt_src_line*)type->data;
+  pusl->type = type_id;
+  pusl->source_file = source_file;
+  pusl->line = line;
 
   return add_type(type);
 }
@@ -1312,9 +1354,11 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
   if (!xloc.file)
     return;
 
-  // add type as LF_STRING_ID, so linker puts it into string table
+  // add filename as LF_STRING_ID, so linker puts it into string table
 
   string_type = add_string_type(xloc.file);
 
-  // FIXME - add type as LF_UDT_SRC_LINE? (Linker transforms it into LF_UDT_MOD_SRC_LINE)
+  // add LF_UDT_SRC_LINE entry, which linker transforms into LF_UDT_MOD_SRC_LINE
+
+  add_udt_src_line_type(type, string_type, xloc.line);
 }
