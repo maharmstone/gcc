@@ -491,6 +491,34 @@ write_procedure(struct pdb_proc *proc)
 }
 
 static void
+write_string_id(struct pdb_type *t)
+{
+  size_t string_len = strlen((const char*)t->data);
+  size_t len = 9 + string_len, align;
+
+  if (len % 4 != 0)
+    align = 4 - (len % 4);
+  else
+    align = 0;
+
+  len += align;
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t)));
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_STRING_ID);
+  fprintf (asm_out_file, "\t.long\t0\n");
+  ASM_OUTPUT_ASCII (asm_out_file, (const char*)t->data, string_len + 1);
+
+  if (align == 3)
+    fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+  if (align >= 2)
+    fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+  if (align >= 1)
+    fprintf (asm_out_file, "\t.byte\t0xf1\n");
+}
+
+static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
@@ -525,6 +553,10 @@ write_type(struct pdb_type *t)
 
     case CODEVIEW_LF_PROCEDURE:
       write_procedure((struct pdb_proc*)t->data);
+      break;
+
+    case CODEVIEW_LF_STRING_ID:
+      write_string_id(t);
       break;
   }
 }
@@ -753,6 +785,15 @@ add_type(struct pdb_type *t) {
 	  }
 
 	  break;
+	}
+
+	case CODEVIEW_LF_STRING_ID:
+	{
+	  if (!strcmp((const char*)t->data, (const char*)t2->data)) {
+	    free(t);
+
+	    return t2->id;
+	  }
 	}
       }
     }
@@ -1234,12 +1275,46 @@ find_type(tree t)
   }
 }
 
+static uint16_t add_string_type(const char *s)
+{
+  struct pdb_type *type;
+  size_t len = strlen(s);
+
+  type = (struct pdb_type*)xmalloc(offsetof(struct pdb_type, data) + len + 1);
+
+  type->tree = NULL;
+  type->cv_type = CODEVIEW_LF_STRING_ID;
+  memcpy(type->data, s, len + 1);
+
+  return add_type(type);
+}
+
 static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 {
+  uint16_t type, string_type;
+  expanded_location xloc;
+
   if (DECL_IN_SYSTEM_HEADER(t)) // ignoring system headers for now (FIXME)
     return;
 
   // FIXME - if from file in /usr/include or wherever, only include in output if used
 
-  find_type(t->typed.type);
+  type = find_type(t->typed.type);
+
+  if (type == 0 || type < FIRST_TYPE_NUM)
+    return;
+
+  if (!DECL_SOURCE_LOCATION(t))
+    return;
+
+  xloc = expand_location(DECL_SOURCE_LOCATION(t));
+
+  if (!xloc.file)
+    return;
+
+  // add type as LF_STRING_ID, so linker puts it into string table
+
+  string_type = add_string_type(xloc.file);
+
+  // FIXME - add type as LF_UDT_SRC_LINE? (Linker transforms it into LF_UDT_MOD_SRC_LINE)
 }
