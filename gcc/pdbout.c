@@ -579,7 +579,8 @@ write_type(struct pdb_type *t)
 static void
 write_pdb_type_section()
 {
-  fprintf (asm_out_file, "\t.section\t.pdb$typ, \"ndr\"\n");
+  fprintf (asm_out_file, "\t.section\t.debug$T, \"ndr\"\n");
+  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
 
   while (types) {
     struct pdb_type *n;
