@@ -9,6 +9,7 @@
 #include "target.h"
 #include "defaults.h"
 #include "config/i386/i386-protos.h"
+#include "md5.h"
 #include "print-tree.h" // FIXME - remove this
 
 #define FUNC_BEGIN_LABEL	".LFB"
@@ -25,6 +26,8 @@ static void pdbout_finish (const char *filename);
 static void pdbout_begin_function(tree func);
 static void pdbout_late_global_decl(tree var);
 static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED);
+static void pdbout_start_source_file(unsigned int line ATTRIBUTE_UNUSED, const char *file);
+static void pdbout_register_main_translation_unit(tree unit);
 
 static uint16_t find_type(tree t);
 
@@ -32,6 +35,8 @@ static struct pdb_func *funcs = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
+static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
+static uint32_t source_file_string_offset = 1;
 
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
@@ -41,7 +46,7 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   debug_nothing_void,			 /* assembly_start */
   debug_nothing_int_charstar,		 /* define */
   debug_nothing_int_charstar,		 /* undef */
-  debug_nothing_int_charstar,		 /* start_source_file */
+  pdbout_start_source_file,
   debug_nothing_int,			 /* end_source_file */
   debug_nothing_int_int,	         /* begin_block */
   debug_nothing_int_int,	         /* end_block */
@@ -53,7 +58,7 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   pdbout_end_epilogue,		         /* end_epilogue */
   pdbout_begin_function,	         /* begin_function */
   debug_nothing_int,		         /* end_function */
-  debug_nothing_tree,		         /* register_main_translation_unit */
+  pdbout_register_main_translation_unit,
   debug_nothing_tree,		         /* function_decl */
   debug_nothing_tree,		         /* early_global_decl */
   pdbout_late_global_decl,
@@ -168,6 +173,8 @@ pdbout_ldata32 (struct pdb_global_var *v)
 static void
 write_pdb_section()
 {
+  struct pdb_source_file *psf;
+
   fprintf (asm_out_file, "\t.section\t.debug$S, \"ndr\"\n");
   fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
   fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_SYMBOLS);
@@ -209,6 +216,47 @@ write_pdb_section()
   }
 
   fprintf (asm_out_file, ".symend:\n");
+
+  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_STRINGTABLE);
+  fprintf (asm_out_file, "\t.long\t[.strtableend]-[.strtablestart]\n");
+  fprintf (asm_out_file, ".strtablestart:\n");
+  fprintf (asm_out_file, "\t.byte\t0\n");
+
+  psf = source_files;
+  while (psf) {
+    ASM_OUTPUT_ASCII (asm_out_file, psf->name, strlen(psf->name) + 1);
+
+    psf = psf->next;
+  }
+
+  fprintf (asm_out_file, "\t.balign\t4\n");
+  fprintf (asm_out_file, ".strtableend:\n");
+
+  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_FILECHKSMS);
+  fprintf (asm_out_file, "\t.long\t[.chksumsend]-[.chksumsstart]\n");
+  fprintf (asm_out_file, ".chksumsstart:\n");
+
+  while (source_files) {
+    struct pdb_source_file *n;
+
+    fprintf (asm_out_file, "\t.long\t0x%x\n", source_files->str_offset);
+    fprintf (asm_out_file, "\t.byte\t0x%x\n", 16); // length of MD5 hash
+    fprintf (asm_out_file, "\t.byte\t0x%x\n", CV_CHKSUM_TYPE_CHKSUM_TYPE_MD5);
+
+    for (unsigned int i = 0; i < 16; i++) {
+      fprintf (asm_out_file, "\t.byte\t0x%x\n", source_files->hash[i]);
+    }
+
+    fprintf (asm_out_file, "\t.short\t0\n");
+
+    n = source_files->next;
+
+    free(source_files);
+
+    source_files = n;
+  }
+
+  fprintf (asm_out_file, ".chksumsend:\n");
 }
 
 static void
@@ -1367,4 +1415,73 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
   // add LF_UDT_SRC_LINE entry, which linker transforms into LF_UDT_MOD_SRC_LINE
 
   add_udt_src_line_type(type, string_type, xloc.line);
+}
+
+static void
+add_source_file(const char *file)
+{
+  struct pdb_source_file *psf;
+  char *path;
+  size_t len;
+  FILE *f;
+
+  path = realpath(file, NULL);
+  if (!path)
+    return;
+
+  // check not already added
+  psf = source_files;
+  while (psf) {
+    if (!strcmp(psf->name, path)) {
+      free(path);
+      return;
+    }
+
+    psf = psf->next;
+  }
+
+  len = strlen(path);
+
+  f = fopen(file, "r");
+
+  if (!f) {
+    free(path);
+    return;
+  }
+
+  psf = (struct pdb_source_file*)xmalloc(offsetof(struct pdb_source_file, name) + len + 1);
+
+  md5_stream(f, psf->hash);
+
+  fclose(f);
+
+  psf->next = NULL;
+  psf->str_offset = source_file_string_offset;
+  memcpy(psf->name, path, len + 1);
+
+  free(path);
+
+  source_file_string_offset += len + 1;
+
+  if (last_source_file)
+    last_source_file->next = psf;
+
+  last_source_file = psf;
+
+  if (!source_files)
+    source_files = psf;
+}
+
+static void
+pdbout_start_source_file(unsigned int line ATTRIBUTE_UNUSED, const char *file)
+{
+  add_source_file(file);
+}
+
+static void
+pdbout_register_main_translation_unit(tree unit)
+{
+  // FIXME - language is in unit->translation_unit_decl.language - record in S_COMPILE3
+
+  add_source_file(IDENTIFIER_POINTER(DECL_NAME(unit)));
 }
