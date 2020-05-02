@@ -235,7 +235,7 @@ write_line_numbers()
     fprintf (asm_out_file, "\t.short\t0\n"); // flags
     fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num); // length
 
-    fprintf (asm_out_file, "\t.long\t0x%x\n", (cur_source_file - 1) * 0x18); // file ID (0x18 is size of checksum struct)
+    fprintf (asm_out_file, "\t.long\t0x%x\n", (func->source_file - 1) * 0x18); // file ID (0x18 is size of checksum struct)
     fprintf (asm_out_file, "\t.long\t0x%x\n", num_entries);
     fprintf (asm_out_file, "\t.long\t0x%x\n", 0xc + (num_entries * 8)); // length of file block
 
@@ -739,6 +739,7 @@ pdbout_begin_function (tree func)
   f->num = current_function_funcdef_no;
   f->public_flag = func->base.public_flag;
   f->type = find_type(TREE_TYPE(func));
+  f->source_file = cur_source_file;
 
   funcs = f;
 
