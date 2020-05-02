@@ -1493,6 +1493,36 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
   add_udt_src_line_type(type, string_type, xloc.line);
 }
 
+static char*
+make_windows_path(char *src)
+{
+  size_t len = strlen(src);
+  char *dest = (char*)xmalloc(len + 3);
+  char *in, *ptr;
+
+  ptr = dest;
+  *ptr = 'Z'; ptr++;
+  *ptr = ':'; ptr++;
+
+  in = src;
+
+  for (unsigned int i = 0; i < len; i++) {
+    if (*in == '/')
+      *ptr = '\\';
+    else
+      *ptr = *in;
+
+    in++;
+    ptr++;
+  }
+
+  *ptr = 0;
+
+  free(src);
+
+  return dest;
+}
+
 static void
 add_source_file(const char *file)
 {
@@ -1504,6 +1534,8 @@ add_source_file(const char *file)
   path = realpath(file, NULL);
   if (!path)
     return;
+
+  path = make_windows_path(path); // FIXME
 
   // check not already added
   psf = source_files;
