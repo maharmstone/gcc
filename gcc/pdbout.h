@@ -44,6 +44,7 @@ struct pdb_func {
   int num;
   unsigned int public_flag;
   uint16_t type;
+  unsigned int source_file;
   struct pdb_line *lines, *last_line;
 };
 
