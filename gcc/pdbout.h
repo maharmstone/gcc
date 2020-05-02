@@ -23,6 +23,13 @@
 #define CV_SIGNATURE_C13	4
 
 #define CV_DEBUG_S_SYMBOLS		0xf1
+#define CV_DEBUG_S_STRINGTABLE		0xf3
+#define CV_DEBUG_S_FILECHKSMS		0xf4
+
+#define CV_CHKSUM_TYPE_NONE			0
+#define CV_CHKSUM_TYPE_CHKSUM_TYPE_MD5		1
+#define CV_CHKSUM_TYPE_CHKSUM_TYPE_SHA1		2
+#define CV_CHKSUM_TYPE_CHKSUM_TYPE_SHA_256	3
 
 struct pdb_func {
   struct pdb_func *next;
@@ -168,5 +175,12 @@ struct pdb_type {
 #define CV_CALL_NEAR_FAST	0x04
 #define CV_CALL_NEAR_STD	0x07
 #define CV_CALL_THISCALL	0x0b
+
+struct pdb_source_file {
+  struct pdb_source_file *next;
+  uint8_t hash[16];
+  uint32_t str_offset;
+  char name[1];
+};
 
 #endif
