@@ -1077,6 +1077,7 @@ find_type_enum(tree t)
 
   while (v) {
     ent->cv_type = CODEVIEW_LF_ENUMERATE;
+    ent->fld_attr = 0; // FIXME
     ent->value = TREE_INT_CST_ELT(TREE_VALUE(v), 0);
     ent->name = xstrdup(IDENTIFIER_POINTER(TREE_PURPOSE(v)));
 
