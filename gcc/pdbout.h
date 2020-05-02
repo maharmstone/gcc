@@ -23,6 +23,7 @@
 #define CV_SIGNATURE_C13	4
 
 #define CV_DEBUG_S_SYMBOLS		0xf1
+#define CV_DEBUG_S_LINES		0xf2
 #define CV_DEBUG_S_STRINGTABLE		0xf3
 #define CV_DEBUG_S_FILECHKSMS		0xf4
 
@@ -31,12 +32,19 @@
 #define CV_CHKSUM_TYPE_CHKSUM_TYPE_SHA1		2
 #define CV_CHKSUM_TYPE_CHKSUM_TYPE_SHA_256	3
 
+struct pdb_line {
+  struct pdb_line *next;
+  unsigned int line;
+  unsigned int entry;
+};
+
 struct pdb_func {
   struct pdb_func *next;
   char *name;
   int num;
   unsigned int public_flag;
   uint16_t type;
+  struct pdb_line *lines, *last_line;
 };
 
 struct pdb_global_var {

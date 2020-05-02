@@ -28,15 +28,21 @@ static void pdbout_late_global_decl(tree var);
 static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED);
 static void pdbout_start_source_file(unsigned int line ATTRIBUTE_UNUSED, const char *file);
 static void pdbout_register_main_translation_unit(tree unit);
+static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
+			       const char *text ATTRIBUTE_UNUSED, int discriminator ATTRIBUTE_UNUSED,
+			       bool is_stmt ATTRIBUTE_UNUSED);
+static void pdbout_end_function(unsigned int line ATTRIBUTE_UNUSED);
 
 static uint16_t find_type(tree t);
 
-static struct pdb_func *funcs = NULL;
+static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
+static unsigned int num_line_number_entries = 0;
+static unsigned int cur_source_file = 0;
 
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
@@ -51,13 +57,13 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   debug_nothing_int_int,	         /* begin_block */
   debug_nothing_int_int,	         /* end_block */
   debug_true_const_tree,	         /* ignore_block */
-  debug_nothing_int_int_charstar_int_bool, /* source_line */
+  pdbout_source_line,
   pdbout_begin_prologue,
   debug_nothing_int_charstar,	         /* end_prologue */
   debug_nothing_int_charstar,	         /* begin_epilogue */
   pdbout_end_epilogue,		         /* end_epilogue */
-  pdbout_begin_function,	         /* begin_function */
-  debug_nothing_int,		         /* end_function */
+  pdbout_begin_function,
+  pdbout_end_function,
   pdbout_register_main_translation_unit,
   debug_nothing_tree,		         /* function_decl */
   debug_nothing_tree,		         /* early_global_decl */
@@ -171,9 +177,95 @@ pdbout_ldata32 (struct pdb_global_var *v)
 }
 
 static void
+write_file_checksums()
+{
+  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_FILECHKSMS);
+  fprintf (asm_out_file, "\t.long\t[.chksumsend]-[.chksumsstart]\n");
+  fprintf (asm_out_file, ".chksumsstart:\n");
+
+  while (source_files) {
+    struct pdb_source_file *n;
+
+    fprintf (asm_out_file, "\t.long\t0x%x\n", source_files->str_offset);
+    fprintf (asm_out_file, "\t.byte\t0x%x\n", 16); // length of MD5 hash
+    fprintf (asm_out_file, "\t.byte\t0x%x\n", CV_CHKSUM_TYPE_CHKSUM_TYPE_MD5);
+
+    for (unsigned int i = 0; i < 16; i++) {
+      fprintf (asm_out_file, "\t.byte\t0x%x\n", source_files->hash[i]);
+    }
+
+    fprintf (asm_out_file, "\t.short\t0\n");
+
+    n = source_files->next;
+
+    free(source_files);
+
+    source_files = n;
+  }
+
+  fprintf (asm_out_file, ".chksumsend:\n");
+}
+
+static void
+write_line_numbers()
+{
+  struct pdb_func *func = funcs;
+
+  while (func) {
+    struct pdb_line *l;
+    unsigned int num_entries = 0;
+
+    if (!func->lines) {
+      func = func->next;
+      continue;
+    }
+
+    l = func->lines;
+    while (l) {
+      num_entries++;
+      l = l->next;
+    }
+
+    fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_LINES);
+    fprintf (asm_out_file, "\t.long\t[.linesend%u]-[.linesstart%u]\n", func->num, func->num);
+    fprintf (asm_out_file, ".linesstart%u:\n", func->num);
+
+    fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n", func->num); // address
+    fprintf (asm_out_file, "\t.short\t0\n"); // segment (filled in by linker)
+    fprintf (asm_out_file, "\t.short\t0\n"); // flags
+    fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num); // length
+
+    fprintf (asm_out_file, "\t.long\t0x%x\n", (cur_source_file - 1) * 0x18); // file ID (0x18 is size of checksum struct)
+    fprintf (asm_out_file, "\t.long\t0x%x\n", num_entries);
+    fprintf (asm_out_file, "\t.long\t0x%x\n", 0xc + (num_entries * 8)); // length of file block
+
+    l = func->lines;
+    while (l) {
+      fprintf (asm_out_file, "\t.long\t[.line%u]-[" FUNC_BEGIN_LABEL "%u]\n", l->entry, func->num); // offset
+      fprintf (asm_out_file, "\t.long\t0x%x\n", l->line); // line no.
+
+      l = l->next;
+    }
+
+    while (func->lines) {
+      struct pdb_line *n = func->lines->next;
+
+      free(func->lines);
+
+      func->lines = n;
+    }
+
+    fprintf (asm_out_file, ".linesend%u:\n", func->num);
+
+    func = func->next;
+  }
+}
+
+static void
 write_pdb_section()
 {
   struct pdb_source_file *psf;
+  struct pdb_func *func;
 
   fprintf (asm_out_file, "\t.section\t.debug$S, \"ndr\"\n");
   fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
@@ -200,19 +292,11 @@ write_pdb_section()
     global_vars = n;
   }
 
-  while (funcs) {
-    struct pdb_func *n;
+  func = funcs;
+  while (func) {
+    pdbout_proc32(func);
 
-    pdbout_proc32(funcs);
-
-    n = funcs->next;
-
-    if (funcs->name)
-      free (funcs->name);
-
-    free(funcs);
-
-    funcs = n;
+    func = func->next;
   }
 
   fprintf (asm_out_file, ".symend:\n");
@@ -232,31 +316,20 @@ write_pdb_section()
   fprintf (asm_out_file, "\t.balign\t4\n");
   fprintf (asm_out_file, ".strtableend:\n");
 
-  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_FILECHKSMS);
-  fprintf (asm_out_file, "\t.long\t[.chksumsend]-[.chksumsstart]\n");
-  fprintf (asm_out_file, ".chksumsstart:\n");
+  write_file_checksums();
 
-  while (source_files) {
-    struct pdb_source_file *n;
+  write_line_numbers();
 
-    fprintf (asm_out_file, "\t.long\t0x%x\n", source_files->str_offset);
-    fprintf (asm_out_file, "\t.byte\t0x%x\n", 16); // length of MD5 hash
-    fprintf (asm_out_file, "\t.byte\t0x%x\n", CV_CHKSUM_TYPE_CHKSUM_TYPE_MD5);
+  while (funcs) {
+    struct pdb_func *n = funcs->next;
 
-    for (unsigned int i = 0; i < 16; i++) {
-      fprintf (asm_out_file, "\t.byte\t0x%x\n", source_files->hash[i]);
-    }
+    if (funcs->name)
+      free (funcs->name);
 
-    fprintf (asm_out_file, "\t.short\t0\n");
+    free(funcs);
 
-    n = source_files->next;
-
-    free(source_files);
-
-    source_files = n;
+    funcs = n;
   }
-
-  fprintf (asm_out_file, ".chksumsend:\n");
 }
 
 static void
@@ -668,6 +741,8 @@ pdbout_begin_function (tree func)
   f->type = find_type(TREE_TYPE(func));
 
   funcs = f;
+
+  cur_func = f;
 }
 
 static void pdbout_late_global_decl(tree var)
@@ -1471,6 +1546,8 @@ add_source_file(const char *file)
 
   if (!source_files)
     source_files = psf;
+
+  cur_source_file++;
 }
 
 static void
@@ -1485,4 +1562,37 @@ pdbout_register_main_translation_unit(tree unit)
   // FIXME - language is in unit->translation_unit_decl.language - record in S_COMPILE3
 
   add_source_file(IDENTIFIER_POINTER(DECL_NAME(unit)));
+}
+
+static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
+			       const char *text ATTRIBUTE_UNUSED, int discriminator ATTRIBUTE_UNUSED,
+			       bool is_stmt ATTRIBUTE_UNUSED)
+{
+  struct pdb_line *ent;
+
+  if (!cur_func)
+    return;
+
+  ent = (struct pdb_line*)xmalloc(sizeof(struct pdb_line));
+
+  ent->next = NULL;
+  ent->line = line;
+  ent->entry = num_line_number_entries;
+
+  if (cur_func->last_line)
+    cur_func->last_line->next = ent;
+
+  cur_func->last_line = ent;
+
+  if (!cur_func->lines)
+    cur_func->lines = ent;
+
+  fprintf (asm_out_file, ".line%u:\n", num_line_number_entries);
+
+  num_line_number_entries++;
+}
+
+static void pdbout_end_function(unsigned int line ATTRIBUTE_UNUSED)
+{
+  cur_func = NULL;
 }
