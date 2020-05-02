@@ -22,6 +22,8 @@
 
 #define CV_SIGNATURE_C13	4
 
+#define CV_DEBUG_S_SYMBOLS		0xf1
+
 struct pdb_func {
   struct pdb_func *next;
   char *name;

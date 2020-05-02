@@ -106,7 +106,7 @@ pdbout_proc32 (struct pdb_func *func)
   fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n", func->public_flag ? CODEVIEW_S_GPROC32 : CODEVIEW_S_LPROC32);
   fprintf (asm_out_file, "\t.long\t0\n"); // pParent
-  fprintf (asm_out_file, "\t.long\t[.cvprocend%u]-[.pdb]\n", func->num); // pEnd
+  fprintf (asm_out_file, "\t.long\t[.cvprocend%u]-[.debug$S]\n", func->num); // pEnd
   fprintf (asm_out_file, "\t.long\t0\n"); // pNext
   fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num); // len
   fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - DbgStart
@@ -168,8 +168,12 @@ pdbout_ldata32 (struct pdb_global_var *v)
 static void
 write_pdb_section()
 {
-  fprintf (asm_out_file, "\t.section\t.pdb, \"ndr\"\n");
+  fprintf (asm_out_file, "\t.section\t.debug$S, \"ndr\"\n");
   fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
+  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_SYMBOLS);
+  fprintf (asm_out_file, "\t.long\t[.symend]-[.symstart]\n");
+
+  fprintf (asm_out_file, ".symstart:\n");
 
   while (global_vars) {
     struct pdb_global_var *n;
@@ -203,6 +207,8 @@ write_pdb_section()
 
     funcs = n;
   }
+
+  fprintf (asm_out_file, ".symend:\n");
 }
 
 static void
