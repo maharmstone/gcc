@@ -189,6 +189,7 @@ struct pdb_source_file {
   struct pdb_source_file *next;
   uint8_t hash[16];
   uint32_t str_offset;
+  unsigned int num;
   char name[1];
 };
 
