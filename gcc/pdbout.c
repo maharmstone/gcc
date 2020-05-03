@@ -10,7 +10,9 @@
 #include "defaults.h"
 #include "config/i386/i386-protos.h"
 #include "md5.h"
+#include "rtl.h"
 #include "print-tree.h" // FIXME - remove this
+#include "print-rtl.h" // FIXME - and this
 
 #define FUNC_BEGIN_LABEL	".LFB"
 #define FUNC_END_LABEL		".LFE"
@@ -32,6 +34,7 @@ static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_
 			       const char *text ATTRIBUTE_UNUSED, int discriminator ATTRIBUTE_UNUSED,
 			       bool is_stmt ATTRIBUTE_UNUSED);
 static void pdbout_end_function(unsigned int line ATTRIBUTE_UNUSED);
+static void pdbout_function_decl(tree decl);
 
 static uint16_t find_type(tree t);
 
@@ -65,7 +68,7 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   pdbout_begin_function,
   pdbout_end_function,
   debug_nothing_tree,			 /* register_main_translation_unit */
-  debug_nothing_tree,		         /* function_decl */
+  pdbout_function_decl,
   debug_nothing_tree,		         /* early_global_decl */
   pdbout_late_global_decl,
   pdbout_type_decl,
@@ -101,6 +104,39 @@ pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 }
 
 static void
+pdbout_local_variable (struct pdb_local_var *v)
+{
+  uint16_t len, align;
+  size_t name_len;
+
+  if (v->var_type != pdb_local_var_stack) // FIXME
+    return;
+
+  // FIXME - is this different for x86 and amd64?
+
+  name_len = strlen(v->name);
+
+  len = 13 + name_len;
+
+  if (len % 4 != 0) {
+    align = 4 - (len % 4);
+    len += 4 - (len % 4);
+  } else
+    align = 0;
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BPREL32);
+  fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
+  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+
+  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+
+  for (unsigned int i = 0; i < align; i++) {
+    fprintf (asm_out_file, "\t.byte\t0\n");
+  }
+}
+
+static void
 pdbout_proc32 (struct pdb_func *func)
 {
   size_t name_len = strlen(func->name);
@@ -129,16 +165,23 @@ pdbout_proc32 (struct pdb_func *func)
   fprintf (asm_out_file, "\t.byte\t0\n"); // FIXME - flags
   ASM_OUTPUT_ASCII (asm_out_file, func->name, name_len + 1);
 
-  if (align == 3)
+  for (unsigned int i = 0; i < align; i++) {
     fprintf (asm_out_file, "\t.byte\t0\n");
+  }
 
-  if (align >= 2)
-    fprintf (asm_out_file, "\t.byte\t0\n");
+  // FIXME - S_FRAMEPROC, S_CALLSITEINFO, etc.
 
-  if (align >= 1)
-    fprintf (asm_out_file, "\t.byte\t0\n");
+  // locals
 
-  // FIXME - S_FRAMEPROC, S_BPREL32, S_CALLSITEINFO, etc.
+  while (func->local_vars) {
+    struct pdb_local_var *n = func->local_vars->next;
+
+    pdbout_local_variable(func->local_vars);
+
+    free(func->local_vars);
+
+    func->local_vars = n;
+  }
 
   // end procedure
 
@@ -744,6 +787,7 @@ pdbout_begin_function (tree func)
   f->public_flag = func->base.public_flag;
   f->type = find_type(TREE_TYPE(func));
   f->lines = f->last_line = NULL;
+  f->local_vars = f->last_local_var = NULL;
 
   funcs = f;
 
@@ -1629,7 +1673,8 @@ pdbout_init(const char *file)
   add_source_file(file);
 }
 
-static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
+static void
+pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
 			       const char *text ATTRIBUTE_UNUSED, int discriminator ATTRIBUTE_UNUSED,
 			       bool is_stmt ATTRIBUTE_UNUSED)
 {
@@ -1660,7 +1705,66 @@ static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_
   num_line_number_entries++;
 }
 
-static void pdbout_end_function(unsigned int line ATTRIBUTE_UNUSED)
+static void
+pdbout_end_function(unsigned int line ATTRIBUTE_UNUSED)
 {
+//   cur_func = NULL;
+}
+
+static void
+pdbout_function_decl(tree decl)
+{
+  tree f;
+
+  if (!cur_func)
+    return;
+
+  printf("FUNCTION %s\n", IDENTIFIER_POINTER(DECL_NAME(decl)));
+
+  // FIXME - locals as well as parameters
+  // FIXME - blocks
+  // FIXME - variable scope
+
+  f = decl->function_decl.arguments;
+  while (f) {
+    if (TREE_CODE(f) == PARM_DECL && DECL_NAME(f)) {
+      struct pdb_local_var *plv;
+      size_t name_len = strlen(IDENTIFIER_POINTER(DECL_NAME(f)));
+
+      if (f->parm_decl.incoming_rtl->code == MEM) {
+	printf("TREE_CODE: %x (%s)\n", TREE_CODE(f), IDENTIFIER_POINTER(DECL_NAME(f)));
+
+	// FIXME - parse RTX, make sure either ebp or ebp+x
+	// FIXME - esp-based stacks?
+
+	plv = (struct pdb_local_var*)xmalloc(offsetof(struct pdb_local_var, name) + name_len + 1);
+	plv->next = NULL;
+	plv->var_type = pdb_local_var_stack;
+	plv->offset = 0; // FIXME
+	plv->type = find_type(f->typed.type);
+	memcpy(plv->name, IDENTIFIER_POINTER(DECL_NAME(f)), name_len + 1);
+
+	// FIXME - parse RTX
+
+	if (cur_func->last_local_var)
+	  cur_func->last_local_var->next = plv;
+
+	cur_func->last_local_var = plv;
+
+	if (!cur_func->local_vars)
+	  cur_func->local_vars = plv;
+      }
+
+      // FIXME - also do register variables
+
+      print_rtl(stdout, f->parm_decl.incoming_rtl);
+    }
+
+    f = f->common.chain;
+  }
+
+  expanded_location xloc = expand_location(DECL_SOURCE_LOCATION(decl));
+  printf("line %u\n", xloc.line);
+
   cur_func = NULL;
 }
