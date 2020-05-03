@@ -744,6 +744,13 @@ pdbout_begin_function (tree func)
   funcs = f;
 
   cur_func = f;
+
+  if (DECL_SOURCE_LOCATION(func)) {
+    expanded_location xloc = expand_location(DECL_SOURCE_LOCATION(func));
+
+    if (xloc.line != 0)
+      pdbout_source_line(xloc.line, 0, NULL, 0, 0);
+  }
 }
 
 static void pdbout_late_global_decl(tree var)
@@ -1604,6 +1611,9 @@ static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_
   struct pdb_line *ent;
 
   if (!cur_func)
+    return;
+
+  if (cur_func->last_line && cur_func->last_line->line == line)
     return;
 
   ent = (struct pdb_line*)xmalloc(sizeof(struct pdb_line));
