@@ -42,7 +42,7 @@ static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
 static unsigned int num_line_number_entries = 0;
-static unsigned int cur_source_file = 0;
+static unsigned int num_source_files = 0;
 
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
@@ -235,7 +235,7 @@ write_line_numbers()
     fprintf (asm_out_file, "\t.short\t0\n"); // flags
     fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num); // length
 
-    fprintf (asm_out_file, "\t.long\t0x%x\n", (func->source_file - 1) * 0x18); // file ID (0x18 is size of checksum struct)
+    fprintf (asm_out_file, "\t.long\t0x%x\n", func->source_file * 0x18); // file ID (0x18 is size of checksum struct)
     fprintf (asm_out_file, "\t.long\t0x%x\n", num_entries);
     fprintf (asm_out_file, "\t.long\t0x%x\n", 0xc + (num_entries * 8)); // length of file block
 
@@ -308,7 +308,9 @@ write_pdb_section()
 
   psf = source_files;
   while (psf) {
-    ASM_OUTPUT_ASCII (asm_out_file, psf->name, strlen(psf->name) + 1);
+    size_t name_len = strlen(psf->name);
+
+    ASM_OUTPUT_ASCII (asm_out_file, psf->name + name_len + 1, strlen(psf->name + name_len + 1) + 1);
 
     psf = psf->next;
   }
@@ -732,6 +734,8 @@ pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 static void
 pdbout_begin_function (tree func)
 {
+  expanded_location xloc;
+  struct pdb_source_file *psf;
   struct pdb_func *f = (struct pdb_func*)xmalloc(sizeof(struct pdb_func));
 
   f->next = funcs;
@@ -739,19 +743,28 @@ pdbout_begin_function (tree func)
   f->num = current_function_funcdef_no;
   f->public_flag = func->base.public_flag;
   f->type = find_type(TREE_TYPE(func));
-  f->source_file = cur_source_file;
   f->lines = f->last_line = NULL;
 
   funcs = f;
 
   cur_func = f;
 
-  if (DECL_SOURCE_LOCATION(func)) {
-    expanded_location xloc = expand_location(DECL_SOURCE_LOCATION(func));
+  xloc = expand_location(DECL_SOURCE_LOCATION(func));
 
-    if (xloc.line != 0)
-      pdbout_source_line(xloc.line, 0, NULL, 0, 0);
+  f->source_file = 0;
+
+  psf = source_files;
+  while (psf) {
+    if (!strcmp(xloc.file, psf->name)) {
+      f->source_file = psf->num;
+      break;
+    }
+
+    psf = psf->next;
   }
+
+  if (xloc.line != 0)
+    pdbout_source_line(xloc.line, 0, NULL, 0, 0);
 }
 
 static void pdbout_late_global_decl(tree var)
@@ -1537,8 +1550,17 @@ add_source_file(const char *file)
 {
   struct pdb_source_file *psf;
   char *path;
-  size_t len;
+  size_t file_len, path_len;
   FILE *f;
+
+  // check not already added
+  psf = source_files;
+  while (psf) {
+    if (!strcmp(psf->name, file))
+      return;
+
+    psf = psf->next;
+  }
 
   path = realpath(file, NULL);
   if (!path)
@@ -1546,18 +1568,8 @@ add_source_file(const char *file)
 
   path = make_windows_path(path); // FIXME
 
-  // check not already added
-  psf = source_files;
-  while (psf) {
-    if (!strcmp(psf->name, path)) {
-      free(path);
-      return;
-    }
-
-    psf = psf->next;
-  }
-
-  len = strlen(path);
+  file_len = strlen(file);
+  path_len = strlen(path);
 
   f = fopen(file, "r");
 
@@ -1566,7 +1578,7 @@ add_source_file(const char *file)
     return;
   }
 
-  psf = (struct pdb_source_file*)xmalloc(offsetof(struct pdb_source_file, name) + len + 1);
+  psf = (struct pdb_source_file*)xmalloc(offsetof(struct pdb_source_file, name) + file_len + 1 + path_len + 1);
 
   md5_stream(f, psf->hash);
 
@@ -1574,11 +1586,12 @@ add_source_file(const char *file)
 
   psf->next = NULL;
   psf->str_offset = source_file_string_offset;
-  memcpy(psf->name, path, len + 1);
+  memcpy(psf->name, file, file_len + 1);
+  memcpy(psf->name + file_len + 1, path, path_len + 1);
 
   free(path);
 
-  source_file_string_offset += len + 1;
+  source_file_string_offset += path_len + 1;
 
   if (last_source_file)
     last_source_file->next = psf;
@@ -1588,7 +1601,9 @@ add_source_file(const char *file)
   if (!source_files)
     source_files = psf;
 
-  cur_source_file++;
+  psf->num = num_source_files;
+
+  num_source_files++;
 }
 
 static void
