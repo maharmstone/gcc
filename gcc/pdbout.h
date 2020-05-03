@@ -4,6 +4,7 @@
 #define CODEVIEW_S_END			0x0006
 #define CODEVIEW_LF_POINTER		0x1002
 #define CODEVIEW_LF_PROCEDURE		0x1008
+#define CODEVIEW_S_BPREL32		0x110b
 #define CODEVIEW_S_LDATA32		0x110c
 #define CODEVIEW_S_GDATA32		0x110d
 #define CODEVIEW_S_LPROC32		0x110f
@@ -38,6 +39,19 @@ struct pdb_line {
   unsigned int entry;
 };
 
+enum pdb_local_var_type {
+  pdb_local_var_stack,
+  pdb_local_var_reg
+};
+
+struct pdb_local_var {
+  struct pdb_local_var *next;
+  enum pdb_local_var_type var_type;
+  int32_t offset;
+  uint16_t type;
+  char name[1];
+};
+
 struct pdb_func {
   struct pdb_func *next;
   char *name;
@@ -46,6 +60,7 @@ struct pdb_func {
   uint16_t type;
   unsigned int source_file;
   struct pdb_line *lines, *last_line;
+  struct pdb_local_var *local_vars, *last_local_var;
 };
 
 struct pdb_global_var {
