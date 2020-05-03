@@ -740,6 +740,7 @@ pdbout_begin_function (tree func)
   f->public_flag = func->base.public_flag;
   f->type = find_type(TREE_TYPE(func));
   f->source_file = cur_source_file;
+  f->lines = f->last_line = NULL;
 
   funcs = f;
 
