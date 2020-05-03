@@ -22,12 +22,12 @@ static void pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 				   const char *file ATTRIBUTE_UNUSED);
 static void pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 				 const char *file ATTRIBUTE_UNUSED);
+static void pdbout_init (const char *filename);
 static void pdbout_finish (const char *filename);
 static void pdbout_begin_function(tree func);
 static void pdbout_late_global_decl(tree var);
 static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED);
 static void pdbout_start_source_file(unsigned int line ATTRIBUTE_UNUSED, const char *file);
-static void pdbout_register_main_translation_unit(tree unit);
 static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
 			       const char *text ATTRIBUTE_UNUSED, int discriminator ATTRIBUTE_UNUSED,
 			       bool is_stmt ATTRIBUTE_UNUSED);
@@ -46,8 +46,8 @@ static unsigned int num_source_files = 0;
 
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
-  debug_nothing_charstar,		 /* init */
-  pdbout_finish,			 /* finish */
+  pdbout_init,
+  pdbout_finish,
   debug_nothing_charstar,		 /* early_finish */
   debug_nothing_void,			 /* assembly_start */
   debug_nothing_int_charstar,		 /* define */
@@ -64,7 +64,7 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   pdbout_end_epilogue,		         /* end_epilogue */
   pdbout_begin_function,
   pdbout_end_function,
-  pdbout_register_main_translation_unit,
+  debug_nothing_tree,			 /* register_main_translation_unit */
   debug_nothing_tree,		         /* function_decl */
   debug_nothing_tree,		         /* early_global_decl */
   pdbout_late_global_decl,
@@ -1486,6 +1486,7 @@ add_udt_src_line_type(uint16_t type_id, uint16_t source_file, uint32_t line)
 static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 {
   uint16_t type, string_type;
+  struct pdb_source_file *psf;
   expanded_location xloc;
 
   if (DECL_IN_SYSTEM_HEADER(t)) // ignoring system headers for now (FIXME)
@@ -1506,9 +1507,19 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
   if (!xloc.file)
     return;
 
+  string_type = 0;
+
   // add filename as LF_STRING_ID, so linker puts it into string table
 
-  string_type = add_string_type(xloc.file);
+  psf = source_files;
+  while (psf) {
+    if (!strcmp(psf->name, xloc.file)) {
+      string_type = add_string_type(psf->name + strlen(psf->name) + 1);
+      break;
+    }
+
+    psf = psf->next;
+  }
 
   // add LF_UDT_SRC_LINE entry, which linker transforms into LF_UDT_MOD_SRC_LINE
 
@@ -1613,11 +1624,9 @@ pdbout_start_source_file(unsigned int line ATTRIBUTE_UNUSED, const char *file)
 }
 
 static void
-pdbout_register_main_translation_unit(tree unit)
+pdbout_init(const char *file)
 {
-  // FIXME - language is in unit->translation_unit_decl.language - record in S_COMPILE3
-
-  add_source_file(IDENTIFIER_POINTER(DECL_NAME(unit)));
+  add_source_file(file);
 }
 
 static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
