@@ -4,6 +4,7 @@
 #define CODEVIEW_S_END			0x0006
 #define CODEVIEW_LF_POINTER		0x1002
 #define CODEVIEW_LF_PROCEDURE		0x1008
+#define CODEVIEW_S_REGISTER		0x1106
 #define CODEVIEW_S_BPREL32		0x110b
 #define CODEVIEW_S_LDATA32		0x110c
 #define CODEVIEW_S_GDATA32		0x110d
@@ -43,7 +44,7 @@ struct pdb_line {
 enum pdb_local_var_type {
   pdb_local_var_unknown,
   pdb_local_var_regrel,
-  pdb_local_var_reg
+  pdb_local_var_register
 };
 
 struct pdb_local_var {
