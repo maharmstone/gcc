@@ -1778,14 +1778,128 @@ map_register_no_x86 (unsigned int regno, machine_mode mode)
   return CV_X86_NONE;
 }
 
+static enum pdb_amd64_register
+map_register_no_amd64 (unsigned int regno, machine_mode mode)
+{
+  if (mode == E_SImode) {
+    switch (regno) {
+      case AX_REG:
+	return CV_AMD64_EAX;
+
+      case DX_REG:
+	return CV_AMD64_EDX;
+
+      case CX_REG:
+	return CV_AMD64_ECX;
+
+      case BX_REG:
+	return CV_AMD64_EBX;
+
+      case SI_REG:
+	return CV_AMD64_ESI;
+
+      case DI_REG:
+	return CV_AMD64_EDI;
+
+      case BP_REG:
+	return CV_AMD64_EBP;
+
+      case SP_REG:
+	return CV_AMD64_ESP;
+
+      case FLAGS_REG:
+	return CV_AMD64_EFLAGS;
+
+      case R8_REG:
+	return CV_AMD64_R8D;
+
+      case R9_REG:
+	return CV_AMD64_R9D;
+
+      case R10_REG:
+	return CV_AMD64_R10D;
+
+      case R11_REG:
+	return CV_AMD64_R11D;
+
+      case R12_REG:
+	return CV_AMD64_R12D;
+
+      case R13_REG:
+	return CV_AMD64_R13D;
+
+      case R14_REG:
+	return CV_AMD64_R14D;
+
+      case R15_REG:
+	return CV_AMD64_R15D;
+    }
+  } else if (mode == E_DImode) {
+    switch (regno) {
+      case AX_REG:
+	return CV_AMD64_RAX;
+
+      case DX_REG:
+	return CV_AMD64_RDX;
+
+      case CX_REG:
+	return CV_AMD64_RCX;
+
+      case BX_REG:
+	return CV_AMD64_RBX;
+
+      case SI_REG:
+	return CV_AMD64_RSI;
+
+      case DI_REG:
+	return CV_AMD64_RDI;
+
+      case BP_REG:
+	return CV_AMD64_RBP;
+
+      case SP_REG:
+	return CV_AMD64_RSP;
+
+      case R8_REG:
+	return CV_AMD64_R8;
+
+      case R9_REG:
+	return CV_AMD64_R9;
+
+      case R10_REG:
+	return CV_AMD64_R10;
+
+      case R11_REG:
+	return CV_AMD64_R11;
+
+      case R12_REG:
+	return CV_AMD64_R12;
+
+      case R13_REG:
+	return CV_AMD64_R13;
+
+      case R14_REG:
+	return CV_AMD64_R14;
+
+      case R15_REG:
+	return CV_AMD64_R15;
+    }
+  }
+
+  fprintf(stderr, "Unhandled register %x, mode %x\n", regno, mode); // FIXME
+
+  return CV_AMD64_NONE;
+}
+
 static unsigned int
 map_register_no (unsigned int regno, machine_mode mode)
 {
-  // FIXME - check machine type
+  // FIXME - check either x86 or amd64
 
-  // FIXME - amd64
-
-  return (unsigned int)map_register_no_x86(regno, mode);
+  if (TARGET_64BIT)
+    return (unsigned int)map_register_no_amd64(regno, mode);
+  else
+    return (unsigned int)map_register_no_x86(regno, mode);
 }
 
 static void
