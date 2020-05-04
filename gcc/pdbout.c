@@ -11,6 +11,8 @@
 #include "config/i386/i386-protos.h"
 #include "md5.h"
 #include "rtl.h"
+#include "insn-config.h"
+#include "reload.h"
 #include "print-tree.h" // FIXME - remove this
 #include "print-rtl.h" // FIXME - and this
 
@@ -107,32 +109,29 @@ static void
 pdbout_local_variable (struct pdb_local_var *v)
 {
   uint16_t len, align;
-  size_t name_len;
+  size_t name_len = strlen(v->name);
 
-  if (v->var_type != pdb_local_var_stack) // FIXME
-    return;
+  if (v->var_type == pdb_local_var_stack) {
+    // FIXME - is this different for x86 and amd64?
 
-  // FIXME - is this different for x86 and amd64?
+    len = 13 + name_len;
 
-  name_len = strlen(v->name);
+    if (len % 4 != 0) {
+      align = 4 - (len % 4);
+      len += 4 - (len % 4);
+    } else
+      align = 0;
 
-  len = 13 + name_len;
+    fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
+    fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BPREL32);
+    fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
+    fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
 
-  if (len % 4 != 0) {
-    align = 4 - (len % 4);
-    len += 4 - (len % 4);
-  } else
-    align = 0;
+    ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
 
-  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BPREL32);
-  fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
-  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
-
-  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
-
-  for (unsigned int i = 0; i < align; i++) {
-    fprintf (asm_out_file, "\t.byte\t0\n");
+    for (unsigned int i = 0; i < align; i++) {
+      fprintf (asm_out_file, "\t.byte\t0\n");
+    }
   }
 }
 
@@ -1730,41 +1729,47 @@ pdbout_function_decl(tree decl)
     if (TREE_CODE(f) == PARM_DECL && DECL_NAME(f)) {
       struct pdb_local_var *plv;
       size_t name_len = strlen(IDENTIFIER_POINTER(DECL_NAME(f)));
+      rtx rtl;
 
-      if (f->parm_decl.incoming_rtl->code == MEM) {
-	printf("TREE_CODE: %x (%s)\n", TREE_CODE(f), IDENTIFIER_POINTER(DECL_NAME(f)));
+      rtl = eliminate_regs(f->parm_decl.incoming_rtl, VOIDmode, NULL_RTX);
 
-	// FIXME - parse RTX, make sure either ebp or ebp+x
+      plv = (struct pdb_local_var*)xmalloc(offsetof(struct pdb_local_var, name) + name_len + 1);
+      plv->next = NULL;
+      plv->type = find_type(f->typed.type);
+      plv->var_type = pdb_local_var_unknown;
+      memcpy(plv->name, IDENTIFIER_POINTER(DECL_NAME(f)), name_len + 1);
+
+      if (rtl->code == MEM) {
 	// FIXME - esp-based stacks?
+	// FIXME - can there be other register-derived values?
 
-	plv = (struct pdb_local_var*)xmalloc(offsetof(struct pdb_local_var, name) + name_len + 1);
-	plv->next = NULL;
-	plv->var_type = pdb_local_var_stack;
-	plv->offset = 0; // FIXME
-	plv->type = find_type(f->typed.type);
-	memcpy(plv->name, IDENTIFIER_POINTER(DECL_NAME(f)), name_len + 1);
-
-	// FIXME - parse RTX
-
-	if (cur_func->last_local_var)
-	  cur_func->last_local_var->next = plv;
-
-	cur_func->last_local_var = plv;
-
-	if (!cur_func->local_vars)
-	  cur_func->local_vars = plv;
+	if (rtl->u.fld[0].rt_rtx->code == PLUS && rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
+	    rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno == BP_REG &&
+	    rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
+	  plv->var_type = pdb_local_var_stack;
+	  plv->offset = rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
+	}
       }
 
-      // FIXME - also do register variables
+      // FIXME - register variables
 
-      print_rtl(stdout, f->parm_decl.incoming_rtl);
+      if (plv->var_type == pdb_local_var_unknown) {
+	fprintf(stderr, "Unhandled argument: "); // FIXME
+	print_rtl(stdout, rtl);
+	printf("\n");
+      }
+
+      if (cur_func->last_local_var)
+	cur_func->last_local_var->next = plv;
+
+      cur_func->last_local_var = plv;
+
+      if (!cur_func->local_vars)
+	cur_func->local_vars = plv;
     }
 
     f = f->common.chain;
   }
-
-  expanded_location xloc = expand_location(DECL_SOURCE_LOCATION(decl));
-  printf("line %u\n", xloc.line);
 
   cur_func = NULL;
 }

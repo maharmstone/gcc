@@ -40,6 +40,7 @@ struct pdb_line {
 };
 
 enum pdb_local_var_type {
+  pdb_local_var_unknown,
   pdb_local_var_stack,
   pdb_local_var_reg
 };
