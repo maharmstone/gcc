@@ -1470,17 +1470,46 @@ find_type(tree t)
 
     size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
-    if (size == 8)
-      return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
-    else if (size == 16)
-      return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
-    else if (size == 32)
-      return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
-    else if (size == 64)
-      return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
+    switch (size) {
+      case 8:
+	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
+
+      case 16:
+	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
+
+      case 32:
+	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
+
+      case 64:
+	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
+    }
 
     // FIXME - HRESULT
     // FIXME - 128-bit integers?
+
+    return 0;
+  } else if (t->base.code == REAL_TYPE) {
+    unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
+
+    switch (size) {
+      case 16:
+	return CV_BUILTIN_TYPE_FLOAT16;
+
+      case 32:
+	return CV_BUILTIN_TYPE_FLOAT32;
+
+      case 48:
+	return CV_BUILTIN_TYPE_FLOAT48;
+
+      case 64:
+	return CV_BUILTIN_TYPE_FLOAT64;
+
+      case 80:
+	return CV_BUILTIN_TYPE_FLOAT80;
+
+      case 128:
+	return CV_BUILTIN_TYPE_FLOAT128;
+    }
 
     return 0;
   } else if (t->base.code == VOID_TYPE)
