@@ -112,9 +112,7 @@ pdbout_local_variable (struct pdb_local_var *v)
   size_t name_len = strlen(v->name);
 
   if (v->var_type == pdb_local_var_regrel) {
-    // FIXME - is this different for x86 and amd64?
-
-    if (v->reg == BP_REG) {
+    if (v->reg == CV_X86_EBP) { // ebp is a special case
       len = 13 + name_len;
 
       if (len % 4 != 0) {
@@ -143,7 +141,7 @@ pdbout_local_variable (struct pdb_local_var *v)
       fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_REGREL32);
       fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
       fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
-      fprintf (asm_out_file, "\t.short\t0x%x\n", 21); // FIXME - register
+      fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
 
       ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
     }
@@ -1723,6 +1721,55 @@ pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
   num_line_number_entries++;
 }
 
+static enum pdb_x86_register
+map_register_no_x86 (unsigned int regno, machine_mode mode)
+{
+  if (mode == E_SImode) {
+    switch (regno) {
+      case AX_REG:
+	return CV_X86_EAX;
+
+      case DX_REG:
+	return CV_X86_EDX;
+
+      case CX_REG:
+	return CV_X86_ECX;
+
+      case BX_REG:
+	return CV_X86_EBX;
+
+      case SI_REG:
+	return CV_X86_ESI;
+
+      case DI_REG:
+	return CV_X86_EDI;
+
+      case BP_REG:
+	return CV_X86_EBP;
+
+      case SP_REG:
+	return CV_X86_ESP;
+
+      case FLAGS_REG:
+	return CV_X86_EFLAGS;
+    }
+  }
+
+  fprintf(stderr, "Unhandled register %x, mode %x\n", regno, mode); // FIXME
+
+  return CV_X86_NONE;
+}
+
+static unsigned int
+map_register_no (unsigned int regno, machine_mode mode)
+{
+  // FIXME - check machine type
+
+  // FIXME - amd64
+
+  return (unsigned int)map_register_no_x86(regno, mode);
+}
+
 static void
 add_local(const char *name, uint16_t type, rtx rtl)
 {
@@ -1743,11 +1790,11 @@ add_local(const char *name, uint16_t type, rtx rtl)
     if (rtl->u.fld[0].rt_rtx->code == PLUS && rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
 	rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
       plv->var_type = pdb_local_var_regrel;
-      plv->reg = rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno;
+      plv->reg = map_register_no(rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno, rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->mode) ;
       plv->offset = rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
     } else if (rtl->u.fld[0].rt_rtx->code == REG) {
       plv->var_type = pdb_local_var_regrel;
-      plv->reg = rtl->u.fld[0].rt_rtx->u.reg.regno;
+      plv->reg = map_register_no(rtl->u.fld[0].rt_rtx->u.reg.regno, rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->mode);
       plv->offset = 0;
     }
   }
