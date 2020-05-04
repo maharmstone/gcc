@@ -1,6 +1,7 @@
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
+#include "varasm.h"
 #include "tree.h"
 #include "debug.h"
 #include "pdbout.h"
@@ -35,7 +36,6 @@ static void pdbout_start_source_file(unsigned int line ATTRIBUTE_UNUSED, const c
 static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
 			       const char *text ATTRIBUTE_UNUSED, int discriminator ATTRIBUTE_UNUSED,
 			       bool is_stmt ATTRIBUTE_UNUSED);
-static void pdbout_end_function(unsigned int line ATTRIBUTE_UNUSED);
 static void pdbout_function_decl(tree decl);
 
 static uint16_t find_type(tree t);
@@ -68,7 +68,7 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   debug_nothing_int_charstar,	         /* begin_epilogue */
   pdbout_end_epilogue,		         /* end_epilogue */
   pdbout_begin_function,
-  pdbout_end_function,
+  debug_nothing_int,			 /* end_function */
   debug_nothing_tree,			 /* register_main_translation_unit */
   pdbout_function_decl,
   debug_nothing_tree,		         /* early_global_decl */
@@ -1705,9 +1705,51 @@ pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
 }
 
 static void
-pdbout_end_function(unsigned int line ATTRIBUTE_UNUSED)
+add_local(const char *name, uint16_t type, rtx rtl)
 {
-//   cur_func = NULL;
+  struct pdb_local_var *plv;
+  size_t name_len = strlen(name);
+
+  rtl = eliminate_regs(rtl, VOIDmode, NULL_RTX);
+
+  plv = (struct pdb_local_var*)xmalloc(offsetof(struct pdb_local_var, name) + name_len + 1);
+  plv->next = NULL;
+  plv->type = type;
+  plv->var_type = pdb_local_var_unknown;
+  memcpy(plv->name, name, name_len + 1);
+
+  if (rtl->code == MEM) {
+    // FIXME - esp-based stacks?
+    // FIXME - can there be other register-derived values?
+    // FIXME - can we have MINUS here instead of PLUS?
+
+    if (rtl->u.fld[0].rt_rtx->code == PLUS && rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
+	rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno == BP_REG &&
+	rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
+      plv->var_type = pdb_local_var_stack;
+      plv->offset = rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
+    } else if (rtl->u.fld[0].rt_rtx->code == REG &&
+	rtl->u.fld[0].rt_rtx->u.reg.regno == BP_REG) {
+      plv->var_type = pdb_local_var_stack;
+      plv->offset = 0;
+    }
+  }
+
+  // FIXME - register variables
+
+  if (plv->var_type == pdb_local_var_unknown) {
+    fprintf(stderr, "Unhandled argument: "); // FIXME
+    print_rtl(stdout, rtl);
+    printf("\n");
+  }
+
+  if (cur_func->last_local_var)
+    cur_func->last_local_var->next = plv;
+
+  cur_func->last_local_var = plv;
+
+  if (!cur_func->local_vars)
+    cur_func->local_vars = plv;
 }
 
 static void
@@ -1718,59 +1760,24 @@ pdbout_function_decl(tree decl)
   if (!cur_func)
     return;
 
-  printf("FUNCTION %s\n", IDENTIFIER_POINTER(DECL_NAME(decl)));
-
-  // FIXME - locals as well as parameters
   // FIXME - blocks
   // FIXME - variable scope
 
   f = decl->function_decl.arguments;
   while (f) {
     if (TREE_CODE(f) == PARM_DECL && DECL_NAME(f)) {
-      struct pdb_local_var *plv;
-      size_t name_len = strlen(IDENTIFIER_POINTER(DECL_NAME(f)));
-      rtx rtl;
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type),
+		f->parm_decl.incoming_rtl);
+    }
 
-      rtl = eliminate_regs(f->parm_decl.incoming_rtl, VOIDmode, NULL_RTX);
+    f = f->common.chain;
+  }
 
-      plv = (struct pdb_local_var*)xmalloc(offsetof(struct pdb_local_var, name) + name_len + 1);
-      plv->next = NULL;
-      plv->type = find_type(f->typed.type);
-      plv->var_type = pdb_local_var_unknown;
-      memcpy(plv->name, IDENTIFIER_POINTER(DECL_NAME(f)), name_len + 1);
-
-      if (rtl->code == MEM) {
-	// FIXME - esp-based stacks?
-	// FIXME - can there be other register-derived values?
-	// FIXME - can we have MINUS here instead of PLUS?
-
-	if (rtl->u.fld[0].rt_rtx->code == PLUS && rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
-	    rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno == BP_REG &&
-	    rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
-	  plv->var_type = pdb_local_var_stack;
-	  plv->offset = rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
-	} else if (rtl->u.fld[0].rt_rtx->code == REG &&
-		   rtl->u.fld[0].rt_rtx->u.reg.regno == BP_REG) {
-	  plv->var_type = pdb_local_var_stack;
-	  plv->offset = 0;
-	}
-      }
-
-      // FIXME - register variables
-
-      if (plv->var_type == pdb_local_var_unknown) {
-	fprintf(stderr, "Unhandled argument: "); // FIXME
-	print_rtl(stdout, rtl);
-	printf("\n");
-      }
-
-      if (cur_func->last_local_var)
-	cur_func->last_local_var->next = plv;
-
-      cur_func->last_local_var = plv;
-
-      if (!cur_func->local_vars)
-	cur_func->local_vars = plv;
+  f = BLOCK_VARS(DECL_INITIAL(decl));
+  while (f) {
+    if (TREE_CODE(f) == VAR_DECL) {
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type),
+		DECL_RTL(f));
     }
 
     f = f->common.chain;
