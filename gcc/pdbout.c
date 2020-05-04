@@ -1742,12 +1742,17 @@ pdbout_function_decl(tree decl)
       if (rtl->code == MEM) {
 	// FIXME - esp-based stacks?
 	// FIXME - can there be other register-derived values?
+	// FIXME - can we have MINUS here instead of PLUS?
 
 	if (rtl->u.fld[0].rt_rtx->code == PLUS && rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
 	    rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno == BP_REG &&
 	    rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
 	  plv->var_type = pdb_local_var_stack;
 	  plv->offset = rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
+	} else if (rtl->u.fld[0].rt_rtx->code == REG &&
+		   rtl->u.fld[0].rt_rtx->u.reg.regno == BP_REG) {
+	  plv->var_type = pdb_local_var_stack;
+	  plv->offset = 0;
 	}
       }
 
