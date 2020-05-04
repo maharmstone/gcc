@@ -1771,6 +1771,32 @@ map_register_no_x86 (unsigned int regno, machine_mode mode)
       case FLAGS_REG:
 	return CV_X86_EFLAGS;
     }
+  } else if (mode == E_SFmode) {
+    switch (regno) {
+      case XMM0_REG:
+	return CV_X86_XMM0L;
+
+      case XMM1_REG:
+	return CV_X86_XMM1L;
+
+      case XMM2_REG:
+	return CV_X86_XMM2L;
+
+      case XMM3_REG:
+	return CV_X86_XMM3L;
+
+      case XMM4_REG:
+	return CV_X86_XMM4L;
+
+      case XMM5_REG:
+	return CV_X86_XMM5L;
+
+      case XMM6_REG:
+	return CV_X86_XMM6L;
+
+      case XMM7_REG:
+	return CV_X86_XMM7L;
+    }
   }
 
   fprintf(stderr, "Unhandled register %x, mode %x\n", regno, mode); // FIXME
@@ -1883,6 +1909,56 @@ map_register_no_amd64 (unsigned int regno, machine_mode mode)
 
       case R15_REG:
 	return CV_AMD64_R15;
+    }
+  } else if (mode == E_SFmode) {
+    switch (regno) {
+      case XMM0_REG:
+	return CV_AMD64_XMM0L;
+
+      case XMM1_REG:
+	return CV_AMD64_XMM1L;
+
+      case XMM2_REG:
+	return CV_AMD64_XMM2L;
+
+      case XMM3_REG:
+	return CV_AMD64_XMM3L;
+
+      case XMM4_REG:
+	return CV_AMD64_XMM4L;
+
+      case XMM5_REG:
+	return CV_AMD64_XMM5L;
+
+      case XMM6_REG:
+	return CV_AMD64_XMM6L;
+
+      case XMM7_REG:
+	return CV_AMD64_XMM7L;
+
+      case XMM8_REG:
+	return CV_AMD64_XMM8L;
+
+      case XMM9_REG:
+	return CV_AMD64_XMM9L;
+
+      case XMM10_REG:
+	return CV_AMD64_XMM10L;
+
+      case XMM11_REG:
+	return CV_AMD64_XMM11L;
+
+      case XMM12_REG:
+	return CV_AMD64_XMM12L;
+
+      case XMM13_REG:
+	return CV_AMD64_XMM13L;
+
+      case XMM14_REG:
+	return CV_AMD64_XMM14L;
+
+      case XMM15_REG:
+	return CV_AMD64_XMM15L;
     }
   }
 
