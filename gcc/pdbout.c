@@ -111,23 +111,42 @@ pdbout_local_variable (struct pdb_local_var *v)
   uint16_t len, align;
   size_t name_len = strlen(v->name);
 
-  if (v->var_type == pdb_local_var_stack) {
+  if (v->var_type == pdb_local_var_regrel) {
     // FIXME - is this different for x86 and amd64?
 
-    len = 13 + name_len;
+    if (v->reg == BP_REG) {
+      len = 13 + name_len;
 
-    if (len % 4 != 0) {
-      align = 4 - (len % 4);
-      len += 4 - (len % 4);
-    } else
-      align = 0;
+      if (len % 4 != 0) {
+	align = 4 - (len % 4);
+	len += 4 - (len % 4);
+      } else
+	align = 0;
 
-    fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-    fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BPREL32);
-    fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
-    fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
+      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BPREL32);
+      fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
+      fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
 
-    ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+      ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+
+    } else {
+      len = 15 + name_len;
+
+      if (len % 4 != 0) {
+	align = 4 - (len % 4);
+	len += 4 - (len % 4);
+      } else
+	align = 0;
+
+      fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
+      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_REGREL32);
+      fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
+      fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", 21); // FIXME - register
+
+      ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+    }
 
     for (unsigned int i = 0; i < align; i++) {
       fprintf (asm_out_file, "\t.byte\t0\n");
@@ -1719,18 +1738,16 @@ add_local(const char *name, uint16_t type, rtx rtl)
   memcpy(plv->name, name, name_len + 1);
 
   if (rtl->code == MEM) {
-    // FIXME - esp-based stacks?
-    // FIXME - can there be other register-derived values?
     // FIXME - can we have MINUS here instead of PLUS?
 
     if (rtl->u.fld[0].rt_rtx->code == PLUS && rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
-	rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno == BP_REG &&
 	rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
-      plv->var_type = pdb_local_var_stack;
+      plv->var_type = pdb_local_var_regrel;
+      plv->reg = rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno;
       plv->offset = rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
-    } else if (rtl->u.fld[0].rt_rtx->code == REG &&
-	rtl->u.fld[0].rt_rtx->u.reg.regno == BP_REG) {
-      plv->var_type = pdb_local_var_stack;
+    } else if (rtl->u.fld[0].rt_rtx->code == REG) {
+      plv->var_type = pdb_local_var_regrel;
+      plv->reg = rtl->u.fld[0].rt_rtx->u.reg.regno;
       plv->offset = 0;
     }
   }

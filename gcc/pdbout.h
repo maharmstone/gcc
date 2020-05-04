@@ -9,6 +9,7 @@
 #define CODEVIEW_S_GDATA32		0x110d
 #define CODEVIEW_S_LPROC32		0x110f
 #define CODEVIEW_S_GPROC32		0x1110
+#define CODEVIEW_S_REGREL32		0x1111
 #define CODEVIEW_LF_ARGLIST		0x1201
 #define CODEVIEW_LF_FIELDLIST		0x1203
 #define CODEVIEW_LF_ENUMERATE		0x1502
@@ -41,7 +42,7 @@ struct pdb_line {
 
 enum pdb_local_var_type {
   pdb_local_var_unknown,
-  pdb_local_var_stack,
+  pdb_local_var_regrel,
   pdb_local_var_reg
 };
 
@@ -49,6 +50,7 @@ struct pdb_local_var {
   struct pdb_local_var *next;
   enum pdb_local_var_type var_type;
   int32_t offset;
+  unsigned int reg;
   uint16_t type;
   char name[1];
 };
