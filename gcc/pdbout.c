@@ -1150,9 +1150,9 @@ find_type_struct(tree t)
   str->field = fltypenum;
   str->size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
 
-  if (TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
+  if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
     str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
-  else if (TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
+  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
     str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
   else
     str->name = NULL;
