@@ -1475,6 +1475,9 @@ find_type(tree t)
 	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
 
       case 16:
+	if (!strcmp(IDENTIFIER_POINTER(TYPE_IDENTIFIER(t)), "wchar_t"))
+	  return CV_BUILTIN_TYPE_WIDE_CHARACTER;
+
 	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
 
       case 32:
@@ -1525,8 +1528,7 @@ find_type(tree t)
     type = type->next;
   }
 
-  // FIXME - wchar_t, char16_t, char32_t, char8_t
-  // FIXME - real_type
+  // FIXME - char16_t, char32_t, char8_t
   // FIXME - complex types
   // FIXME - booleans
   // FIXME - C++ references
