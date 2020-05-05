@@ -850,6 +850,9 @@ static void pdbout_late_global_decl(tree var)
   if (TREE_CODE (var) != VAR_DECL)
     return;
 
+  if (!DECL_ASSEMBLER_NAME_RAW (var))
+    return;
+
   struct pdb_global_var *v = (struct pdb_global_var*)xmalloc(sizeof(struct pdb_global_var));
 
   v->next = global_vars;
