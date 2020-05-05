@@ -1515,6 +1515,25 @@ find_type(tree t)
     }
 
     return 0;
+  } else if (t->base.code == BOOLEAN_TYPE) {
+    unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
+
+    switch (size) {
+      case 8:
+	return CV_BUILTIN_TYPE_BOOLEAN8;
+
+      case 16:
+	return CV_BUILTIN_TYPE_BOOLEAN16;
+
+      case 32:
+	return CV_BUILTIN_TYPE_BOOLEAN32;
+
+      case 64:
+	return CV_BUILTIN_TYPE_BOOLEAN64;
+
+      case 128:
+	return CV_BUILTIN_TYPE_BOOLEAN128;
+    }
   } else if (t->base.code == VOID_TYPE)
     return CV_BUILTIN_TYPE_VOID;
 
