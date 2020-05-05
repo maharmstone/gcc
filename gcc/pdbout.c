@@ -43,6 +43,7 @@ static uint16_t find_type(tree t);
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
+static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
@@ -799,6 +800,16 @@ write_pdb_type_section()
 
     types = n;
   }
+
+  while (aliases) {
+    struct pdb_alias *n;
+
+    n = aliases->next;
+
+    free(aliases);
+
+    aliases = n;
+  }
 }
 
 static void
@@ -1445,9 +1456,20 @@ static uint16_t
 find_type(tree t)
 {
   struct pdb_type *type;
+  struct pdb_alias *a;
 
   if (!t)
     return 0;
+
+  // search through typedefs
+
+  a = aliases;
+  while (a) {
+    if (a->tree == t)
+      return a->cv_type;
+
+    a = a->next;
+  }
 
   if (t->base.code == INTEGER_TYPE) {
     unsigned int size;
@@ -1624,6 +1646,20 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
     return;
 
   // FIXME - if from file in /usr/include or wherever, only include in output if used
+
+  if (t->decl_non_common.result) { // typedef
+    struct pdb_alias *a;
+
+    a = (struct pdb_alias*)xmalloc(sizeof(struct pdb_alias));
+
+    a->next = aliases;
+    a->tree = t->typed.type;
+    a->cv_type = find_type(t->decl_non_common.result);
+
+    aliases = a;
+
+    return;
+  }
 
   type = find_type(t->typed.type);
 
