@@ -2137,7 +2137,7 @@ pdbout_function_decl(tree decl)
   while (f) {
     if (TREE_CODE(f) == PARM_DECL && DECL_NAME(f)) {
       add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type),
-		f->parm_decl.incoming_rtl);
+		f->parm_decl.common.rtl);
     }
 
     f = f->common.chain;
