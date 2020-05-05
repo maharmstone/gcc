@@ -2101,7 +2101,7 @@ pdbout_function_decl(tree decl)
 
   f = BLOCK_VARS(DECL_INITIAL(decl));
   while (f) {
-    if (TREE_CODE(f) == VAR_DECL) {
+    if (TREE_CODE(f) == VAR_DECL && DECL_RTL_SET_P(f)) {
       add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type),
 		DECL_RTL(f));
     }
