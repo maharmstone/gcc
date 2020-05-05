@@ -574,7 +574,7 @@ write_struct(uint16_t type, struct pdb_struct *str)
 static void
 write_union(struct pdb_struct *str)
 {
-  size_t name_len = str->name ? strlen(str->name) : 0;
+  size_t name_len = str->name ? strlen(str->name) : (sizeof(unnamed) - 1);
   unsigned int len = 15 + name_len, align;
 
   if (len % 4 != 0)
@@ -591,7 +591,7 @@ write_union(struct pdb_struct *str)
   if (str->name)
     ASM_OUTPUT_ASCII (asm_out_file, str->name, name_len + 1);
   else
-    fprintf (asm_out_file, "\t.byte\t0\n");
+    ASM_OUTPUT_ASCII (asm_out_file, unnamed, sizeof(unnamed));
 
   // FIXME - unique name?
 
