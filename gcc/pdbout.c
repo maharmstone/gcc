@@ -22,6 +22,8 @@
 
 #define FIRST_TYPE_NUM		0x1000
 
+static const char unnamed[] = "<unnamed-tag>";
+
 static void pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 				   unsigned int column ATTRIBUTE_UNUSED,
 				   const char *file ATTRIBUTE_UNUSED);
@@ -530,7 +532,7 @@ write_fieldlist(struct pdb_fieldlist *fl)
 static void
 write_struct(uint16_t type, struct pdb_struct *str)
 {
-  size_t name_len = strlen(str->name);
+  size_t name_len = str->name ? strlen(str->name) : (sizeof(unnamed) - 1);
   unsigned int len = 23 + name_len, align;
 
   if (len % 4 != 0)
@@ -549,7 +551,10 @@ write_struct(uint16_t type, struct pdb_struct *str)
   fprintf (asm_out_file, "\t.short\t0\n"); // FIXME
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->size);
 
-  ASM_OUTPUT_ASCII (asm_out_file, str->name, name_len + 1);
+  if (str->name)
+    ASM_OUTPUT_ASCII (asm_out_file, str->name, name_len + 1);
+  else
+    ASM_OUTPUT_ASCII (asm_out_file, unnamed, sizeof(unnamed));
 
   // FIXME - unique name?
 
