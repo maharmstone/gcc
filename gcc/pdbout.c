@@ -1276,7 +1276,14 @@ find_type_enum(tree t)
   while (v) {
     ent->cv_type = CODEVIEW_LF_ENUMERATE;
     ent->fld_attr = 0; // FIXME
-    ent->value = TREE_INT_CST_ELT(TREE_VALUE(v), 0);
+
+    if (TREE_CODE(TREE_VALUE(v)) == CONST_DECL)
+      ent->value = TREE_INT_CST_ELT(DECL_INITIAL(TREE_VALUE(v)), 0);
+    else if (TREE_CODE(TREE_VALUE(v)) == INTEGER_CST)
+      ent->value = TREE_INT_CST_ELT(TREE_VALUE(v), 0);
+    else // FIXME - print error or warning?
+      ent->value = 0;
+
     ent->name = xstrdup(IDENTIFIER_POINTER(TREE_PURPOSE(v)));
 
     v = v->common.chain;
