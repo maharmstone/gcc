@@ -1139,10 +1139,11 @@ find_type_struct(tree t)
       ent->offset = bit_offset / 8; // FIXME - what about bit fields?
       ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
       ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
+
+      ent++;
     }
 
     f = f->common.chain;
-    ent++;
   }
 
   fltypenum = add_type(fltype);
