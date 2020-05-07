@@ -180,7 +180,7 @@ struct pdb_type {
 struct pdb_alias {
   struct pdb_alias *next;
   tree_node *tree;
-  uint16_t cv_type;
+  uint16_t type;
 };
 
 #define CV_BUILTIN_TYPE_VOID			0x0003
