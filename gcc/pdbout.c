@@ -1911,31 +1911,31 @@ map_register_no_x86 (unsigned int regno, machine_mode mode)
       case BX_REG:
 	return CV_X86_BL;
     }
-  } else if (mode == E_SFmode) {
+  } else if (mode == E_SFmode || mode == E_DFmode) {
     switch (regno) {
       case XMM0_REG:
-	return CV_X86_XMM0L;
+	return CV_X86_XMM0;
 
       case XMM1_REG:
-	return CV_X86_XMM1L;
+	return CV_X86_XMM1;
 
       case XMM2_REG:
-	return CV_X86_XMM2L;
+	return CV_X86_XMM2;
 
       case XMM3_REG:
-	return CV_X86_XMM3L;
+	return CV_X86_XMM3;
 
       case XMM4_REG:
-	return CV_X86_XMM4L;
+	return CV_X86_XMM4;
 
       case XMM5_REG:
-	return CV_X86_XMM5L;
+	return CV_X86_XMM5;
 
       case XMM6_REG:
-	return CV_X86_XMM6L;
+	return CV_X86_XMM6;
 
       case XMM7_REG:
-	return CV_X86_XMM7L;
+	return CV_X86_XMM7;
     }
   }
 
@@ -2153,55 +2153,55 @@ map_register_no_amd64 (unsigned int regno, machine_mode mode)
       case R15_REG:
 	return CV_AMD64_R15B;
     }
-  } else if (mode == E_SFmode) {
+  } else if (mode == E_SFmode || mode == E_DFmode) {
     switch (regno) {
       case XMM0_REG:
-	return CV_AMD64_XMM0L;
+	return CV_AMD64_XMM0;
 
       case XMM1_REG:
-	return CV_AMD64_XMM1L;
+	return CV_AMD64_XMM1;
 
       case XMM2_REG:
-	return CV_AMD64_XMM2L;
+	return CV_AMD64_XMM2;
 
       case XMM3_REG:
-	return CV_AMD64_XMM3L;
+	return CV_AMD64_XMM3;
 
       case XMM4_REG:
-	return CV_AMD64_XMM4L;
+	return CV_AMD64_XMM4;
 
       case XMM5_REG:
-	return CV_AMD64_XMM5L;
+	return CV_AMD64_XMM5;
 
       case XMM6_REG:
-	return CV_AMD64_XMM6L;
+	return CV_AMD64_XMM6;
 
       case XMM7_REG:
-	return CV_AMD64_XMM7L;
+	return CV_AMD64_XMM7;
 
       case XMM8_REG:
-	return CV_AMD64_XMM8L;
+	return CV_AMD64_XMM8;
 
       case XMM9_REG:
-	return CV_AMD64_XMM9L;
+	return CV_AMD64_XMM9;
 
       case XMM10_REG:
-	return CV_AMD64_XMM10L;
+	return CV_AMD64_XMM10;
 
       case XMM11_REG:
-	return CV_AMD64_XMM11L;
+	return CV_AMD64_XMM11;
 
       case XMM12_REG:
-	return CV_AMD64_XMM12L;
+	return CV_AMD64_XMM12;
 
       case XMM13_REG:
-	return CV_AMD64_XMM13L;
+	return CV_AMD64_XMM13;
 
       case XMM14_REG:
-	return CV_AMD64_XMM14L;
+	return CV_AMD64_XMM14;
 
       case XMM15_REG:
-	return CV_AMD64_XMM15L;
+	return CV_AMD64_XMM15;
     }
   }
 
