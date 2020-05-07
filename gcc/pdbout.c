@@ -1693,6 +1693,16 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 
 	    break;
 	  }
+
+	  case CODEVIEW_LF_ENUM:
+	  {
+	    struct pdb_enum *en = (struct pdb_enum*)type->data;
+
+	    if (!en->name)
+	      en->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(t)));
+
+	    break;
+	  }
 	}
 
 	break;
