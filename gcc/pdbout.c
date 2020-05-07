@@ -1315,9 +1315,9 @@ find_type_enum(tree t)
   else
     en->type = 0;
 
-  if (TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
+  if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
     en->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
-  else if (TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
+  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
     en->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
   else
     en->name = NULL;
