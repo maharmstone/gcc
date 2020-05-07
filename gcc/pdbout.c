@@ -611,7 +611,7 @@ write_union(struct pdb_struct *str)
 static void
 write_enum(struct pdb_enum *en)
 {
-  size_t name_len = strlen(en->name);
+  size_t name_len = en->name ? strlen(en->name) : (sizeof(unnamed) - 1);
   unsigned int len = 17 + name_len, align;
 
   if (len % 4 != 0)
@@ -626,7 +626,10 @@ write_enum(struct pdb_enum *en)
   fprintf (asm_out_file, "\t.short\t0x%x\n", en->field);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
 
-  ASM_OUTPUT_ASCII (asm_out_file, en->name, name_len + 1);
+  if (en->name)
+    ASM_OUTPUT_ASCII (asm_out_file, en->name, name_len + 1);
+  else
+    ASM_OUTPUT_ASCII (asm_out_file, unnamed, sizeof(unnamed));
 
   align = 4 - ((1 + name_len) % 4);
 
