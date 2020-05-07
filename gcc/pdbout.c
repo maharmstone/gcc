@@ -968,7 +968,7 @@ add_type(struct pdb_type *t) {
 	  if (en1->count == en2->count &&
 	      en1->type == en2->type &&
 	      en1->field == en2->field &&
-	      !strcmp(en1->name, en2->name)) {
+	      ((!en1->name && !en2->name) || (en1->name && en2->name && !strcmp(en1->name, en2->name)))) {
 	    if (en1->name)
 	      free(en1->name);
 
