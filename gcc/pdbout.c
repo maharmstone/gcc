@@ -1868,6 +1868,35 @@ map_register_no_x86 (unsigned int regno, machine_mode mode)
       case FLAGS_REG:
 	return CV_X86_EFLAGS;
     }
+  } else if (mode == E_HImode) {
+    switch (regno) {
+      case AX_REG:
+	return CV_X86_AX;
+
+      case DX_REG:
+	return CV_X86_DX;
+
+      case CX_REG:
+	return CV_X86_CX;
+
+      case BX_REG:
+	return CV_X86_BX;
+
+      case SI_REG:
+	return CV_X86_SI;
+
+      case DI_REG:
+	return CV_X86_DI;
+
+      case BP_REG:
+	return CV_X86_BP;
+
+      case SP_REG:
+	return CV_X86_SP;
+
+      case FLAGS_REG:
+	return CV_X86_FLAGS;
+    }
   } else if (mode == E_SFmode) {
     switch (regno) {
       case XMM0_REG:
@@ -2006,6 +2035,59 @@ map_register_no_amd64 (unsigned int regno, machine_mode mode)
 
       case R15_REG:
 	return CV_AMD64_R15;
+    }
+  } else if (mode == E_HImode) {
+    switch (regno) {
+      case AX_REG:
+	return CV_AMD64_AX;
+
+      case DX_REG:
+	return CV_AMD64_DX;
+
+      case CX_REG:
+	return CV_AMD64_CX;
+
+      case BX_REG:
+	return CV_AMD64_BX;
+
+      case SI_REG:
+	return CV_AMD64_SI;
+
+      case DI_REG:
+	return CV_AMD64_DI;
+
+      case BP_REG:
+	return CV_AMD64_BP;
+
+      case SP_REG:
+	return CV_AMD64_SP;
+
+      case FLAGS_REG:
+	return CV_AMD64_FLAGS;
+
+      case R8_REG:
+	return CV_AMD64_R8W;
+
+      case R9_REG:
+	return CV_AMD64_R9W;
+
+      case R10_REG:
+	return CV_AMD64_R10W;
+
+      case R11_REG:
+	return CV_AMD64_R11W;
+
+      case R12_REG:
+	return CV_AMD64_R12W;
+
+      case R13_REG:
+	return CV_AMD64_R13W;
+
+      case R14_REG:
+	return CV_AMD64_R14W;
+
+      case R15_REG:
+	return CV_AMD64_R15W;
     }
   } else if (mode == E_SFmode) {
     switch (regno) {
