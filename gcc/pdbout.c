@@ -1482,7 +1482,7 @@ find_type(tree t)
   a = aliases;
   while (a) {
     if (a->tree == t)
-      return a->cv_type;
+      return a->type;
 
     a = a->next;
   }
@@ -1665,12 +1665,38 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 
   if (t->decl_non_common.result) { // typedef
     struct pdb_alias *a;
+    struct pdb_type *type;
 
     a = (struct pdb_alias*)xmalloc(sizeof(struct pdb_alias));
 
     a->next = aliases;
     a->tree = t->typed.type;
-    a->cv_type = find_type(t->decl_non_common.result);
+    a->type = find_type(t->decl_non_common.result);
+
+    // give name if previously anonymous
+
+    type = types;
+    while (type) {
+      if (type->id == a->type) {
+	switch (type->cv_type) {
+	  case CODEVIEW_LF_STRUCTURE:
+	  case CODEVIEW_LF_CLASS:
+	  case CODEVIEW_LF_UNION:
+	  {
+	    struct pdb_struct *str = (struct pdb_struct*)type->data;
+
+	    if (!str->name)
+	      str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(t)));
+
+	    break;
+	  }
+	}
+
+	break;
+      }
+
+      type = type->next;
+    }
 
     aliases = a;
 
