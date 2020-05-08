@@ -1613,7 +1613,6 @@ find_type(tree t, tree parent, bool ignore_cv)
 	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
     }
 
-    // FIXME - HRESULT
     // FIXME - 128-bit integers?
 
     return 0;
@@ -1756,7 +1755,14 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
     a->tree = t->typed.type;
     a->type = find_type(t->decl_non_common.result, NULL, false);
 
+    if (a->type == CV_BUILTIN_TYPE_INT32LONG && DECL_NAME(t) && IDENTIFIER_POINTER(DECL_NAME(t)) &&
+	!strcmp(IDENTIFIER_POINTER(DECL_NAME(t)), "HRESULT")) {
+      a->type = CV_BUILTIN_TYPE_HRESULT; // HRESULTs have their own value
+    }
+
     // give name if previously anonymous
+
+    // FIXME - save time by getting find_type to return a pointer instead of a number?
 
     type = types;
     while (type) {
