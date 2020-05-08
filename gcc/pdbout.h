@@ -105,10 +105,31 @@ struct pdb_fieldlist {
   struct pdb_fieldlist_entry *entries;
 };
 
+union pdb_property { // CV_prop_t in cvdump
+  struct {
+    uint16_t packed : 1;
+    uint16_t ctor : 1;
+    uint16_t ovlops : 1;
+    uint16_t isnested : 1;
+    uint16_t cnested : 1;
+    uint16_t opassign : 1;
+    uint16_t opcast : 1;
+    uint16_t fwdref : 1;
+    uint16_t scoped : 1;
+    uint16_t hasuniquename : 1;
+    uint16_t sealed : 1;
+    uint16_t hfa : 2;
+    uint16_t intrinsic : 1;
+    uint16_t mocom : 2;
+  } s;
+  uint16_t value;
+};
+
 struct pdb_struct {
   unsigned int count;
   uint16_t field;
   uint16_t size;
+  union pdb_property property;
   char *name;
 };
 
