@@ -2,6 +2,7 @@
 #define GCC_PDBOUT_H 1
 
 #define CODEVIEW_S_END			0x0006
+#define CODEVIEW_LF_MODIFIER		0x1001
 #define CODEVIEW_LF_POINTER		0x1002
 #define CODEVIEW_LF_PROCEDURE		0x1008
 #define CODEVIEW_S_REGISTER		0x1106
@@ -249,6 +250,15 @@ struct pdb_source_file {
   uint32_t str_offset;
   unsigned int num;
   char name[1];
+};
+
+#define CV_MODIFIER_CONST	0x1
+#define CV_MODIFIER_VOLATILE	0x2
+#define CV_MODIFIER_UNALIGNED	0x4
+
+struct pdb_modifier {
+  uint16_t type;
+  uint16_t modifier;
 };
 
 enum pdb_x86_register {
