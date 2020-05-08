@@ -583,7 +583,7 @@ write_union(struct pdb_struct *str)
   fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
   fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_UNION);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
-  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - property
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->property.value);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->field);
   fprintf (asm_out_file, "\t.short\t0\n"); // FIXME
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->size);
@@ -1181,7 +1181,7 @@ find_type_union(tree t)
   struct pdb_fieldlist_entry *ent;
   struct pdb_struct *str;
   unsigned int num_entries = 0;
-  uint16_t fltypenum;
+  uint16_t fltypenum = 0;
 
   f = t->type_non_common.values;
 
@@ -1192,35 +1192,37 @@ find_type_union(tree t)
     f = f->common.chain;
   }
 
-  // add fieldlist type
+  if (num_entries > 0) {
+    // add fieldlist type
 
-  fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
-  fltype->cv_type = CODEVIEW_LF_FIELDLIST;
-  fltype->tree = NULL;
+    fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
+    fltype->cv_type = CODEVIEW_LF_FIELDLIST;
+    fltype->tree = NULL;
 
-  fieldlist = (struct pdb_fieldlist*)fltype->data;
-  fieldlist->count = num_entries;
-  fieldlist->entries = (struct pdb_fieldlist_entry*)xmalloc(sizeof(struct pdb_fieldlist_entry) * num_entries);
+    fieldlist = (struct pdb_fieldlist*)fltype->data;
+    fieldlist->count = num_entries;
+    fieldlist->entries = (struct pdb_fieldlist_entry*)xmalloc(sizeof(struct pdb_fieldlist_entry) * num_entries);
 
-  ent = fieldlist->entries;
-  f = t->type_non_common.values;
+    ent = fieldlist->entries;
+    f = t->type_non_common.values;
 
-  while (f) {
-    if (TREE_CODE(f) == FIELD_DECL) {
-      unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
+    while (f) {
+      if (TREE_CODE(f) == FIELD_DECL) {
+	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
-      ent->cv_type = CODEVIEW_LF_MEMBER;
-      ent->type = find_type(f->common.typed.type);
-      ent->offset = bit_offset / 8; // FIXME - what about bit fields?
-      ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
-      ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
-      ent++;
+	ent->cv_type = CODEVIEW_LF_MEMBER;
+	ent->type = find_type(f->common.typed.type);
+	ent->offset = bit_offset / 8; // FIXME - what about bit fields?
+	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
+	ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
+	ent++;
+      }
+
+      f = f->common.chain;
     }
 
-    f = f->common.chain;
+    fltypenum = add_type(fltype);
   }
-
-  fltypenum = add_type(fltype);
 
   // add type for union
 
@@ -1231,7 +1233,8 @@ find_type_union(tree t)
   str = (struct pdb_struct*)uniontype->data;
   str->count = num_entries;
   str->field = fltypenum;
-  str->size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
+  str->size = TYPE_SIZE(t) ? (TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8) : 0;
+  str->property.value = 0;
 
   if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
     str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
@@ -1239,6 +1242,9 @@ find_type_union(tree t)
     str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
   else
     str->name = NULL;
+
+  if (!TYPE_SIZE(t)) // forward declaration
+    str->property.s.fwdref = 1;
 
   return add_type(uniontype);
 }
