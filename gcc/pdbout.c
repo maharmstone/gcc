@@ -40,7 +40,7 @@ static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_
 			       bool is_stmt ATTRIBUTE_UNUSED);
 static void pdbout_function_decl(tree decl);
 
-static uint16_t find_type(tree t, tree parent);
+static uint16_t find_type(tree t, tree parent, bool ignore_cv);
 
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_global_var *global_vars = NULL;
@@ -748,6 +748,17 @@ write_udt_src_line(struct pdb_udt_src_line *t)
 }
 
 static void
+write_modifier(struct pdb_modifier *t)
+{
+  fprintf (asm_out_file, "\t.short\t0xa\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_MODIFIER);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->type);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->modifier);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+}
+
+static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
@@ -790,6 +801,10 @@ write_type(struct pdb_type *t)
 
     case CODEVIEW_LF_UDT_SRC_LINE:
       write_udt_src_line((struct pdb_udt_src_line*)t->data);
+      break;
+
+    case CODEVIEW_LF_MODIFIER:
+      write_modifier((struct pdb_modifier*)t->data);
       break;
   }
 }
@@ -841,7 +856,7 @@ pdbout_begin_function (tree func)
   f->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(func)));
   f->num = current_function_funcdef_no;
   f->public_flag = func->base.public_flag;
-  f->type = find_type(TREE_TYPE(func), NULL);
+  f->type = find_type(TREE_TYPE(func), NULL, false);
   f->lines = f->last_line = NULL;
   f->local_vars = f->last_local_var = NULL;
 
@@ -881,7 +896,7 @@ static void pdbout_late_global_decl(tree var)
   v->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(var)));
   v->asm_name = xstrdup((const char*)var->var_decl.common.assembler_name->identifier.id.str); // FIXME - is this guaranteed to be null-terminated?
   v->public_flag = var->base.public_flag;
-  v->type = find_type(TREE_TYPE(var), NULL);
+  v->type = find_type(TREE_TYPE(var), NULL, false);
 
   global_vars = v;
 }
@@ -1066,6 +1081,7 @@ add_type(struct pdb_type *t) {
 	break;
 
 	case CODEVIEW_LF_UDT_SRC_LINE:
+	case CODEVIEW_LF_MODIFIER:
 	  if (!memcmp(t->data, t2->data, sizeof(struct pdb_udt_src_line))) {
 	    free(t);
 
@@ -1159,7 +1175,7 @@ find_type_struct(tree t, tree parent)
 	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
 	ent->cv_type = CODEVIEW_LF_MEMBER;
-	ent->type = find_type(f->common.typed.type, t);
+	ent->type = find_type(f->common.typed.type, t, false);
 	ent->offset = bit_offset / 8; // FIXME - what about bit fields?
 	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
 	ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
@@ -1237,7 +1253,7 @@ find_type_union(tree t)
 	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
 	ent->cv_type = CODEVIEW_LF_MEMBER;
-	ent->type = find_type(f->common.typed.type, NULL);
+	ent->type = find_type(f->common.typed.type, NULL, false);
 	ent->offset = bit_offset / 8; // FIXME - what about bit fields?
 	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
 	ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
@@ -1366,7 +1382,7 @@ find_type_pointer(tree t, tree parent)
   struct pdb_type *ptrtype;
   struct pdb_pointer *ptr;
   unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
-  uint16_t type = find_type(TREE_TYPE(t), parent);
+  uint16_t type = find_type(TREE_TYPE(t), parent, false);
 
   if (type == 0)
     return 0;
@@ -1404,7 +1420,7 @@ find_type_array(tree t)
 {
   struct pdb_type *arrtype;
   struct pdb_array *arr;
-  uint16_t type = find_type(TREE_TYPE(t), NULL);
+  uint16_t type = find_type(TREE_TYPE(t), NULL, false);
 
   if (type == 0)
     return 0;
@@ -1453,7 +1469,7 @@ find_type_function(tree t)
   arg = TYPE_ARG_TYPES(t);
   while (arg) {
     if (TREE_VALUE(arg)->base.code != VOID_TYPE) {
-      *argptr = find_type(TREE_VALUE(arg), NULL);
+      *argptr = find_type(TREE_VALUE(arg), NULL, false);
       argptr++;
     }
 
@@ -1470,7 +1486,7 @@ find_type_function(tree t)
 
   proc = (struct pdb_proc*)proctype->data;
 
-  proc->return_type = find_type(TREE_TYPE(t), NULL);
+  proc->return_type = find_type(TREE_TYPE(t), NULL, false);
   proc->attributes = 0;
   proc->num_args = num_args;
   proc->arg_list = arglisttypenum;
@@ -1504,7 +1520,31 @@ find_type_function(tree t)
 }
 
 static uint16_t
-find_type(tree t, tree parent)
+find_type_modifier(tree t, tree parent)
+{
+  struct pdb_type *type;
+  struct pdb_modifier *mod;
+
+  type = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_modifier));
+  type->cv_type = CODEVIEW_LF_MODIFIER;
+  type->tree = t;
+
+  mod = (struct pdb_modifier*)type->data;
+
+  mod->type = find_type(t, parent, true);
+  mod->modifier = 0;
+
+  if (TYPE_READONLY(t))
+    mod->modifier |= CV_MODIFIER_CONST;
+
+  if (TYPE_VOLATILE(t))
+    mod->modifier |= CV_MODIFIER_VOLATILE;
+
+  return add_type(type);
+}
+
+static uint16_t
+find_type(tree t, tree parent, bool ignore_cv)
 {
   struct pdb_type *type;
   struct pdb_alias *a;
@@ -1522,10 +1562,23 @@ find_type(tree t, tree parent)
     a = a->next;
   }
 
+  // search through existing types
+
+  type = types;
+  while (type) {
+    if (type->tree == t)
+      return type->id;
+
+    type = type->next;
+  }
+
+  // add modifier type if const or volatile
+
+  if (!ignore_cv && (TYPE_READONLY(t) || TYPE_VOLATILE(t)))
+    return find_type_modifier(t, parent);
+
   if (t->base.code == INTEGER_TYPE) {
     unsigned int size;
-
-    // FIXME - constness?
 
     if (t == char_type_node)
       return CV_BUILTIN_TYPE_NARROW_CHARACTER;
@@ -1613,21 +1666,9 @@ find_type(tree t, tree parent)
   } else if (t->base.code == VOID_TYPE)
     return CV_BUILTIN_TYPE_VOID;
 
-  // search through existing types
-
-  type = types;
-  while (type) {
-    if (type->tree == t)
-      return type->id;
-
-    type = type->next;
-  }
-
-  // FIXME - char16_t, char32_t, char8_t
+  // FIXME - char16_t, char32_t
   // FIXME - complex types
-  // FIXME - booleans
   // FIXME - C++ references
-  // FIXME - constness etc.
   // FIXME - any others?
 
   switch (t->base.code) {
@@ -1706,7 +1747,7 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 
     a->next = aliases;
     a->tree = t->typed.type;
-    a->type = find_type(t->decl_non_common.result, NULL);
+    a->type = find_type(t->decl_non_common.result, NULL, false);
 
     // give name if previously anonymous
 
@@ -1748,7 +1789,7 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
     return;
   }
 
-  type = find_type(t->typed.type, NULL);
+  type = find_type(t->typed.type, NULL, false);
 
   if (type == 0 || type < FIRST_TYPE_NUM)
     return;
@@ -2361,7 +2402,7 @@ pdbout_function_decl(tree decl)
   f = decl->function_decl.arguments;
   while (f) {
     if (TREE_CODE(f) == PARM_DECL && DECL_NAME(f)) {
-      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type, NULL),
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type, NULL, false),
 		f->parm_decl.common.rtl);
     }
 
@@ -2371,7 +2412,7 @@ pdbout_function_decl(tree decl)
   f = BLOCK_VARS(DECL_INITIAL(decl));
   while (f) {
     if (TREE_CODE(f) == VAR_DECL && DECL_RTL_SET_P(f)) {
-      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type, NULL),
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type, NULL, false),
 		DECL_RTL(f));
     }
 
