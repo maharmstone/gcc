@@ -1407,7 +1407,6 @@ find_type_pointer(tree t, tree parent)
   else if (size == 4)
     ptr->attr.s.ptrtype = CV_PTR_NEAR32;
 
-  // FIXME - const and volatile pointers
   // FIXME - C++ references
 
   return add_type(ptrtype);
