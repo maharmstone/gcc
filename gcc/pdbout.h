@@ -238,7 +238,7 @@ struct pdb_alias {
 #define CV_TM_NPTR32			4
 #define CV_TM_NPTR64			6
 
-// from CV_call_e in cvdummp
+// from CV_call_e in cvdump
 #define CV_CALL_NEAR_C		0x00
 #define CV_CALL_NEAR_FAST	0x04
 #define CV_CALL_NEAR_STD	0x07

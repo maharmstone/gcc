@@ -1101,8 +1101,6 @@ add_type(struct pdb_type *t) {
   t->id = type_num;
   type_num++;
 
-  t->tree = NULL;
-
   if (last_type)
     last_type->next = t;
 
@@ -1128,7 +1126,7 @@ find_type_struct(tree t, tree parent)
   if (t == parent) { // self-referencing struct - add implicit forward declaration
     strtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
     strtype->cv_type = CODEVIEW_LF_STRUCTURE; // FIXME - LF_CLASS if C++ class?
-    strtype->tree = t;
+    strtype->tree = NULL;
 
     str = (struct pdb_struct*)strtype->data;
     str->count = 0;
@@ -1577,7 +1575,7 @@ find_type(tree t, tree parent, bool ignore_cv)
   if (!ignore_cv && (TYPE_READONLY(t) || TYPE_VOLATILE(t)))
     return find_type_modifier(t, parent);
 
-  if (t->base.code == INTEGER_TYPE) {
+  if (TREE_CODE(t) == INTEGER_TYPE) {
     unsigned int size;
 
     if (t == char_type_node)
@@ -1620,7 +1618,7 @@ find_type(tree t, tree parent, bool ignore_cv)
     // FIXME - 128-bit integers?
 
     return 0;
-  } else if (t->base.code == REAL_TYPE) {
+  } else if (TREE_CODE(t) == REAL_TYPE) {
     unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
     switch (size) {
@@ -1644,7 +1642,7 @@ find_type(tree t, tree parent, bool ignore_cv)
     }
 
     return 0;
-  } else if (t->base.code == BOOLEAN_TYPE) {
+  } else if (TREE_CODE(t) == BOOLEAN_TYPE) {
     unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
     switch (size) {
@@ -1663,15 +1661,25 @@ find_type(tree t, tree parent, bool ignore_cv)
       case 128:
 	return CV_BUILTIN_TYPE_BOOLEAN128;
     }
-  } else if (t->base.code == VOID_TYPE)
+  } else if (TREE_CODE(t) == VOID_TYPE)
     return CV_BUILTIN_TYPE_VOID;
+
+  if (TYPE_MAIN_VARIANT(t) != t) {
+    type = types;
+    while (type) {
+      if (type->tree == TYPE_MAIN_VARIANT(t))
+	return type->id;
+
+      type = type->next;
+    }
+  }
 
   // FIXME - char16_t, char32_t
   // FIXME - complex types
   // FIXME - C++ references
   // FIXME - any others?
 
-  switch (t->base.code) {
+  switch (TREE_CODE(t)) {
     case POINTER_TYPE:
       return find_type_pointer(t, parent);
 
