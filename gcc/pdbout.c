@@ -40,7 +40,7 @@ static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_
 			       bool is_stmt ATTRIBUTE_UNUSED);
 static void pdbout_function_decl(tree decl);
 
-static uint16_t find_type(tree t);
+static uint16_t find_type(tree t, tree parent);
 
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_global_var *global_vars = NULL;
@@ -841,7 +841,7 @@ pdbout_begin_function (tree func)
   f->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(func)));
   f->num = current_function_funcdef_no;
   f->public_flag = func->base.public_flag;
-  f->type = find_type(TREE_TYPE(func));
+  f->type = find_type(TREE_TYPE(func), NULL);
   f->lines = f->last_line = NULL;
   f->local_vars = f->last_local_var = NULL;
 
@@ -881,7 +881,7 @@ static void pdbout_late_global_decl(tree var)
   v->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(var)));
   v->asm_name = xstrdup((const char*)var->var_decl.common.assembler_name->identifier.id.str); // FIXME - is this guaranteed to be null-terminated?
   v->public_flag = var->base.public_flag;
-  v->type = find_type(TREE_TYPE(var));
+  v->type = find_type(TREE_TYPE(var), NULL);
 
   global_vars = v;
 }
@@ -1099,7 +1099,7 @@ add_type(struct pdb_type *t) {
 }
 
 static uint16_t
-find_type_struct(tree t)
+find_type_struct(tree t, tree parent)
 {
   tree f;
   struct pdb_type *fltype, *strtype;
@@ -1109,7 +1109,27 @@ find_type_struct(tree t)
   unsigned int num_entries = 0;
   uint16_t fltypenum = 0;
 
-  // FIXME - what about self-referencing structs?
+  if (t == parent) { // self-referencing struct - add implicit forward declaration
+    strtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
+    strtype->cv_type = CODEVIEW_LF_STRUCTURE; // FIXME - LF_CLASS if C++ class?
+    strtype->tree = t;
+
+    str = (struct pdb_struct*)strtype->data;
+    str->count = 0;
+    str->field = 0;
+    str->size = 0;
+    str->property.value = 0;
+    str->property.s.fwdref = 1;
+
+    if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
+      str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
+    else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
+      str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
+    else
+      str->name = NULL;
+
+    return add_type(strtype);
+  }
 
   f = t->type_non_common.values;
 
@@ -1139,7 +1159,7 @@ find_type_struct(tree t)
 	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
 	ent->cv_type = CODEVIEW_LF_MEMBER;
-	ent->type = find_type(f->common.typed.type);
+	ent->type = find_type(f->common.typed.type, t);
 	ent->offset = bit_offset / 8; // FIXME - what about bit fields?
 	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
 	ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
@@ -1217,7 +1237,7 @@ find_type_union(tree t)
 	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
 	ent->cv_type = CODEVIEW_LF_MEMBER;
-	ent->type = find_type(f->common.typed.type);
+	ent->type = find_type(f->common.typed.type, NULL);
 	ent->offset = bit_offset / 8; // FIXME - what about bit fields?
 	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
 	ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
@@ -1341,12 +1361,12 @@ find_type_enum(tree t)
 }
 
 static uint16_t
-find_type_pointer(tree t)
+find_type_pointer(tree t, tree parent)
 {
   struct pdb_type *ptrtype;
   struct pdb_pointer *ptr;
   unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
-  uint16_t type = find_type(TREE_TYPE(t));
+  uint16_t type = find_type(TREE_TYPE(t), parent);
 
   if (type == 0)
     return 0;
@@ -1384,7 +1404,7 @@ find_type_array(tree t)
 {
   struct pdb_type *arrtype;
   struct pdb_array *arr;
-  uint16_t type = find_type(TREE_TYPE(t));
+  uint16_t type = find_type(TREE_TYPE(t), NULL);
 
   if (type == 0)
     return 0;
@@ -1433,7 +1453,7 @@ find_type_function(tree t)
   arg = TYPE_ARG_TYPES(t);
   while (arg) {
     if (TREE_VALUE(arg)->base.code != VOID_TYPE) {
-      *argptr = find_type(TREE_VALUE(arg));
+      *argptr = find_type(TREE_VALUE(arg), NULL);
       argptr++;
     }
 
@@ -1450,7 +1470,7 @@ find_type_function(tree t)
 
   proc = (struct pdb_proc*)proctype->data;
 
-  proc->return_type = find_type(TREE_TYPE(t));
+  proc->return_type = find_type(TREE_TYPE(t), NULL);
   proc->attributes = 0;
   proc->num_args = num_args;
   proc->arg_list = arglisttypenum;
@@ -1484,7 +1504,7 @@ find_type_function(tree t)
 }
 
 static uint16_t
-find_type(tree t)
+find_type(tree t, tree parent)
 {
   struct pdb_type *type;
   struct pdb_alias *a;
@@ -1612,13 +1632,13 @@ find_type(tree t)
 
   switch (t->base.code) {
     case POINTER_TYPE:
-      return find_type_pointer(t);
+      return find_type_pointer(t, parent);
 
     case ARRAY_TYPE:
       return find_type_array(t);
 
     case RECORD_TYPE:
-      return find_type_struct(t);
+      return find_type_struct(t, parent);
 
     case UNION_TYPE:
       return find_type_union(t);
@@ -1686,7 +1706,7 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 
     a->next = aliases;
     a->tree = t->typed.type;
-    a->type = find_type(t->decl_non_common.result);
+    a->type = find_type(t->decl_non_common.result, NULL);
 
     // give name if previously anonymous
 
@@ -1728,7 +1748,7 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
     return;
   }
 
-  type = find_type(t->typed.type);
+  type = find_type(t->typed.type, NULL);
 
   if (type == 0 || type < FIRST_TYPE_NUM)
     return;
@@ -2341,7 +2361,7 @@ pdbout_function_decl(tree decl)
   f = decl->function_decl.arguments;
   while (f) {
     if (TREE_CODE(f) == PARM_DECL && DECL_NAME(f)) {
-      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type),
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type, NULL),
 		f->parm_decl.common.rtl);
     }
 
@@ -2351,7 +2371,7 @@ pdbout_function_decl(tree decl)
   f = BLOCK_VARS(DECL_INITIAL(decl));
   while (f) {
     if (TREE_CODE(f) == VAR_DECL && DECL_RTL_SET_P(f)) {
-      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type),
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type, NULL),
 		DECL_RTL(f));
     }
 
