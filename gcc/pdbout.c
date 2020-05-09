@@ -1603,8 +1603,10 @@ find_type(tree t, tree parent, bool ignore_cv)
       case 16:
 	if (!strcmp(IDENTIFIER_POINTER(TYPE_IDENTIFIER(t)), "wchar_t"))
 	  return CV_BUILTIN_TYPE_WIDE_CHARACTER;
-
-	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
+	else if (!strcmp(IDENTIFIER_POINTER(TYPE_IDENTIFIER(t)), "char16_t"))
+	  return CV_BUILTIN_TYPE_CHARACTER16;
+	else
+	  return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
 
       case 32:
 	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
@@ -1612,8 +1614,6 @@ find_type(tree t, tree parent, bool ignore_cv)
       case 64:
 	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
     }
-
-    // FIXME - 128-bit integers?
 
     return 0;
   } else if (TREE_CODE(t) == REAL_TYPE) {
@@ -1672,10 +1672,8 @@ find_type(tree t, tree parent, bool ignore_cv)
     }
   }
 
-  // FIXME - char16_t, char32_t
+  // FIXME - char32_t
   // FIXME - complex types
-  // FIXME - C++ references
-  // FIXME - any others?
 
   switch (TREE_CODE(t)) {
     case POINTER_TYPE:
