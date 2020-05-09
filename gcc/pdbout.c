@@ -1609,7 +1609,10 @@ find_type(tree t, tree parent, bool ignore_cv)
 	  return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
 
       case 32:
-	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
+	if (!strcmp(IDENTIFIER_POINTER(TYPE_IDENTIFIER(t)), "char32_t"))
+	  return CV_BUILTIN_TYPE_CHARACTER32;
+	else
+	  return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
 
       case 64:
 	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
@@ -1672,7 +1675,6 @@ find_type(tree t, tree parent, bool ignore_cv)
     }
   }
 
-  // FIXME - char32_t
   // FIXME - complex types
 
   switch (TREE_CODE(t)) {
