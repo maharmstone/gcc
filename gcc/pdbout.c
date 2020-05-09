@@ -468,9 +468,9 @@ write_fieldlist(struct pdb_fieldlist *fl)
     len += 2;
 
     if (fl->entries[i].cv_type == CODEVIEW_LF_MEMBER)
-      len += 9 + strlen(fl->entries[i].name);
+      len += 9 + (fl->entries[i].name ? strlen(fl->entries[i].name) : 0);
     else if (fl->entries[i].cv_type == CODEVIEW_LF_ENUMERATE)
-      len += 5 + strlen(fl->entries[i].name);
+      len += 5 + (fl->entries[i].name ? strlen(fl->entries[i].name) : 0);
 
     if (len % 4 != 0)
       len += 4 - (len % 4);
@@ -483,14 +483,18 @@ write_fieldlist(struct pdb_fieldlist *fl)
     fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].cv_type);
 
     if (fl->entries[i].cv_type == CODEVIEW_LF_MEMBER) {
-      size_t name_len = strlen(fl->entries[i].name);
+      size_t name_len = fl->entries[i].name ? strlen(fl->entries[i].name) : 0;
       unsigned int align;
 
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].fld_attr);
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].type);
       fprintf (asm_out_file, "\t.short\t0\n"); // padding
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].offset);
-      ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name, name_len + 1);
+
+      if (fl->entries[i].name)
+	ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name, name_len + 1);
+      else
+	fprintf (asm_out_file, "\t.byte\t0\n");
 
       // handle alignment padding
 
@@ -506,12 +510,16 @@ write_fieldlist(struct pdb_fieldlist *fl)
 	fprintf (asm_out_file, "\t.byte\t0xf1\n");
       }
     } else if (fl->entries[i].cv_type == CODEVIEW_LF_ENUMERATE) {
-      size_t name_len = strlen(fl->entries[i].name);
+      size_t name_len = fl->entries[i].name ? strlen(fl->entries[i].name) : 0;
       unsigned int align;
 
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].fld_attr);
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].value);
-      ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name, name_len + 1);
+
+      if (fl->entries[i].name)
+	ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name, name_len + 1);
+      else
+	fprintf (asm_out_file, "\t.byte\t0\n");
 
       // handle alignment padding
 
@@ -1182,7 +1190,7 @@ find_type_struct(tree t, tree parent)
 	ent->type = find_type(f->common.typed.type, t, false);
 	ent->offset = bit_offset / 8; // FIXME - what about bit fields?
 	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
-	ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
+	ent->name = DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f)) ? xstrdup(IDENTIFIER_POINTER(DECL_NAME(f))) : NULL;
 
 	ent++;
       }
