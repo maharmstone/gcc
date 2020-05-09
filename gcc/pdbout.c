@@ -1591,8 +1591,10 @@ find_type(tree t, tree parent, bool ignore_cv)
       return CV_BUILTIN_TYPE_INT32LONG;
     else if (t == long_unsigned_type_node)
       return CV_BUILTIN_TYPE_UINT32LONG;
-
-    // FIXME - should we be mapping long long to Int64Quad? (What does MSVC do?)
+    else if (t == long_long_integer_type_node)
+      return CV_BUILTIN_TYPE_INT64QUAD;
+    else if (t == long_long_unsigned_type_node)
+      return CV_BUILTIN_TYPE_UINT64QUAD;
 
     size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
