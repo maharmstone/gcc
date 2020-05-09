@@ -1706,6 +1706,9 @@ find_type(tree t, tree parent, bool ignore_cv)
     case VOID_TYPE:
       return CV_BUILTIN_TYPE_VOID;
 
+    case NULLPTR_TYPE:
+      return (CV_TM_NPTR << 8) | CV_BUILTIN_TYPE_VOID;
+
     default:
       break;
   }
