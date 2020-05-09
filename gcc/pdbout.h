@@ -255,6 +255,7 @@ struct pdb_alias {
 #define CV_BUILTIN_TYPE_CHARACTER32		0x007b
 
 // from CV_prmode_e in cvdump
+#define CV_TM_NPTR			1
 #define CV_TM_NPTR32			4
 #define CV_TM_NPTR64			6
 
