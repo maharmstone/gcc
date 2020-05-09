@@ -1575,123 +1575,140 @@ find_type(tree t, tree parent, bool ignore_cv)
   if (!ignore_cv && (TYPE_READONLY(t) || TYPE_VOLATILE(t)))
     return find_type_modifier(t, parent);
 
-  if (TREE_CODE(t) == INTEGER_TYPE) {
-    unsigned int size;
+  switch (TREE_CODE(t)) {
+    case INTEGER_TYPE: {
+      unsigned int size;
 
-    if (t == char_type_node)
-      return CV_BUILTIN_TYPE_NARROW_CHARACTER;
-    else if (t == signed_char_type_node)
-      return CV_BUILTIN_TYPE_SIGNED_CHARACTER;
-    else if (t == unsigned_char_type_node)
-      return CV_BUILTIN_TYPE_UNSIGNED_CHARACTER;
-    else if (t == short_integer_type_node)
-      return CV_BUILTIN_TYPE_INT16SHORT;
-    else if (t == short_unsigned_type_node)
-      return CV_BUILTIN_TYPE_UINT16SHORT;
-    else if (t == long_integer_type_node)
-      return CV_BUILTIN_TYPE_INT32LONG;
-    else if (t == long_unsigned_type_node)
-      return CV_BUILTIN_TYPE_UINT32LONG;
-    else if (t == long_long_integer_type_node)
-      return CV_BUILTIN_TYPE_INT64QUAD;
-    else if (t == long_long_unsigned_type_node)
-      return CV_BUILTIN_TYPE_UINT64QUAD;
+      if (t == char_type_node)
+	return CV_BUILTIN_TYPE_NARROW_CHARACTER;
+      else if (t == signed_char_type_node)
+	return CV_BUILTIN_TYPE_SIGNED_CHARACTER;
+      else if (t == unsigned_char_type_node)
+	return CV_BUILTIN_TYPE_UNSIGNED_CHARACTER;
+      else if (t == short_integer_type_node)
+	return CV_BUILTIN_TYPE_INT16SHORT;
+      else if (t == short_unsigned_type_node)
+	return CV_BUILTIN_TYPE_UINT16SHORT;
+      else if (t == long_integer_type_node)
+	return CV_BUILTIN_TYPE_INT32LONG;
+      else if (t == long_unsigned_type_node)
+	return CV_BUILTIN_TYPE_UINT32LONG;
+      else if (t == long_long_integer_type_node)
+	return CV_BUILTIN_TYPE_INT64QUAD;
+      else if (t == long_long_unsigned_type_node)
+	return CV_BUILTIN_TYPE_UINT64QUAD;
 
-    size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
+      size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
-    switch (size) {
-      case 8:
-	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
+      switch (size) {
+	case 8:
+	  return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
 
-      case 16:
-	if (!strcmp(IDENTIFIER_POINTER(TYPE_IDENTIFIER(t)), "wchar_t"))
-	  return CV_BUILTIN_TYPE_WIDE_CHARACTER;
-	else if (!strcmp(IDENTIFIER_POINTER(TYPE_IDENTIFIER(t)), "char16_t"))
-	  return CV_BUILTIN_TYPE_CHARACTER16;
-	else
-	  return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
+	case 16:
+	  if (!strcmp(IDENTIFIER_POINTER(TYPE_IDENTIFIER(t)), "wchar_t"))
+	    return CV_BUILTIN_TYPE_WIDE_CHARACTER;
+	  else if (!strcmp(IDENTIFIER_POINTER(TYPE_IDENTIFIER(t)), "char16_t"))
+	    return CV_BUILTIN_TYPE_CHARACTER16;
+	  else
+	    return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
 
-      case 32:
-	if (!strcmp(IDENTIFIER_POINTER(TYPE_IDENTIFIER(t)), "char32_t"))
-	  return CV_BUILTIN_TYPE_CHARACTER32;
-	else
-	  return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
+	case 32:
+	  if (!strcmp(IDENTIFIER_POINTER(TYPE_IDENTIFIER(t)), "char32_t"))
+	    return CV_BUILTIN_TYPE_CHARACTER32;
+	  else
+	    return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
 
-      case 64:
-	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
+	case 64:
+	  return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
 
-      case 128:
-	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT128 : CV_BUILTIN_TYPE_INT128;
+	case 128:
+	  return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT128 : CV_BUILTIN_TYPE_INT128;
+      }
+
+      return 0;
     }
 
-    return 0;
-  } else if (TREE_CODE(t) == REAL_TYPE) {
-    unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
+    case REAL_TYPE: {
+      unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
-    switch (size) {
-      case 16:
-	return CV_BUILTIN_TYPE_FLOAT16;
+      switch (size) {
+	case 16:
+	  return CV_BUILTIN_TYPE_FLOAT16;
 
-      case 32:
-	return CV_BUILTIN_TYPE_FLOAT32;
+	case 32:
+	  return CV_BUILTIN_TYPE_FLOAT32;
 
-      case 48:
-	return CV_BUILTIN_TYPE_FLOAT48;
+	case 48:
+	  return CV_BUILTIN_TYPE_FLOAT48;
 
-      case 64:
-	return CV_BUILTIN_TYPE_FLOAT64;
+	case 64:
+	  return CV_BUILTIN_TYPE_FLOAT64;
 
-      case 80:
-	return CV_BUILTIN_TYPE_FLOAT80;
+	case 80:
+	  return CV_BUILTIN_TYPE_FLOAT80;
 
-      case 128:
-	return CV_BUILTIN_TYPE_FLOAT128;
+	case 128:
+	  return CV_BUILTIN_TYPE_FLOAT128;
+      }
+
+      return 0;
     }
 
-    return 0;
-  } else if (TREE_CODE(t) == BOOLEAN_TYPE) {
-    unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
+    case BOOLEAN_TYPE: {
+      unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
-    switch (size) {
-      case 8:
-	return CV_BUILTIN_TYPE_BOOLEAN8;
+      switch (size) {
+	case 8:
+	  return CV_BUILTIN_TYPE_BOOLEAN8;
 
-      case 16:
-	return CV_BUILTIN_TYPE_BOOLEAN16;
+	case 16:
+	  return CV_BUILTIN_TYPE_BOOLEAN16;
 
-      case 32:
-	return CV_BUILTIN_TYPE_BOOLEAN32;
+	case 32:
+	  return CV_BUILTIN_TYPE_BOOLEAN32;
 
-      case 64:
-	return CV_BUILTIN_TYPE_BOOLEAN64;
+	case 64:
+	  return CV_BUILTIN_TYPE_BOOLEAN64;
 
-      case 128:
-	return CV_BUILTIN_TYPE_BOOLEAN128;
+	case 128:
+	  return CV_BUILTIN_TYPE_BOOLEAN128;
+      }
+
+      return 0;
     }
-  } else if (TREE_CODE(t) == COMPLEX_TYPE) {
-    unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
-    switch (size) {
-      case 16:
-	return CV_BUILTIN_TYPE_COMPLEX16;
+    case COMPLEX_TYPE: {
+      unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
 
-      case 32:
-	return CV_BUILTIN_TYPE_COMPLEX32;
+      switch (size) {
+	case 16:
+	  return CV_BUILTIN_TYPE_COMPLEX16;
 
-      case 48:
-	return CV_BUILTIN_TYPE_COMPLEX48;
+	case 32:
+	  return CV_BUILTIN_TYPE_COMPLEX32;
 
-      case 64:
-	return CV_BUILTIN_TYPE_COMPLEX64;
+	case 48:
+	  return CV_BUILTIN_TYPE_COMPLEX48;
 
-      case 80:
-	return CV_BUILTIN_TYPE_COMPLEX80;
+	case 64:
+	  return CV_BUILTIN_TYPE_COMPLEX64;
 
-      case 128:
-	return CV_BUILTIN_TYPE_COMPLEX128;
+	case 80:
+	  return CV_BUILTIN_TYPE_COMPLEX80;
+
+	case 128:
+	  return CV_BUILTIN_TYPE_COMPLEX128;
+      }
+
+      return 0;
     }
-  } else if (TREE_CODE(t) == VOID_TYPE)
-    return CV_BUILTIN_TYPE_VOID;
+
+    case VOID_TYPE:
+      return CV_BUILTIN_TYPE_VOID;
+
+    default:
+      break;
+  }
 
   if (TYPE_MAIN_VARIANT(t) != t) {
     type = types;
