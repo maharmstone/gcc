@@ -14,6 +14,7 @@
 #include "rtl.h"
 #include "insn-config.h"
 #include "reload.h"
+#include "cp/cp-tree.h"
 #include "print-tree.h" // FIXME - remove this
 #include "print-rtl.h" // FIXME - and this
 
@@ -1125,7 +1126,12 @@ find_type_struct(tree t, tree parent)
 
   if (t == parent) { // self-referencing struct - add implicit forward declaration
     strtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
-    strtype->cv_type = CODEVIEW_LF_STRUCTURE; // FIXME - LF_CLASS if C++ class?
+
+    if (TYPE_LANG_SPECIFIC(t) && CLASSTYPE_DECLARED_CLASS(t))
+      strtype->cv_type = CODEVIEW_LF_CLASS;
+    else
+      strtype->cv_type = CODEVIEW_LF_STRUCTURE;
+
     strtype->tree = NULL;
 
     str = (struct pdb_struct*)strtype->data;
@@ -1190,7 +1196,12 @@ find_type_struct(tree t, tree parent)
   // add type for struct
 
   strtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
-  strtype->cv_type = CODEVIEW_LF_STRUCTURE; // FIXME - LF_CLASS if C++ class?
+
+  if (TYPE_LANG_SPECIFIC(t) && CLASSTYPE_DECLARED_CLASS(t))
+    strtype->cv_type = CODEVIEW_LF_CLASS;
+  else
+    strtype->cv_type = CODEVIEW_LF_STRUCTURE;
+
   strtype->tree = t;
 
   str = (struct pdb_struct*)strtype->data;
