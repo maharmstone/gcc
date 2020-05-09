@@ -1375,7 +1375,7 @@ find_type_enum(tree t)
 }
 
 static uint16_t
-find_type_pointer(tree t, tree parent)
+find_type_pointer(tree t, tree parent, bool ref)
 {
   struct pdb_type *ptrtype;
   struct pdb_pointer *ptr;
@@ -1385,7 +1385,7 @@ find_type_pointer(tree t, tree parent)
   if (type == 0)
     return 0;
 
-  if (type < FIRST_TYPE_NUM) { // pointers to builtins have their own constants
+  if (type < FIRST_TYPE_NUM && !ref) { // pointers to builtins have their own constants
     if (size == 4)
       return (CV_TM_NPTR32 << 8) | type;
     else if (size == 8)
@@ -1407,7 +1407,8 @@ find_type_pointer(tree t, tree parent)
   else if (size == 4)
     ptr->attr.s.ptrtype = CV_PTR_NEAR32;
 
-  // FIXME - C++ references
+  if (ref)
+    ptr->attr.s.ptrmode = CV_PTR_MODE_LVREF;
 
   return add_type(ptrtype);
 }
@@ -1704,7 +1705,10 @@ find_type(tree t, tree parent, bool ignore_cv)
 
   switch (TREE_CODE(t)) {
     case POINTER_TYPE:
-      return find_type_pointer(t, parent);
+      return find_type_pointer(t, parent, false);
+
+    case REFERENCE_TYPE:
+      return find_type_pointer(t, parent, true);
 
     case ARRAY_TYPE:
       return find_type_array(t);

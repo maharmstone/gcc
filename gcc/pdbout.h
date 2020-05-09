@@ -145,6 +145,13 @@ struct pdb_enum {
 #define CV_PTR_NEAR32		0x0a
 #define CV_PTR_64		0x0c
 
+// from CV_ptrmode_e in cvdump
+#define CV_PTR_MODE_PTR		0x0
+#define CV_PTR_MODE_LVREF	0x1
+#define CV_PTR_MODE_PMEM	0x2
+#define CV_PTR_MODE_PMFUNC	0x3
+#define CV_PTR_MODE_RVREF	0x4
+
 struct pdb_pointer {
   uint16_t type;
   union {
