@@ -1618,6 +1618,9 @@ find_type(tree t, tree parent, bool ignore_cv)
 
       case 64:
 	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
+
+      case 128:
+	return TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_UINT128 : CV_BUILTIN_TYPE_INT128;
     }
 
     return 0;
