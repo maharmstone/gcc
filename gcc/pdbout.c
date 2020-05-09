@@ -1662,6 +1662,28 @@ find_type(tree t, tree parent, bool ignore_cv)
       case 128:
 	return CV_BUILTIN_TYPE_BOOLEAN128;
     }
+  } else if (TREE_CODE(t) == COMPLEX_TYPE) {
+    unsigned int size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
+
+    switch (size) {
+      case 16:
+	return CV_BUILTIN_TYPE_COMPLEX16;
+
+      case 32:
+	return CV_BUILTIN_TYPE_COMPLEX32;
+
+      case 48:
+	return CV_BUILTIN_TYPE_COMPLEX48;
+
+      case 64:
+	return CV_BUILTIN_TYPE_COMPLEX64;
+
+      case 80:
+	return CV_BUILTIN_TYPE_COMPLEX80;
+
+      case 128:
+	return CV_BUILTIN_TYPE_COMPLEX128;
+    }
   } else if (TREE_CODE(t) == VOID_TYPE)
     return CV_BUILTIN_TYPE_VOID;
 
@@ -1674,8 +1696,6 @@ find_type(tree t, tree parent, bool ignore_cv)
       type = type->next;
     }
   }
-
-  // FIXME - complex types
 
   switch (TREE_CODE(t)) {
     case POINTER_TYPE:
