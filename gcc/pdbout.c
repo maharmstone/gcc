@@ -937,13 +937,13 @@ add_type(struct pdb_type *t) {
 		if (fl1->entries[i].type != fl2->entries[i].type ||
 		    fl1->entries[i].offset != fl2->entries[i].offset ||
 		    fl1->entries[i].fld_attr != fl2->entries[i].fld_attr ||
-		    strcmp(fl1->entries[i].name, fl2->entries[i].name)) {
+		    ((fl1->entries[i].name || fl2->entries[i].name) && (!fl1->entries[i].name || !fl2->entries[i].name || strcmp(fl1->entries[i].name, fl2->entries[i].name)))) {
 		  same = false;
 		  break;
 		}
 	      } else if (fl1->entries[i].cv_type == CODEVIEW_LF_ENUMERATE) {
 		if (fl1->entries[i].value != fl2->entries[i].value ||
-		    strcmp(fl1->entries[i].name, fl2->entries[i].name)) {
+		    ((fl1->entries[i].name || fl2->entries[i].name) && (!fl1->entries[i].name || !fl2->entries[i].name || strcmp(fl1->entries[i].name, fl2->entries[i].name)))) {
 		  same = false;
 		  break;
 		}
@@ -1273,7 +1273,7 @@ find_type_union(tree t)
 	ent->type = find_type(f->common.typed.type, NULL, false);
 	ent->offset = bit_offset / 8; // FIXME - what about bit fields?
 	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
-	ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
+	ent->name = DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f)) ? xstrdup(IDENTIFIER_POINTER(DECL_NAME(f))) : NULL;
 	ent++;
       }
 
