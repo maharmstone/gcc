@@ -2444,7 +2444,7 @@ add_local(const char *name, uint16_t type, rtx rtl)
       plv->offset = rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
     } else if (rtl->u.fld[0].rt_rtx->code == REG) {
       plv->var_type = pdb_local_var_regrel;
-      plv->reg = map_register_no(rtl->u.fld[0].rt_rtx->u.reg.regno, rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->mode);
+      plv->reg = map_register_no(rtl->u.fld[0].rt_rtx->u.reg.regno, rtl->u.fld[0].rt_rtx->mode);
       plv->offset = 0;
     }
   } else if (rtl->code == REG) {
