@@ -45,7 +45,8 @@ struct pdb_line {
 enum pdb_local_var_type {
   pdb_local_var_unknown,
   pdb_local_var_regrel,
-  pdb_local_var_register
+  pdb_local_var_register,
+  pdb_local_var_symbol
 };
 
 struct pdb_local_var {
@@ -54,6 +55,7 @@ struct pdb_local_var {
   int32_t offset;
   unsigned int reg;
   uint16_t type;
+  char *symbol;
   char name[1];
 };
 

@@ -115,9 +115,48 @@ pdbout_local_variable (struct pdb_local_var *v)
   uint16_t len, align;
   size_t name_len = strlen(v->name);
 
-  if (v->var_type == pdb_local_var_regrel) {
-    if (v->reg == CV_X86_EBP) { // ebp is a special case
-      len = 13 + name_len;
+  switch (v->var_type) {
+    case pdb_local_var_regrel:
+      if (v->reg == CV_X86_EBP) { // ebp is a special case
+	len = 13 + name_len;
+
+	if (len % 4 != 0) {
+	  align = 4 - (len % 4);
+	  len += 4 - (len % 4);
+	} else
+	  align = 0;
+
+	fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
+	fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BPREL32);
+	fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
+	fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+
+	ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+      } else {
+	len = 15 + name_len;
+
+	if (len % 4 != 0) {
+	  align = 4 - (len % 4);
+	  len += 4 - (len % 4);
+	} else
+	  align = 0;
+
+	fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
+	fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_REGREL32);
+	fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
+	fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+	fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
+
+	ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+      }
+
+      for (unsigned int i = 0; i < align; i++) {
+	fprintf (asm_out_file, "\t.byte\t0\n");
+      }
+    break;
+
+    case pdb_local_var_register:
+      len = 11 + name_len;
 
       if (len % 4 != 0) {
 	align = 4 - (len % 4);
@@ -126,12 +165,18 @@ pdbout_local_variable (struct pdb_local_var *v)
 	align = 0;
 
       fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BPREL32);
-      fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_REGISTER);
       fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
 
       ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
-    } else {
+
+      for (unsigned int i = 0; i < align; i++) {
+	fprintf (asm_out_file, "\t.byte\t0\n");
+      }
+    break;
+
+    case pdb_local_var_symbol:
       len = 15 + name_len;
 
       if (len % 4 != 0) {
@@ -141,36 +186,24 @@ pdbout_local_variable (struct pdb_local_var *v)
 	align = 0;
 
       fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_REGREL32);
-      fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
-      fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
-      fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_LDATA32);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", v->type);
+      fprintf (asm_out_file, "\t.short\t0\n");
 
+      fprintf (asm_out_file, "\t.long\t["); // off
+      ASM_OUTPUT_LABELREF (asm_out_file, v->symbol);
+      fprintf (asm_out_file, "]\n");
+
+      fprintf (asm_out_file, "\t.short\t0\n"); // seg (will get set by the linker)
       ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
-    }
 
-    for (unsigned int i = 0; i < align; i++) {
-      fprintf (asm_out_file, "\t.byte\t0\n");
-    }
-  } else if (v->var_type == pdb_local_var_register) {
-    len = 11 + name_len;
+      for (unsigned int i = 0; i < align; i++) {
+	fprintf (asm_out_file, "\t.byte\t0\n");
+      }
+    break;
 
-    if (len % 4 != 0) {
-      align = 4 - (len % 4);
-      len += 4 - (len % 4);
-    } else
-      align = 0;
-
-    fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-    fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_REGISTER);
-    fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
-    fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
-
-    ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
-
-    for (unsigned int i = 0; i < align; i++) {
-      fprintf (asm_out_file, "\t.byte\t0\n");
-    }
+    default:
+    break;
   }
 }
 
@@ -215,6 +248,9 @@ pdbout_proc32 (struct pdb_func *func)
     struct pdb_local_var *n = func->local_vars->next;
 
     pdbout_local_variable(func->local_vars);
+
+    if (func->local_vars->symbol)
+      free(func->local_vars->symbol);
 
     free(func->local_vars);
 
@@ -2431,6 +2467,7 @@ add_local(const char *name, uint16_t type, rtx rtl)
   plv = (struct pdb_local_var*)xmalloc(offsetof(struct pdb_local_var, name) + name_len + 1);
   plv->next = NULL;
   plv->type = type;
+  plv->symbol = NULL;
   plv->var_type = pdb_local_var_unknown;
   memcpy(plv->name, name, name_len + 1);
 
@@ -2446,6 +2483,9 @@ add_local(const char *name, uint16_t type, rtx rtl)
       plv->var_type = pdb_local_var_regrel;
       plv->reg = map_register_no(rtl->u.fld[0].rt_rtx->u.reg.regno, rtl->u.fld[0].rt_rtx->mode);
       plv->offset = 0;
+    } else if (rtl->u.fld[0].rt_rtx->code == SYMBOL_REF) {
+      plv->var_type = pdb_local_var_symbol;
+      plv->symbol = xstrdup(rtl->u.fld[0].rt_rtx->u.block_sym.fld[0].rt_str);
     }
   } else if (rtl->code == REG) {
     plv->var_type = pdb_local_var_register;
@@ -2454,8 +2494,8 @@ add_local(const char *name, uint16_t type, rtx rtl)
 
   if (plv->var_type == pdb_local_var_unknown) {
     fprintf(stderr, "Unhandled argument: "); // FIXME
-    print_rtl(stdout, rtl);
-    printf("\n");
+    print_rtl(stderr, rtl);
+    fprintf(stderr, "\n");
   }
 
   if (cur_func->last_local_var)
