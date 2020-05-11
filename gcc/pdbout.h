@@ -78,6 +78,11 @@ struct pdb_var_location {
   int32_t offset;
 };
 
+struct pdb_block {
+  struct pdb_local_var *local_vars, *last_local_var;
+  struct pdb_var_location *var_locs, *last_var_loc;
+};
+
 struct pdb_func {
   struct pdb_func *next;
   char *name;
@@ -86,8 +91,7 @@ struct pdb_func {
   uint16_t type;
   unsigned int source_file;
   struct pdb_line *lines, *last_line;
-  struct pdb_local_var *local_vars, *last_local_var;
-  struct pdb_var_location *var_locs, *last_var_loc;
+  struct pdb_block block;
 };
 
 struct pdb_global_var {
