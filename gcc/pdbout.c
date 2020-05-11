@@ -41,10 +41,13 @@ static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_
 			       bool is_stmt ATTRIBUTE_UNUSED);
 static void pdbout_function_decl(tree decl);
 static void pdbout_var_location(rtx_insn *loc_note);
+static void pdbout_begin_block(unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum);
+static void pdbout_end_block(unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum);
 
 static uint16_t find_type(tree t, tree parent, bool ignore_cv);
 
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
+static struct pdb_block *cur_block = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
 static struct pdb_alias *aliases = NULL;
@@ -65,8 +68,8 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   debug_nothing_int_charstar,		 /* undef */
   pdbout_start_source_file,
   debug_nothing_int,			 /* end_source_file */
-  debug_nothing_int_int,	         /* begin_block */
-  debug_nothing_int_int,	         /* end_block */
+  pdbout_begin_block,
+  pdbout_end_block,
   debug_true_const_tree,	         /* ignore_block */
   pdbout_source_line,
   pdbout_begin_prologue,
@@ -300,6 +303,33 @@ pdbout_local_variable (struct pdb_local_var *v, struct pdb_var_location *var_loc
 }
 
 static void
+pdbout_block (struct pdb_block *block, unsigned int func_num)
+{
+  while (block->local_vars) {
+    struct pdb_local_var *n = block->local_vars->next;
+
+    pdbout_local_variable(block->local_vars, block->var_locs, func_num);
+
+    if (block->local_vars->symbol)
+      free(block->local_vars->symbol);
+
+    free(block->local_vars);
+
+    block->local_vars = n;
+  }
+
+  while (block->var_locs) {
+    struct pdb_var_location *n = block->var_locs->next;
+
+    free(block->var_locs);
+
+    block->var_locs = n;
+  }
+
+  // FIXME - sub-blocks
+}
+
+static void
 pdbout_proc32 (struct pdb_func *func)
 {
   size_t name_len = strlen(func->name);
@@ -334,28 +364,7 @@ pdbout_proc32 (struct pdb_func *func)
 
   // FIXME - S_FRAMEPROC, S_CALLSITEINFO, etc.
 
-  // locals
-
-  while (func->local_vars) {
-    struct pdb_local_var *n = func->local_vars->next;
-
-    pdbout_local_variable(func->local_vars, func->var_locs, func->num);
-
-    if (func->local_vars->symbol)
-      free(func->local_vars->symbol);
-
-    free(func->local_vars);
-
-    func->local_vars = n;
-  }
-
-  while (func->var_locs) {
-    struct pdb_var_location *n = func->var_locs->next;
-
-    free(func->var_locs);
-
-    func->var_locs = n;
-  }
+  pdbout_block(&func->block, func->num);
 
   // end procedure
 
@@ -1003,12 +1012,13 @@ pdbout_begin_function (tree func)
   f->public_flag = func->base.public_flag;
   f->type = find_type(TREE_TYPE(func), NULL, false);
   f->lines = f->last_line = NULL;
-  f->local_vars = f->last_local_var = NULL;
-  f->var_locs = f->last_var_loc = NULL;
+  f->block.local_vars = f->block.last_local_var = NULL;
+  f->block.var_locs = f->block.last_var_loc = NULL;
 
   funcs = f;
 
   cur_func = f;
+  cur_block = &f->block;
 
   xloc = expand_location(DECL_SOURCE_LOCATION(func));
 
@@ -2605,13 +2615,13 @@ add_local(const char *name, tree t, uint16_t type, rtx rtl)
     fprintf(stderr, "\n");
   }
 
-  if (cur_func->last_local_var)
-    cur_func->last_local_var->next = plv;
+  if (cur_block->last_local_var)
+    cur_block->last_local_var->next = plv;
 
-  cur_func->last_local_var = plv;
+  cur_block->last_local_var = plv;
 
-  if (!cur_func->local_vars)
-    cur_func->local_vars = plv;
+  if (!cur_block->local_vars)
+    cur_block->local_vars = plv;
 }
 
 static void
@@ -2646,6 +2656,7 @@ pdbout_function_decl(tree decl)
   }
 
   cur_func = NULL;
+  cur_block = NULL;
 }
 
 static void
@@ -2710,13 +2721,29 @@ pdbout_var_location(rtx_insn *loc_note)
 
   fprintf(asm_out_file, ".varloc%u:\n", var_loc_number);
 
-  if (cur_func->last_var_loc)
-    cur_func->last_var_loc->next = var_loc;
+  if (cur_block->last_var_loc)
+    cur_block->last_var_loc->next = var_loc;
 
-  cur_func->last_var_loc = var_loc;
+  cur_block->last_var_loc = var_loc;
 
-  if (!cur_func->var_locs)
-    cur_func->var_locs = var_loc;
+  if (!cur_block->var_locs)
+    cur_block->var_locs = var_loc;
 
   var_loc_number++;
+}
+
+static void
+pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
+{
+  fprintf(asm_out_file, ".blockstart%u:\n", blocknum);
+
+  // FIXME
+}
+
+static void
+pdbout_end_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
+{
+  fprintf(asm_out_file, ".blockend%u:\n", blocknum);
+
+  // FIXME
 }
