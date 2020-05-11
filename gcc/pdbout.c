@@ -320,7 +320,7 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
     fprintf (asm_out_file, "\t.short\t0x16\n"); // reclen
     fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BLOCK32);
     fprintf (asm_out_file, "\t.long\t0\n"); // pParent
-    fprintf (asm_out_file, "\t.long\t0\n"); // pEnd
+    fprintf (asm_out_file, "\t.long\t[.cvblockend%u]-[.debug$S]\n", block->children->num); // pEnd
     fprintf (asm_out_file, "\t.long\t[.blockend%u]-[.blockstart%u]\n", block->children->num, block->children->num); // length
     fprintf (asm_out_file, "\t.long\t[.blockstart%u]\n", block->children->num); // offset
     fprintf (asm_out_file, "\t.short\t0\n"); // section (will be filled in by the linker)
@@ -329,6 +329,7 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
 
     pdbout_block(block->children, func);
 
+    fprintf (asm_out_file, ".cvblockend%u:\n", block->children->num);
     fprintf (asm_out_file, "\t.short\t0x2\n");
     fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_END);
 
