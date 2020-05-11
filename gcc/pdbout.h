@@ -59,6 +59,7 @@ struct pdb_local_var {
   tree t;
   int32_t offset;
   unsigned int reg;
+  unsigned int block_num;
   uint16_t type;
   char *symbol;
   char name[1];
@@ -83,8 +84,6 @@ struct pdb_block {
   struct pdb_block *next;
   struct pdb_block *parent;
   unsigned int num;
-  struct pdb_local_var *local_vars, *last_local_var;
-  struct pdb_var_location *var_locs, *last_var_loc;
   struct pdb_block *children, *last_child;
 };
 
@@ -96,6 +95,8 @@ struct pdb_func {
   uint16_t type;
   unsigned int source_file;
   struct pdb_line *lines, *last_line;
+  struct pdb_local_var *local_vars, *last_local_var;
+  struct pdb_var_location *var_locs, *last_var_loc;
   struct pdb_block block;
 };
 

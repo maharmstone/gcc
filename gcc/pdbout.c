@@ -303,27 +303,15 @@ pdbout_local_variable (struct pdb_local_var *v, struct pdb_var_location *var_loc
 }
 
 static void
-pdbout_block (struct pdb_block *block, unsigned int func_num)
+pdbout_block (struct pdb_block *block, struct pdb_func *func)
 {
-  while (block->local_vars) {
-    struct pdb_local_var *n = block->local_vars->next;
+  struct pdb_local_var *local_var = func->local_vars;
 
-    pdbout_local_variable(block->local_vars, block->var_locs, func_num);
+  while (local_var) {
+    if (local_var->block_num == block->num)
+      pdbout_local_variable(local_var, func->var_locs, func->num);
 
-    if (block->local_vars->symbol)
-      free(block->local_vars->symbol);
-
-    free(block->local_vars);
-
-    block->local_vars = n;
-  }
-
-  while (block->var_locs) {
-    struct pdb_var_location *n = block->var_locs->next;
-
-    free(block->var_locs);
-
-    block->var_locs = n;
+    local_var = local_var->next;
   }
 
   while (block->children) {
@@ -339,7 +327,7 @@ pdbout_block (struct pdb_block *block, unsigned int func_num)
     fprintf (asm_out_file, "\t.byte\t0\n"); // name (zero-length string)
     fprintf (asm_out_file, "\t.byte\t0\n"); // padding
 
-    pdbout_block(block->children, func_num);
+    pdbout_block(block->children, func);
 
     fprintf (asm_out_file, "\t.short\t0x2\n");
     fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_END);
@@ -385,7 +373,7 @@ pdbout_proc32 (struct pdb_func *func)
 
   // FIXME - S_FRAMEPROC, S_CALLSITEINFO, etc.
 
-  pdbout_block(&func->block, func->num);
+  pdbout_block(&func->block, func);
 
   // end procedure
 
@@ -393,6 +381,25 @@ pdbout_proc32 (struct pdb_func *func)
 
   fprintf (asm_out_file, "\t.short\t0x2\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_END);
+
+  while (func->local_vars) {
+    struct pdb_local_var *n = func->local_vars->next;
+
+    if (func->local_vars->symbol)
+      free(func->local_vars->symbol);
+
+    free(func->local_vars);
+
+    func->local_vars = n;
+  }
+
+  while (func->var_locs) {
+    struct pdb_var_location *n = func->var_locs->next;
+
+    free(func->var_locs);
+
+    func->var_locs = n;
+  }
 }
 
 static void
@@ -1033,12 +1040,12 @@ pdbout_begin_function (tree func)
   f->public_flag = func->base.public_flag;
   f->type = find_type(TREE_TYPE(func), NULL, false);
   f->lines = f->last_line = NULL;
+  f->local_vars = f->last_local_var = NULL;
+  f->var_locs = f->last_var_loc = NULL;
 
   f->block.next = NULL;
   f->block.parent = NULL;
   f->block.num = 0;
-  f->block.local_vars = f->block.last_local_var = NULL;
-  f->block.var_locs = f->block.last_var_loc = NULL;
   f->block.children = f->block.last_child = NULL;
 
   funcs = f;
@@ -2599,7 +2606,7 @@ map_register_no (unsigned int regno, machine_mode mode)
 }
 
 static void
-add_local(const char *name, tree t, uint16_t type, rtx rtl)
+add_local(const char *name, tree t, uint16_t type, rtx rtl, unsigned int block_num)
 {
   struct pdb_local_var *plv;
   size_t name_len = strlen(name);
@@ -2611,6 +2618,7 @@ add_local(const char *name, tree t, uint16_t type, rtx rtl)
   plv->type = type;
   plv->symbol = NULL;
   plv->t = t;
+  plv->block_num = block_num;
   plv->var_type = pdb_local_var_unknown;
   memcpy(plv->name, name, name_len + 1);
 
@@ -2641,13 +2649,36 @@ add_local(const char *name, tree t, uint16_t type, rtx rtl)
     fprintf(stderr, "\n");
   }
 
-  if (cur_block->last_local_var)
-    cur_block->last_local_var->next = plv;
+  if (cur_func->last_local_var)
+    cur_func->last_local_var->next = plv;
 
-  cur_block->last_local_var = plv;
+  cur_func->last_local_var = plv;
 
-  if (!cur_block->local_vars)
-    cur_block->local_vars = plv;
+  if (!cur_func->local_vars)
+    cur_func->local_vars = plv;
+}
+
+static void
+pdbout_function_decl_block(tree block)
+{
+  tree f;
+
+  f = BLOCK_VARS(block);
+  while (f) {
+    if (TREE_CODE(f) == VAR_DECL && DECL_RTL_SET_P(f)) {
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), f, find_type(f->typed.type, NULL, false),
+		DECL_RTL(f), BLOCK_NUMBER(block));
+    }
+
+    f = f->common.chain;
+  }
+
+  f = BLOCK_SUBBLOCKS(block);
+  while (f) {
+    pdbout_function_decl_block(f);
+
+    f = BLOCK_CHAIN(f);
+  }
 }
 
 static void
@@ -2658,28 +2689,17 @@ pdbout_function_decl(tree decl)
   if (!cur_func)
     return;
 
-  // FIXME - blocks
-  // FIXME - variable scope
-
   f = decl->function_decl.arguments;
   while (f) {
     if (TREE_CODE(f) == PARM_DECL && DECL_NAME(f)) {
       add_local(IDENTIFIER_POINTER(DECL_NAME(f)), f, find_type(f->typed.type, NULL, false),
-		f->parm_decl.common.rtl);
+		f->parm_decl.common.rtl, 0);
     }
 
     f = f->common.chain;
   }
 
-  f = BLOCK_VARS(DECL_INITIAL(decl));
-  while (f) {
-    if (TREE_CODE(f) == VAR_DECL && DECL_RTL_SET_P(f)) {
-      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), f, find_type(f->typed.type, NULL, false),
-		DECL_RTL(f));
-    }
-
-    f = f->common.chain;
-  }
+  pdbout_function_decl_block(DECL_INITIAL(decl));
 
   cur_func = NULL;
   cur_block = NULL;
@@ -2747,13 +2767,13 @@ pdbout_var_location(rtx_insn *loc_note)
 
   fprintf(asm_out_file, ".varloc%u:\n", var_loc_number);
 
-  if (cur_block->last_var_loc)
-    cur_block->last_var_loc->next = var_loc;
+  if (cur_func->last_var_loc)
+    cur_func->last_var_loc->next = var_loc;
 
-  cur_block->last_var_loc = var_loc;
+  cur_func->last_var_loc = var_loc;
 
-  if (!cur_block->var_locs)
-    cur_block->var_locs = var_loc;
+  if (!cur_func->var_locs)
+    cur_func->var_locs = var_loc;
 
   var_loc_number++;
 }
@@ -2775,8 +2795,6 @@ pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
 
   b->parent = cur_block;
   b->num = blocknum;
-  b->local_vars = b->last_local_var = NULL;
-  b->var_locs = b->last_var_loc = NULL;
   b->children = b->last_child = NULL;
 
   cur_block = b;
