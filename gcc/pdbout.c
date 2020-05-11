@@ -18,8 +18,8 @@
 #include "print-tree.h" // FIXME - remove this
 #include "print-rtl.h" // FIXME - and this
 
-#define FUNC_BEGIN_LABEL	".LFB"
-#define FUNC_END_LABEL		".LFE"
+#define FUNC_BEGIN_LABEL	".startfunc"
+#define FUNC_END_LABEL		".endfunc"
 
 #define FIRST_TYPE_NUM		0x1000
 
@@ -40,6 +40,7 @@ static void pdbout_source_line(unsigned int line, unsigned int column ATTRIBUTE_
 			       const char *text ATTRIBUTE_UNUSED, int discriminator ATTRIBUTE_UNUSED,
 			       bool is_stmt ATTRIBUTE_UNUSED);
 static void pdbout_function_decl(tree decl);
+static void pdbout_var_location(rtx_insn *loc_note);
 
 static uint16_t find_type(tree t, tree parent, bool ignore_cv);
 
@@ -52,6 +53,7 @@ static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
 static unsigned int num_line_number_entries = 0;
 static unsigned int num_source_files = 0;
+static unsigned int var_loc_number = 1;
 
 const struct gcc_debug_hooks pdb_debug_hooks =
 {
@@ -85,7 +87,7 @@ const struct gcc_debug_hooks pdb_debug_hooks =
   debug_nothing_tree,		         /* outlining_inline_function */
   debug_nothing_rtx_code_label,	         /* label */
   debug_nothing_int,		         /* handle_pch */
-  debug_nothing_rtx_insn,		 /* var_location */
+  pdbout_var_location,
   debug_nothing_tree,	         	 /* inline_entry */
   debug_nothing_tree,			 /* size_function */
   debug_nothing_void,                    /* switch_text_section */
@@ -110,10 +112,85 @@ pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 }
 
 static void
-pdbout_local_variable (struct pdb_local_var *v)
+write_var_location(struct pdb_var_location *var_loc, unsigned int next_var_loc_number, unsigned int func_num)
+{
+  switch (var_loc->type) {
+    case pdb_var_loc_register: {
+      fprintf (asm_out_file, "\t.short\t0xe\n");
+      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_DEFRANGE_REGISTER);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", var_loc->reg);
+      fprintf (asm_out_file, "\t.short\t0\n"); // range attr
+      fprintf (asm_out_file, "\t.long\t[.varloc%u]\n", var_loc->var_loc_number);
+      fprintf (asm_out_file, "\t.short\t0\n"); // section (will be filled in by the linker)
+
+      if (next_var_loc_number != 0)
+	fprintf (asm_out_file, "\t.short\t[.varloc%u]-[.varloc%u]\n", next_var_loc_number, var_loc->var_loc_number);
+      else
+	fprintf (asm_out_file, "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n", func_num, var_loc->var_loc_number); // to end of function
+
+      break;
+    }
+
+    case pdb_var_loc_unknown:
+      break;
+  }
+}
+
+static void
+pdbout_optimized_local_variable (struct pdb_local_var *v, struct pdb_var_location *var_locs, unsigned int func_num)
 {
   uint16_t len, align;
   size_t name_len = strlen(v->name);
+  struct pdb_var_location *last_pvl = var_locs, *pvl;
+
+  len = 11 + name_len;
+
+  if (len % 4 != 0) {
+    align = 4 - (len % 4);
+    len += 4 - (len % 4);
+  } else
+    align = 0;
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t)));
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_LOCAL);
+  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - flags (CV_LVARFLAGS)
+
+  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+
+  for (unsigned int i = 0; i < align; i++) {
+    fprintf (asm_out_file, "\t.byte\t0\n");
+  }
+
+  pvl = var_locs->next;
+  while (pvl) {
+    if (pvl->var == v->t) {
+      write_var_location(last_pvl, pvl->var_loc_number, func_num);
+      last_pvl = pvl;
+    }
+
+    pvl = pvl->next;
+  }
+
+  write_var_location(last_pvl, 0, func_num);
+}
+
+static void
+pdbout_local_variable (struct pdb_local_var *v, struct pdb_var_location *var_locs, unsigned int func_num)
+{
+  uint16_t len, align;
+  size_t name_len = strlen(v->name);
+  struct pdb_var_location *pvl;
+
+  pvl = var_locs;
+  while (pvl) {
+    if (pvl->var == v->t) {
+      pdbout_optimized_local_variable(v, pvl, func_num);
+      return;
+    }
+
+    pvl = pvl->next;
+  }
 
   switch (v->var_type) {
     case pdb_local_var_regrel:
@@ -247,7 +324,7 @@ pdbout_proc32 (struct pdb_func *func)
   while (func->local_vars) {
     struct pdb_local_var *n = func->local_vars->next;
 
-    pdbout_local_variable(func->local_vars);
+    pdbout_local_variable(func->local_vars, func->var_locs, func->num);
 
     if (func->local_vars->symbol)
       free(func->local_vars->symbol);
@@ -255,6 +332,14 @@ pdbout_proc32 (struct pdb_func *func)
     free(func->local_vars);
 
     func->local_vars = n;
+  }
+
+  while (func->var_locs) {
+    struct pdb_var_location *n = func->var_locs->next;
+
+    free(func->var_locs);
+
+    func->var_locs = n;
   }
 
   // end procedure
@@ -904,6 +989,7 @@ pdbout_begin_function (tree func)
   f->type = find_type(TREE_TYPE(func), NULL, false);
   f->lines = f->last_line = NULL;
   f->local_vars = f->last_local_var = NULL;
+  f->var_locs = f->last_var_loc = NULL;
 
   funcs = f;
 
@@ -2452,7 +2538,8 @@ map_register_no_amd64 (unsigned int regno, machine_mode mode)
 static unsigned int
 map_register_no (unsigned int regno, machine_mode mode)
 {
-  // FIXME - check either x86 or amd64
+  if (regno >= FIRST_PSEUDO_REGISTER)
+    return 0;
 
   if (TARGET_64BIT)
     return (unsigned int)map_register_no_amd64(regno, mode);
@@ -2461,7 +2548,7 @@ map_register_no (unsigned int regno, machine_mode mode)
 }
 
 static void
-add_local(const char *name, uint16_t type, rtx rtl)
+add_local(const char *name, tree t, uint16_t type, rtx rtl)
 {
   struct pdb_local_var *plv;
   size_t name_len = strlen(name);
@@ -2472,6 +2559,7 @@ add_local(const char *name, uint16_t type, rtx rtl)
   plv->next = NULL;
   plv->type = type;
   plv->symbol = NULL;
+  plv->t = t;
   plv->var_type = pdb_local_var_unknown;
   memcpy(plv->name, name, name_len + 1);
 
@@ -2481,7 +2569,7 @@ add_local(const char *name, uint16_t type, rtx rtl)
     if (rtl->u.fld[0].rt_rtx->code == PLUS && rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
 	rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
       plv->var_type = pdb_local_var_regrel;
-      plv->reg = map_register_no(rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno, rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->mode) ;
+      plv->reg = map_register_no(rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno, rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->mode);
       plv->offset = rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
     } else if (rtl->u.fld[0].rt_rtx->code == REG) {
       plv->var_type = pdb_local_var_regrel;
@@ -2525,7 +2613,7 @@ pdbout_function_decl(tree decl)
   f = decl->function_decl.arguments;
   while (f) {
     if (TREE_CODE(f) == PARM_DECL && DECL_NAME(f)) {
-      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type, NULL, false),
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), f, find_type(f->typed.type, NULL, false),
 		f->parm_decl.common.rtl);
     }
 
@@ -2535,7 +2623,7 @@ pdbout_function_decl(tree decl)
   f = BLOCK_VARS(DECL_INITIAL(decl));
   while (f) {
     if (TREE_CODE(f) == VAR_DECL && DECL_RTL_SET_P(f)) {
-      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), find_type(f->typed.type, NULL, false),
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), f, find_type(f->typed.type, NULL, false),
 		DECL_RTL(f));
     }
 
@@ -2543,4 +2631,54 @@ pdbout_function_decl(tree decl)
   }
 
   cur_func = NULL;
+}
+
+static void
+pdbout_var_location(rtx_insn *loc_note)
+{
+  rtx value;
+  tree var;
+  struct pdb_var_location *var_loc;
+
+  if (!cur_func)
+    return;
+
+  if (!NOTE_P(loc_note))
+    return;
+
+  if (NOTE_KIND(loc_note) != NOTE_INSN_VAR_LOCATION)
+    return;
+
+  var = NOTE_VAR_LOCATION_DECL(loc_note);
+  value = NOTE_VAR_LOCATION_LOC(loc_note);
+
+  var_loc = (struct pdb_var_location*)xmalloc(sizeof(struct pdb_var_location));
+
+  var_loc->next = NULL;
+  var_loc->var = var;
+  var_loc->var_loc_number = var_loc_number;
+  var_loc->type = pdb_var_loc_unknown;
+
+  if (GET_CODE(value) == REG) {
+    var_loc->type = pdb_var_loc_register;
+    var_loc->reg = map_register_no(value->u.reg.regno, value->mode);
+  }
+
+  if (var_loc->type == pdb_var_loc_unknown) {
+    fprintf(stderr, "Unhandled var_location (%s):\n", IDENTIFIER_POINTER(DECL_NAME(var)));
+    print_rtl(stderr, value);
+    fprintf(stderr, "\n");
+  }
+
+  fprintf(asm_out_file, ".varloc%u:\n", var_loc_number);
+
+  if (cur_func->last_var_loc)
+    cur_func->last_var_loc->next = var_loc;
+
+  cur_func->last_var_loc = var_loc;
+
+  if (!cur_func->var_locs)
+    cur_func->var_locs = var_loc;
+
+  var_loc_number++;
 }
