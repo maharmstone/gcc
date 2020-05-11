@@ -1405,7 +1405,7 @@ find_type_struct(tree t, tree parent)
 
   if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
     str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
-  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
+  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL && IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t)))[0] != '.')
     str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
   else
     str->name = NULL;
@@ -1482,7 +1482,7 @@ find_type_union(tree t)
 
   if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
     str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
-  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
+  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL && IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t)))[0] != '.')
     str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
   else
     str->name = NULL;
@@ -1570,7 +1570,7 @@ find_type_enum(tree t)
 
   if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
     en->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
-  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL)
+  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL && IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t)))[0] != '.')
     en->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
   else
     en->name = NULL;
