@@ -2667,7 +2667,8 @@ pdbout_var_location(rtx_insn *loc_note)
   var = NOTE_VAR_LOCATION_DECL(loc_note);
   value = NOTE_VAR_LOCATION_LOC(loc_note);
 
-  value = eliminate_regs(value, VOIDmode, NULL_RTX);
+  if (value)
+    value = eliminate_regs(value, VOIDmode, NULL_RTX);
 
   var_loc = (struct pdb_var_location*)xmalloc(sizeof(struct pdb_var_location));
 
@@ -2676,33 +2677,35 @@ pdbout_var_location(rtx_insn *loc_note)
   var_loc->var_loc_number = var_loc_number;
   var_loc->type = pdb_var_loc_unknown;
 
-  switch (GET_CODE(value)) {
-    case REG:
-      var_loc->type = pdb_var_loc_register;
-      var_loc->reg = map_register_no(value->u.reg.regno, value->mode);
-    break;
+  if (value) {
+    switch (GET_CODE(value)) {
+      case REG:
+	var_loc->type = pdb_var_loc_register;
+	var_loc->reg = map_register_no(value->u.reg.regno, value->mode);
+      break;
 
-    case MEM: // FIXME - prettify
-      if (value->u.fld[0].rt_rtx->code == PLUS && value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
-	value->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
-	var_loc->type = pdb_var_loc_regrel;
-	var_loc->reg = map_register_no(value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno, value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->mode);
-	var_loc->offset = value->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
-      } else if (value->u.fld[0].rt_rtx->code == REG) {
-	var_loc->type = pdb_var_loc_regrel;
-	var_loc->reg = map_register_no(value->u.fld[0].rt_rtx->u.reg.regno, value->u.fld[0].rt_rtx->mode);
-	var_loc->offset = 0;
-      }
-    break;
+      case MEM: // FIXME - prettify
+	if (value->u.fld[0].rt_rtx->code == PLUS && value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
+	  value->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
+	  var_loc->type = pdb_var_loc_regrel;
+	  var_loc->reg = map_register_no(value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno, value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->mode);
+	  var_loc->offset = value->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
+	} else if (value->u.fld[0].rt_rtx->code == REG) {
+	  var_loc->type = pdb_var_loc_regrel;
+	  var_loc->reg = map_register_no(value->u.fld[0].rt_rtx->u.reg.regno, value->u.fld[0].rt_rtx->mode);
+	  var_loc->offset = 0;
+	}
+      break;
 
-    default:
-    break;
-  }
+      default:
+      break;
+    }
 
-  if (var_loc->type == pdb_var_loc_unknown) {
-    fprintf(stderr, "Unhandled var_location (%s):\n", IDENTIFIER_POINTER(DECL_NAME(var)));
-    print_rtl(stderr, value);
-    fprintf(stderr, "\n");
+    if (var_loc->type == pdb_var_loc_unknown) {
+      fprintf(stderr, "Unhandled var_location (%s):\n", IDENTIFIER_POINTER(DECL_NAME(var)));
+      print_rtl(stderr, value);
+      fprintf(stderr, "\n");
+    }
   }
 
   fprintf(asm_out_file, ".varloc%u:\n", var_loc_number);
