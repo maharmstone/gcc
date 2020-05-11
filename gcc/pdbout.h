@@ -5,6 +5,7 @@
 #define CODEVIEW_LF_MODIFIER			0x1001
 #define CODEVIEW_LF_POINTER			0x1002
 #define CODEVIEW_LF_PROCEDURE			0x1008
+#define CODEVIEW_S_BLOCK32			0x1103
 #define CODEVIEW_S_REGISTER			0x1106
 #define CODEVIEW_S_BPREL32			0x110b
 #define CODEVIEW_S_LDATA32			0x110c
@@ -79,8 +80,12 @@ struct pdb_var_location {
 };
 
 struct pdb_block {
+  struct pdb_block *next;
+  struct pdb_block *parent;
+  unsigned int num;
   struct pdb_local_var *local_vars, *last_local_var;
   struct pdb_var_location *var_locs, *last_var_loc;
+  struct pdb_block *children, *last_child;
 };
 
 struct pdb_func {

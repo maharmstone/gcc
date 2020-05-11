@@ -326,7 +326,28 @@ pdbout_block (struct pdb_block *block, unsigned int func_num)
     block->var_locs = n;
   }
 
-  // FIXME - sub-blocks
+  while (block->children) {
+    struct pdb_block *n = block->children->next;
+
+    fprintf (asm_out_file, "\t.short\t0x16\n"); // reclen
+    fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BLOCK32);
+    fprintf (asm_out_file, "\t.long\t0\n"); // pParent
+    fprintf (asm_out_file, "\t.long\t0\n"); // pEnd
+    fprintf (asm_out_file, "\t.long\t[.blockend%u]-[.blockstart%u]\n", block->children->num, block->children->num); // length
+    fprintf (asm_out_file, "\t.long\t[.blockstart%u]\n", block->children->num); // offset
+    fprintf (asm_out_file, "\t.short\t0\n"); // section (will be filled in by the linker)
+    fprintf (asm_out_file, "\t.byte\t0\n"); // name (zero-length string)
+    fprintf (asm_out_file, "\t.byte\t0\n"); // padding
+
+    pdbout_block(block->children, func_num);
+
+    fprintf (asm_out_file, "\t.short\t0x2\n");
+    fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_END);
+
+    free(block->children);
+
+    block->children = n;
+  }
 }
 
 static void
@@ -1012,8 +1033,13 @@ pdbout_begin_function (tree func)
   f->public_flag = func->base.public_flag;
   f->type = find_type(TREE_TYPE(func), NULL, false);
   f->lines = f->last_line = NULL;
+
+  f->block.next = NULL;
+  f->block.parent = NULL;
+  f->block.num = 0;
   f->block.local_vars = f->block.last_local_var = NULL;
   f->block.var_locs = f->block.last_var_loc = NULL;
+  f->block.children = f->block.last_child = NULL;
 
   funcs = f;
 
@@ -2735,9 +2761,25 @@ pdbout_var_location(rtx_insn *loc_note)
 static void
 pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
 {
+  struct pdb_block *b;
+
   fprintf(asm_out_file, ".blockstart%u:\n", blocknum);
 
-  // FIXME
+  b = (struct pdb_block*)xmalloc(sizeof(pdb_block));
+
+  b->next = cur_block->last_child;
+  cur_block->last_child = b;
+
+  if (!cur_block->children)
+    cur_block->children = b;
+
+  b->parent = cur_block;
+  b->num = blocknum;
+  b->local_vars = b->last_local_var = NULL;
+  b->var_locs = b->last_var_loc = NULL;
+  b->children = b->last_child = NULL;
+
+  cur_block = b;
 }
 
 static void
@@ -2745,5 +2787,5 @@ pdbout_end_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
 {
   fprintf(asm_out_file, ".blockend%u:\n", blocknum);
 
-  // FIXME
+  cur_block = cur_block->parent;
 }
