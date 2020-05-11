@@ -12,6 +12,8 @@
 #define CODEVIEW_S_LPROC32		0x110f
 #define CODEVIEW_S_GPROC32		0x1110
 #define CODEVIEW_S_REGREL32		0x1111
+#define CODEVIEW_S_DEFRANGE_REGISTER	0x1141
+#define CODEVIEW_S_LOCAL		0x113e
 #define CODEVIEW_LF_ARGLIST		0x1201
 #define CODEVIEW_LF_FIELDLIST		0x1203
 #define CODEVIEW_LF_ENUMERATE		0x1502
@@ -52,11 +54,25 @@ enum pdb_local_var_type {
 struct pdb_local_var {
   struct pdb_local_var *next;
   enum pdb_local_var_type var_type;
+  tree t;
   int32_t offset;
   unsigned int reg;
   uint16_t type;
   char *symbol;
   char name[1];
+};
+
+enum pdb_var_loc_type {
+  pdb_var_loc_unknown,
+  pdb_var_loc_register
+};
+
+struct pdb_var_location {
+  struct pdb_var_location *next;
+  tree var;
+  unsigned int var_loc_number;
+  enum pdb_var_loc_type type;
+  unsigned int reg;
 };
 
 struct pdb_func {
@@ -68,6 +84,7 @@ struct pdb_func {
   unsigned int source_file;
   struct pdb_line *lines, *last_line;
   struct pdb_local_var *local_vars, *last_local_var;
+  struct pdb_var_location *var_locs, *last_var_loc;
 };
 
 struct pdb_global_var {
