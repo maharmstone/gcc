@@ -115,7 +115,7 @@ static void
 write_var_location(struct pdb_var_location *var_loc, unsigned int next_var_loc_number, unsigned int func_num)
 {
   switch (var_loc->type) {
-    case pdb_var_loc_register: {
+    case pdb_var_loc_register:
       fprintf (asm_out_file, "\t.short\t0xe\n");
       fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_DEFRANGE_REGISTER);
       fprintf (asm_out_file, "\t.short\t0x%x\n", var_loc->reg);
@@ -128,8 +128,23 @@ write_var_location(struct pdb_var_location *var_loc, unsigned int next_var_loc_n
       else
 	fprintf (asm_out_file, "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n", func_num, var_loc->var_loc_number); // to end of function
 
-      break;
-    }
+    break;
+
+    case pdb_var_loc_regrel:
+      fprintf (asm_out_file, "\t.short\t0x12\n");
+      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_DEFRANGE_REGISTER_REL);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", var_loc->reg);
+      fprintf (asm_out_file, "\t.short\t0\n"); // spilledUdtMember, padding, offsetParent
+      fprintf (asm_out_file, "\t.long\t0x%x\n", var_loc->offset);
+      fprintf (asm_out_file, "\t.long\t[.varloc%u]\n", var_loc->var_loc_number);
+      fprintf (asm_out_file, "\t.short\t0\n"); // section (will be filled in by the linker)
+
+      if (next_var_loc_number != 0)
+	fprintf (asm_out_file, "\t.short\t[.varloc%u]-[.varloc%u]\n", next_var_loc_number, var_loc->var_loc_number);
+      else
+	fprintf (asm_out_file, "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n", func_num, var_loc->var_loc_number); // to end of function
+
+    break;
 
     case pdb_var_loc_unknown:
       break;
@@ -2652,6 +2667,8 @@ pdbout_var_location(rtx_insn *loc_note)
   var = NOTE_VAR_LOCATION_DECL(loc_note);
   value = NOTE_VAR_LOCATION_LOC(loc_note);
 
+  value = eliminate_regs(value, VOIDmode, NULL_RTX);
+
   var_loc = (struct pdb_var_location*)xmalloc(sizeof(struct pdb_var_location));
 
   var_loc->next = NULL;
@@ -2659,9 +2676,27 @@ pdbout_var_location(rtx_insn *loc_note)
   var_loc->var_loc_number = var_loc_number;
   var_loc->type = pdb_var_loc_unknown;
 
-  if (GET_CODE(value) == REG) {
-    var_loc->type = pdb_var_loc_register;
-    var_loc->reg = map_register_no(value->u.reg.regno, value->mode);
+  switch (GET_CODE(value)) {
+    case REG:
+      var_loc->type = pdb_var_loc_register;
+      var_loc->reg = map_register_no(value->u.reg.regno, value->mode);
+    break;
+
+    case MEM: // FIXME - prettify
+      if (value->u.fld[0].rt_rtx->code == PLUS && value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
+	value->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
+	var_loc->type = pdb_var_loc_regrel;
+	var_loc->reg = map_register_no(value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno, value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->mode);
+	var_loc->offset = value->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
+      } else if (value->u.fld[0].rt_rtx->code == REG) {
+	var_loc->type = pdb_var_loc_regrel;
+	var_loc->reg = map_register_no(value->u.fld[0].rt_rtx->u.reg.regno, value->u.fld[0].rt_rtx->mode);
+	var_loc->offset = 0;
+      }
+    break;
+
+    default:
+    break;
   }
 
   if (var_loc->type == pdb_var_loc_unknown) {

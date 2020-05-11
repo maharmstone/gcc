@@ -1,30 +1,31 @@
 #ifndef GCC_PDBOUT_H
 #define GCC_PDBOUT_H 1
 
-#define CODEVIEW_S_END			0x0006
-#define CODEVIEW_LF_MODIFIER		0x1001
-#define CODEVIEW_LF_POINTER		0x1002
-#define CODEVIEW_LF_PROCEDURE		0x1008
-#define CODEVIEW_S_REGISTER		0x1106
-#define CODEVIEW_S_BPREL32		0x110b
-#define CODEVIEW_S_LDATA32		0x110c
-#define CODEVIEW_S_GDATA32		0x110d
-#define CODEVIEW_S_LPROC32		0x110f
-#define CODEVIEW_S_GPROC32		0x1110
-#define CODEVIEW_S_REGREL32		0x1111
-#define CODEVIEW_S_DEFRANGE_REGISTER	0x1141
-#define CODEVIEW_S_LOCAL		0x113e
-#define CODEVIEW_LF_ARGLIST		0x1201
-#define CODEVIEW_LF_FIELDLIST		0x1203
-#define CODEVIEW_LF_ENUMERATE		0x1502
-#define CODEVIEW_LF_ARRAY		0x1503
-#define CODEVIEW_LF_CLASS		0x1504
-#define CODEVIEW_LF_STRUCTURE		0x1505
-#define CODEVIEW_LF_UNION		0x1506
-#define CODEVIEW_LF_ENUM		0x1507
-#define CODEVIEW_LF_MEMBER		0x150d
-#define CODEVIEW_LF_STRING_ID		0x1605
-#define CODEVIEW_LF_UDT_SRC_LINE	0x1606
+#define CODEVIEW_S_END				0x0006
+#define CODEVIEW_LF_MODIFIER			0x1001
+#define CODEVIEW_LF_POINTER			0x1002
+#define CODEVIEW_LF_PROCEDURE			0x1008
+#define CODEVIEW_S_REGISTER			0x1106
+#define CODEVIEW_S_BPREL32			0x110b
+#define CODEVIEW_S_LDATA32			0x110c
+#define CODEVIEW_S_GDATA32			0x110d
+#define CODEVIEW_S_LPROC32			0x110f
+#define CODEVIEW_S_GPROC32			0x1110
+#define CODEVIEW_S_REGREL32			0x1111
+#define CODEVIEW_S_DEFRANGE_REGISTER		0x1141
+#define CODEVIEW_S_DEFRANGE_REGISTER_REL	0x1145
+#define CODEVIEW_S_LOCAL			0x113e
+#define CODEVIEW_LF_ARGLIST			0x1201
+#define CODEVIEW_LF_FIELDLIST			0x1203
+#define CODEVIEW_LF_ENUMERATE			0x1502
+#define CODEVIEW_LF_ARRAY			0x1503
+#define CODEVIEW_LF_CLASS			0x1504
+#define CODEVIEW_LF_STRUCTURE			0x1505
+#define CODEVIEW_LF_UNION			0x1506
+#define CODEVIEW_LF_ENUM			0x1507
+#define CODEVIEW_LF_MEMBER			0x150d
+#define CODEVIEW_LF_STRING_ID			0x1605
+#define CODEVIEW_LF_UDT_SRC_LINE		0x1606
 
 #define CV_SIGNATURE_C13	4
 
@@ -64,7 +65,8 @@ struct pdb_local_var {
 
 enum pdb_var_loc_type {
   pdb_var_loc_unknown,
-  pdb_var_loc_register
+  pdb_var_loc_register,
+  pdb_var_loc_regrel
 };
 
 struct pdb_var_location {
@@ -73,6 +75,7 @@ struct pdb_var_location {
   unsigned int var_loc_number;
   enum pdb_var_loc_type type;
   unsigned int reg;
+  int32_t offset;
 };
 
 struct pdb_func {
