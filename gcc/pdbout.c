@@ -1552,10 +1552,19 @@ find_type_union(tree t, struct pdb_type **typeptr)
 	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
 	ent->cv_type = CODEVIEW_LF_MEMBER;
-	ent->type = find_type(f->common.typed.type, NULL, false, NULL);
-	ent->offset = bit_offset / 8; // FIXME - what about bit fields?
 	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
 	ent->name = DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f)) ? xstrdup(IDENTIFIER_POINTER(DECL_NAME(f))) : NULL;
+
+	if (DECL_BIT_FIELD_TYPE(f)) {
+	  uint16_t underlying_type = find_type(DECL_BIT_FIELD_TYPE(f), t, false, NULL);
+
+	  ent->type = find_type_bitfield(underlying_type, TREE_INT_CST_ELT(DECL_SIZE(f), 0), TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0));
+	  ent->offset = TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0);
+	} else {
+	  ent->type = find_type(f->common.typed.type, NULL, false, NULL);
+	  ent->offset = bit_offset / 8;
+	}
+
 	ent++;
       }
 
