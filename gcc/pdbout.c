@@ -2032,7 +2032,8 @@ add_udt_src_line_type(uint16_t type_id, uint16_t source_file, uint32_t line)
 
 static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 {
-  uint16_t type, string_type;
+  uint16_t type_id, string_type;
+  struct pdb_type *type;
   struct pdb_source_file *psf;
   expanded_location xloc;
 
@@ -2088,10 +2089,38 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
     return;
   }
 
-  type = find_type(t->typed.type, NULL, false, NULL);
+  type_id = find_type(t->typed.type, NULL, false, &type);
 
-  if (type == 0 || type < FIRST_TYPE_NUM)
+  if (type_id == 0 || type_id < FIRST_TYPE_NUM)
     return;
+
+  if (type && DECL_NAME(t) && IDENTIFIER_POINTER(DECL_NAME(t)) && IDENTIFIER_POINTER(DECL_NAME(t))[0] != '.') {
+    // give name if previously anonymous
+
+    switch (type->cv_type) {
+      case CODEVIEW_LF_STRUCTURE:
+      case CODEVIEW_LF_CLASS:
+      case CODEVIEW_LF_UNION:
+      {
+	struct pdb_struct *str = (struct pdb_struct*)type->data;
+
+	if (!str->name)
+	  str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(t)));
+
+	break;
+      }
+
+      case CODEVIEW_LF_ENUM:
+      {
+	struct pdb_enum *en = (struct pdb_enum*)type->data;
+
+	if (!en->name)
+	  en->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(t)));
+
+	break;
+      }
+    }
+  }
 
   if (!DECL_SOURCE_LOCATION(t))
     return;
@@ -2117,7 +2146,7 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 
   // add LF_UDT_SRC_LINE entry, which linker transforms into LF_UDT_MOD_SRC_LINE
 
-  add_udt_src_line_type(type, string_type, xloc.line);
+  add_udt_src_line_type(type_id, string_type, xloc.line);
 }
 
 static char*
