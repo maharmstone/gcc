@@ -241,7 +241,8 @@ struct pdb_type {
 struct pdb_alias {
   struct pdb_alias *next;
   tree_node *tree;
-  uint16_t type;
+  struct pdb_type *type;
+  uint16_t type_id;
 };
 
 #define CV_BUILTIN_TYPE_VOID			0x0003
