@@ -942,6 +942,20 @@ write_modifier(struct pdb_modifier *t)
 }
 
 static void
+write_bitfield(struct pdb_bitfield *t)
+{
+  fprintf (asm_out_file, "\t.short\t0xa\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_BITFIELD);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->underlying_type);
+  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+  fprintf (asm_out_file, "\t.byte\t0x%x\n", t->size);
+  fprintf (asm_out_file, "\t.byte\t0x%x\n", t->offset);
+
+  fprintf (asm_out_file, "\t.byte\t0xf2\n"); // alignment
+  fprintf (asm_out_file, "\t.byte\t0xf1\n"); // alignment
+}
+
+static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
@@ -988,6 +1002,10 @@ write_type(struct pdb_type *t)
 
     case CODEVIEW_LF_MODIFIER:
       write_modifier((struct pdb_modifier*)t->data);
+      break;
+
+    case CODEVIEW_LF_BITFIELD:
+      write_bitfield((struct pdb_bitfield*)t->data);
       break;
   }
 }
@@ -1299,8 +1317,29 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	break;
 
 	case CODEVIEW_LF_UDT_SRC_LINE:
-	case CODEVIEW_LF_MODIFIER:
 	  if (!memcmp(t->data, t2->data, sizeof(struct pdb_udt_src_line))) {
+	    free(t);
+
+	    if (typeptr)
+	      *typeptr = t2;
+
+	    return t2->id;
+	  }
+	break;
+
+	case CODEVIEW_LF_MODIFIER:
+	  if (!memcmp(t->data, t2->data, sizeof(struct pdb_modifier))) {
+	    free(t);
+
+	    if (typeptr)
+	      *typeptr = t2;
+
+	    return t2->id;
+	  }
+	break;
+
+	case CODEVIEW_LF_BITFIELD:
+	  if (!memcmp(t->data, t2->data, sizeof(struct pdb_bitfield))) {
 	    free(t);
 
 	    if (typeptr)
@@ -1334,6 +1373,26 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
     *typeptr = t;
 
   return t->id;
+}
+
+static uint16_t
+find_type_bitfield(uint16_t underlying_type, unsigned int size, unsigned int offset)
+{
+  struct pdb_type *type;
+  struct pdb_bitfield *bf;
+
+  type = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_bitfield));
+
+  type->cv_type = CODEVIEW_LF_BITFIELD;
+  type->tree = NULL;
+
+  bf = (struct pdb_bitfield*)type->data;
+
+  bf->underlying_type = underlying_type;
+  bf->size = size;
+  bf->offset = offset;
+
+  return add_type(type, NULL);
 }
 
 static uint16_t
@@ -1402,10 +1461,18 @@ find_type_struct(tree t, tree parent, struct pdb_type **typeptr)
 	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
 	ent->cv_type = CODEVIEW_LF_MEMBER;
-	ent->type = find_type(f->common.typed.type, t, false, NULL);
-	ent->offset = bit_offset / 8; // FIXME - what about bit fields?
 	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
 	ent->name = DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f)) ? xstrdup(IDENTIFIER_POINTER(DECL_NAME(f))) : NULL;
+
+	if (DECL_BIT_FIELD_TYPE(f)) {
+	  uint16_t underlying_type = find_type(DECL_BIT_FIELD_TYPE(f), t, false, NULL);
+
+	  ent->type = find_type_bitfield(underlying_type, TREE_INT_CST_ELT(DECL_SIZE(f), 0), TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0));
+	  ent->offset = TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0);
+	} else {
+	  ent->type = find_type(f->common.typed.type, t, false, NULL);
+	  ent->offset = bit_offset / 8;
+	}
 
 	ent++;
       }

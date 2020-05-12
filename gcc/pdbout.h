@@ -18,6 +18,7 @@
 #define CODEVIEW_S_LOCAL			0x113e
 #define CODEVIEW_LF_ARGLIST			0x1201
 #define CODEVIEW_LF_FIELDLIST			0x1203
+#define CODEVIEW_LF_BITFIELD			0x1205
 #define CODEVIEW_LF_ENUMERATE			0x1502
 #define CODEVIEW_LF_ARRAY			0x1503
 #define CODEVIEW_LF_CLASS			0x1504
@@ -313,6 +314,12 @@ struct pdb_source_file {
 struct pdb_modifier {
   uint16_t type;
   uint16_t modifier;
+};
+
+struct pdb_bitfield {
+  uint16_t underlying_type;
+  unsigned int size;
+  unsigned int offset;
 };
 
 enum pdb_x86_register {
