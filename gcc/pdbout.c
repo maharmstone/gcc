@@ -2806,7 +2806,7 @@ pdbout_function_decl_block(tree block)
 
   f = BLOCK_VARS(block);
   while (f) {
-    if (TREE_CODE(f) == VAR_DECL && DECL_RTL_SET_P(f)) {
+    if (TREE_CODE(f) == VAR_DECL && DECL_RTL_SET_P(f) && DECL_NAME(f)) {
       add_local(IDENTIFIER_POINTER(DECL_NAME(f)), f, find_type(f->typed.type, NULL, false, NULL),
 		DECL_RTL(f), BLOCK_NUMBER(block));
     }
