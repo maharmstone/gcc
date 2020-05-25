@@ -28,6 +28,13 @@
 #define LF_MEMBER			0x150d
 #define LF_STRING_ID			0x1605
 #define LF_UDT_SRC_LINE			0x1606
+#define LF_CHAR				0x8000
+#define LF_SHORT			0x8001
+#define LF_USHORT			0x8002
+#define LF_LONG				0x8003
+#define LF_ULONG			0x8004
+#define LF_QUADWORD			0x8009
+#define LF_UQUADWORD			0x800a
 
 #define CV_SIGNATURE_C13	4
 
@@ -130,7 +137,7 @@ struct pdb_fieldlist_entry {
   uint16_t type;
   uint16_t offset;
   uint16_t fld_attr;
-  unsigned int value;
+  int64_t value;
   char* name;
 };
 

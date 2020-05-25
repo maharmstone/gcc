@@ -643,8 +643,30 @@ write_fieldlist(struct pdb_fieldlist *fl)
 
     if (fl->entries[i].cv_type == LF_MEMBER)
       len += 9 + (fl->entries[i].name ? strlen(fl->entries[i].name) : 0);
-    else if (fl->entries[i].cv_type == LF_ENUMERATE)
-      len += 5 + (fl->entries[i].name ? strlen(fl->entries[i].name) : 0);
+    else if (fl->entries[i].cv_type == LF_ENUMERATE) {
+      len += 5;
+
+      // Positive values less than 0x8000 are stored as they are; otherwise
+      // we prepend two bytes describing what type it is.
+
+      if (fl->entries[i].value >= 0x8000 || fl->entries[i].value < 0) {
+	if (fl->entries[i].value >= -127 && fl->entries[i].value < 0) // LF_CHAR
+	  len++;
+	else if (fl->entries[i].value >= -0x7fff && fl->entries[i].value <= 0x7fff) // LF_SHORT
+	  len += 2;
+	else if (fl->entries[i].value >= 0x8000 && fl->entries[i].value <= 0xffff) // LF_USHORT
+	  len += 2;
+	else if (fl->entries[i].value >= -0x7fffffff && fl->entries[i].value <= 0x7fffffff) // LF_LONG
+	  len += 4;
+	else if (fl->entries[i].value >= 0x80000000 && fl->entries[i].value <= 0xffffffff) // LF_ULONG
+	  len += 4;
+	else // LF_QUADWORD or LF_UQUADWORD
+	  len += 8;
+      }
+
+      if (fl->entries[i].name)
+	len += strlen(fl->entries[i].name);
+    }
 
     if (len % 4 != 0)
       len += 4 - (len % 4);
@@ -688,7 +710,39 @@ write_fieldlist(struct pdb_fieldlist *fl)
       unsigned int align;
 
       fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].fld_attr);
-      fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].value);
+
+      align = (3 + name_len) % 4;
+
+      if (fl->entries[i].value >= 0 && fl->entries[i].value < 0x8000)
+	fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)fl->entries[i].value);
+      else if (fl->entries[i].value >= -127 && fl->entries[i].value < 0) {
+	fprintf (asm_out_file, "\t.short\t0x%x\n", LF_CHAR);
+	fprintf (asm_out_file, "\t.byte\t0x%x\n", (unsigned int)((int8_t)fl->entries[i].value & 0xff));
+
+	align = (align + 1) % 4;
+      } else if (fl->entries[i].value >= -0x7fff && fl->entries[i].value <= 0x7fff) {
+	fprintf (asm_out_file, "\t.short\t0x%x\n", LF_SHORT);
+	fprintf (asm_out_file, "\t.short\t0x%x\n", (unsigned int)((int16_t)fl->entries[i].value & 0xffff));
+
+	align = (align + 2) % 4;
+      } else if (fl->entries[i].value >= 0x8000 && fl->entries[i].value <= 0xffff) {
+	fprintf (asm_out_file, "\t.short\t0x%x\n", LF_USHORT);
+	fprintf (asm_out_file, "\t.short\t0x%x\n", (unsigned int)((uint16_t)fl->entries[i].value & 0xffff));
+
+	align = (align + 2) % 4;
+      } else if (fl->entries[i].value >= -0x7fffffff && fl->entries[i].value <= 0x7fffffff) {
+	fprintf (asm_out_file, "\t.short\t0x%x\n", LF_LONG);
+	fprintf (asm_out_file, "\t.long\t0x%x\n", (int32_t)fl->entries[i].value);
+      } else if (fl->entries[i].value >= 0x80000000 && fl->entries[i].value <= 0xffffffff) {
+	fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ULONG);
+	fprintf (asm_out_file, "\t.long\t0x%x\n", (uint32_t)fl->entries[i].value);
+      } else if (fl->entries[i].value < 0) {
+	fprintf (asm_out_file, "\t.short\t0x%x\n", LF_QUADWORD);
+	fprintf (asm_out_file, "\t.quad\t0x%" PRIx64 "\n", (int64_t)fl->entries[i].value);
+      } else {
+	fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UQUADWORD);
+	fprintf (asm_out_file, "\t.quad\t0x%" PRIx64 "\n", (uint64_t)fl->entries[i].value);
+      }
 
       if (fl->entries[i].name)
 	ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name, name_len + 1);
@@ -697,7 +751,7 @@ write_fieldlist(struct pdb_fieldlist *fl)
 
       // handle alignment padding
 
-      align = 4 - ((3 + name_len) % 4);
+      align = 4 - align;
 
       if (align != 4) {
 	if (align == 3)
