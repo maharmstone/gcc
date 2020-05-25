@@ -2730,7 +2730,7 @@ common_handle_option (struct gcc_options *opts,
       set_debug_level (NO_DEBUG, 2, arg, opts, opts_set, loc);
       break;
 
-    case OPT_gpdb:
+    case OPT_gcodeview:
       set_debug_level (PDB_DEBUG, false, "", opts, opts_set, loc);
       break;
 
