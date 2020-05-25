@@ -1855,7 +1855,7 @@ static uint16_t
 find_type(tree t, tree parent, bool ignore_cv, struct pdb_type **typeptr)
 {
   struct pdb_type *type;
-  struct pdb_alias *a;
+  struct pdb_alias *al;
 
   if (typeptr)
     *typeptr = NULL;
@@ -1865,16 +1865,16 @@ find_type(tree t, tree parent, bool ignore_cv, struct pdb_type **typeptr)
 
   // search through typedefs
 
-  a = aliases;
-  while (a) {
-    if (a->tree == t) {
+  al = aliases;
+  while (al) {
+    if (al->tree == t) {
       if (typeptr)
-	*typeptr = a->type;
+	*typeptr = al->type;
 
-      return a->type_id;
+      return al->type_id;
     }
 
-    a = a->next;
+    al = al->next;
   }
 
   // search through existing types
