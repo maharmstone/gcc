@@ -120,7 +120,7 @@ write_var_location(struct pdb_var_location *var_loc, unsigned int next_var_loc_n
   switch (var_loc->type) {
     case pdb_var_loc_register:
       fprintf (asm_out_file, "\t.short\t0xe\n");
-      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_DEFRANGE_REGISTER);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_DEFRANGE_REGISTER);
       fprintf (asm_out_file, "\t.short\t0x%x\n", var_loc->reg);
       fprintf (asm_out_file, "\t.short\t0\n"); // range attr
       fprintf (asm_out_file, "\t.long\t[.varloc%u]\n", var_loc->var_loc_number);
@@ -135,7 +135,7 @@ write_var_location(struct pdb_var_location *var_loc, unsigned int next_var_loc_n
 
     case pdb_var_loc_regrel:
       fprintf (asm_out_file, "\t.short\t0x12\n");
-      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_DEFRANGE_REGISTER_REL);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_DEFRANGE_REGISTER_REL);
       fprintf (asm_out_file, "\t.short\t0x%x\n", var_loc->reg);
       fprintf (asm_out_file, "\t.short\t0\n"); // spilledUdtMember, padding, offsetParent
       fprintf (asm_out_file, "\t.long\t0x%x\n", var_loc->offset);
@@ -170,7 +170,7 @@ pdbout_optimized_local_variable (struct pdb_local_var *v, struct pdb_var_locatio
     align = 0;
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t)));
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_LOCAL);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", S_LOCAL);
   fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
   fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - flags (CV_LVARFLAGS)
 
@@ -222,7 +222,7 @@ pdbout_local_variable (struct pdb_local_var *v, struct pdb_var_location *var_loc
 	  align = 0;
 
 	fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-	fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BPREL32);
+	fprintf (asm_out_file, "\t.short\t0x%x\n", S_BPREL32);
 	fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
 	fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
 
@@ -237,7 +237,7 @@ pdbout_local_variable (struct pdb_local_var *v, struct pdb_var_location *var_loc
 	  align = 0;
 
 	fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-	fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_REGREL32);
+	fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGREL32);
 	fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
 	fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
 	fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
@@ -260,7 +260,7 @@ pdbout_local_variable (struct pdb_local_var *v, struct pdb_var_location *var_loc
 	align = 0;
 
       fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_REGISTER);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGISTER);
       fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
       fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
 
@@ -281,7 +281,7 @@ pdbout_local_variable (struct pdb_local_var *v, struct pdb_var_location *var_loc
 	align = 0;
 
       fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-      fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_LDATA32);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_LDATA32);
       fprintf (asm_out_file, "\t.short\t0x%x\n", v->type);
       fprintf (asm_out_file, "\t.short\t0\n");
 
@@ -318,7 +318,7 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
     struct pdb_block *n = block->children->next;
 
     fprintf (asm_out_file, "\t.short\t0x16\n"); // reclen
-    fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_BLOCK32);
+    fprintf (asm_out_file, "\t.short\t0x%x\n", S_BLOCK32);
     fprintf (asm_out_file, "\t.long\t0\n"); // pParent
     fprintf (asm_out_file, "\t.long\t[.cvblockend%u]-[.debug$S]\n", block->children->num); // pEnd
     fprintf (asm_out_file, "\t.long\t[.blockend%u]-[.blockstart%u]\n", block->children->num, block->children->num); // length
@@ -331,7 +331,7 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
 
     fprintf (asm_out_file, ".cvblockend%u:\n", block->children->num);
     fprintf (asm_out_file, "\t.short\t0x2\n");
-    fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_END);
+    fprintf (asm_out_file, "\t.short\t0x%x\n", S_END);
 
     free(block->children);
 
@@ -354,7 +354,7 @@ pdbout_proc32 (struct pdb_func *func)
     align = 0;
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-  fprintf (asm_out_file, "\t.short\t0x%x\n", func->public_flag ? CODEVIEW_S_GPROC32 : CODEVIEW_S_LPROC32);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", func->public_flag ? S_GPROC32 : S_LPROC32);
   fprintf (asm_out_file, "\t.long\t0\n"); // pParent
   fprintf (asm_out_file, "\t.long\t[.cvprocend%u]-[.debug$S]\n", func->num); // pEnd
   fprintf (asm_out_file, "\t.long\t0\n"); // pNext
@@ -381,7 +381,7 @@ pdbout_proc32 (struct pdb_func *func)
   fprintf (asm_out_file, ".cvprocend%u:\n", func->num);
 
   fprintf (asm_out_file, "\t.short\t0x2\n");
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_S_END);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", S_END);
 
   while (func->local_vars) {
     struct pdb_local_var *n = func->local_vars->next;
@@ -417,7 +417,7 @@ pdbout_ldata32 (struct pdb_global_var *v)
     len += 4 - (len % 4);
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
-  fprintf (asm_out_file, "\t.short\t0x%x\n", v->public_flag ? CODEVIEW_S_GDATA32 : CODEVIEW_S_LDATA32);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", v->public_flag ? S_GDATA32 : S_LDATA32);
   fprintf (asm_out_file, "\t.short\t0x%x\n", v->type);
   fprintf (asm_out_file, "\t.short\t0\n");
 
@@ -593,7 +593,7 @@ static void
 free_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
-    case CODEVIEW_LF_FIELDLIST:
+    case LF_FIELDLIST:
     {
       struct pdb_fieldlist *fl = (struct pdb_fieldlist*)t->data;
 
@@ -607,9 +607,9 @@ free_type(struct pdb_type *t)
       break;
     }
 
-    case CODEVIEW_LF_CLASS:
-    case CODEVIEW_LF_STRUCTURE:
-    case CODEVIEW_LF_UNION:
+    case LF_CLASS:
+    case LF_STRUCTURE:
+    case LF_UNION:
     {
       struct pdb_struct *str = (struct pdb_struct*)t->data;
 
@@ -619,7 +619,7 @@ free_type(struct pdb_type *t)
       break;
     }
 
-    case CODEVIEW_LF_ENUM:
+    case LF_ENUM:
     {
       struct pdb_enum *en = (struct pdb_enum*)t->data;
 
@@ -641,9 +641,9 @@ write_fieldlist(struct pdb_fieldlist *fl)
   for (unsigned int i = 0; i < fl->count; i++) {
     len += 2;
 
-    if (fl->entries[i].cv_type == CODEVIEW_LF_MEMBER)
+    if (fl->entries[i].cv_type == LF_MEMBER)
       len += 9 + (fl->entries[i].name ? strlen(fl->entries[i].name) : 0);
-    else if (fl->entries[i].cv_type == CODEVIEW_LF_ENUMERATE)
+    else if (fl->entries[i].cv_type == LF_ENUMERATE)
       len += 5 + (fl->entries[i].name ? strlen(fl->entries[i].name) : 0);
 
     if (len % 4 != 0)
@@ -651,12 +651,12 @@ write_fieldlist(struct pdb_fieldlist *fl)
   }
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_FIELDLIST);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_FIELDLIST);
 
   for (unsigned int i = 0; i < fl->count; i++) {
     fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].cv_type);
 
-    if (fl->entries[i].cv_type == CODEVIEW_LF_MEMBER) {
+    if (fl->entries[i].cv_type == LF_MEMBER) {
       size_t name_len = fl->entries[i].name ? strlen(fl->entries[i].name) : 0;
       unsigned int align;
 
@@ -683,7 +683,7 @@ write_fieldlist(struct pdb_fieldlist *fl)
 
 	fprintf (asm_out_file, "\t.byte\t0xf1\n");
       }
-    } else if (fl->entries[i].cv_type == CODEVIEW_LF_ENUMERATE) {
+    } else if (fl->entries[i].cv_type == LF_ENUMERATE) {
       size_t name_len = fl->entries[i].name ? strlen(fl->entries[i].name) : 0;
       unsigned int align;
 
@@ -764,7 +764,7 @@ write_union(struct pdb_struct *str)
     len += 4 - (len % 4);
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_UNION);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UNION);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->property.value);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->field);
@@ -801,7 +801,7 @@ write_enum(struct pdb_enum *en)
     len += 4 - (len % 4);
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_ENUM);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ENUM);
   fprintf (asm_out_file, "\t.short\t0x%x\n", en->count);
   fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - property
   fprintf (asm_out_file, "\t.short\t0x%x\n", en->type);
@@ -831,7 +831,7 @@ static void
 write_pointer(struct pdb_pointer *ptr)
 {
   fprintf (asm_out_file, "\t.short\t0xa\n");
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_POINTER);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_POINTER);
   fprintf (asm_out_file, "\t.short\t0x%x\n", ptr->type);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
   fprintf (asm_out_file, "\t.long\t0x%x\n", ptr->attr.num);
@@ -841,7 +841,7 @@ static void
 write_array(struct pdb_array *arr)
 {
   fprintf (asm_out_file, "\t.short\t0xe\n");
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_ARRAY);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ARRAY);
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", arr->type);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
@@ -862,7 +862,7 @@ write_arglist(struct pdb_arglist *arglist)
     len += 4;
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_ARGLIST);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ARGLIST);
   fprintf (asm_out_file, "\t.long\t0x%x\n", arglist->count == 0 ? 1 : arglist->count);
 
   for (unsigned int i = 0; i < arglist->count; i++) {
@@ -880,7 +880,7 @@ static void
 write_procedure(struct pdb_proc *proc)
 {
   fprintf (asm_out_file, "\t.short\t0xe\n");
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_PROCEDURE);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_PROCEDURE);
   fprintf (asm_out_file, "\t.short\t0x%x\n", proc->return_type);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
   fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->calling_convention);
@@ -904,7 +904,7 @@ write_string_id(struct pdb_type *t)
   len += align;
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t)));
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_STRING_ID);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_STRING_ID);
   fprintf (asm_out_file, "\t.long\t0\n");
   ASM_OUTPUT_ASCII (asm_out_file, (const char*)t->data, string_len + 1);
 
@@ -922,7 +922,7 @@ static void
 write_udt_src_line(struct pdb_udt_src_line *t)
 {
   fprintf (asm_out_file, "\t.short\t0xe\n");
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_UDT_SRC_LINE);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UDT_SRC_LINE);
   fprintf (asm_out_file, "\t.short\t0x%x\n", t->type);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
   fprintf (asm_out_file, "\t.short\t0x%x\n", t->source_file);
@@ -934,7 +934,7 @@ static void
 write_modifier(struct pdb_modifier *t)
 {
   fprintf (asm_out_file, "\t.short\t0xa\n");
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_MODIFIER);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_MODIFIER);
   fprintf (asm_out_file, "\t.short\t0x%x\n", t->type);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
   fprintf (asm_out_file, "\t.short\t0x%x\n", t->modifier);
@@ -945,7 +945,7 @@ static void
 write_bitfield(struct pdb_bitfield *t)
 {
   fprintf (asm_out_file, "\t.short\t0xa\n");
-  fprintf (asm_out_file, "\t.short\t0x%x\n", CODEVIEW_LF_BITFIELD);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_BITFIELD);
   fprintf (asm_out_file, "\t.short\t0x%x\n", t->underlying_type);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
   fprintf (asm_out_file, "\t.byte\t0x%x\n", t->size);
@@ -959,52 +959,52 @@ static void
 write_type(struct pdb_type *t)
 {
   switch (t->cv_type) {
-    case CODEVIEW_LF_FIELDLIST:
+    case LF_FIELDLIST:
       write_fieldlist((struct pdb_fieldlist*)t->data);
       break;
 
-    case CODEVIEW_LF_CLASS:
-    case CODEVIEW_LF_STRUCTURE:
+    case LF_CLASS:
+    case LF_STRUCTURE:
       write_struct(t->cv_type, (struct pdb_struct*)t->data);
       break;
 
-    case CODEVIEW_LF_UNION:
+    case LF_UNION:
       write_union((struct pdb_struct*)t->data);
       break;
 
-    case CODEVIEW_LF_ENUM:
+    case LF_ENUM:
       write_enum((struct pdb_enum*)t->data);
       break;
 
-    case CODEVIEW_LF_POINTER:
+    case LF_POINTER:
       write_pointer((struct pdb_pointer*)t->data);
       break;
 
-    case CODEVIEW_LF_ARRAY:
+    case LF_ARRAY:
       write_array((struct pdb_array*)t->data);
       break;
 
-    case CODEVIEW_LF_ARGLIST:
+    case LF_ARGLIST:
       write_arglist((struct pdb_arglist*)t->data);
       break;
 
-    case CODEVIEW_LF_PROCEDURE:
+    case LF_PROCEDURE:
       write_procedure((struct pdb_proc*)t->data);
       break;
 
-    case CODEVIEW_LF_STRING_ID:
+    case LF_STRING_ID:
       write_string_id(t);
       break;
 
-    case CODEVIEW_LF_UDT_SRC_LINE:
+    case LF_UDT_SRC_LINE:
       write_udt_src_line((struct pdb_udt_src_line*)t->data);
       break;
 
-    case CODEVIEW_LF_MODIFIER:
+    case LF_MODIFIER:
       write_modifier((struct pdb_modifier*)t->data);
       break;
 
-    case CODEVIEW_LF_BITFIELD:
+    case LF_BITFIELD:
       write_bitfield((struct pdb_bitfield*)t->data);
       break;
   }
@@ -1122,7 +1122,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
   while (t2) {
     if (t2->cv_type == t->cv_type) {
       switch (t2->cv_type) {
-	case CODEVIEW_LF_FIELDLIST:
+	case LF_FIELDLIST:
 	{
 	  struct pdb_fieldlist *fl1 = (struct pdb_fieldlist*)t->data;
 	  struct pdb_fieldlist *fl2 = (struct pdb_fieldlist*)t2->data;
@@ -1136,7 +1136,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 		break;
 	      }
 
-	      if (fl1->entries[i].cv_type == CODEVIEW_LF_MEMBER) {
+	      if (fl1->entries[i].cv_type == LF_MEMBER) {
 		if (fl1->entries[i].type != fl2->entries[i].type ||
 		    fl1->entries[i].offset != fl2->entries[i].offset ||
 		    fl1->entries[i].fld_attr != fl2->entries[i].fld_attr ||
@@ -1144,7 +1144,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 		  same = false;
 		  break;
 		}
-	      } else if (fl1->entries[i].cv_type == CODEVIEW_LF_ENUMERATE) {
+	      } else if (fl1->entries[i].cv_type == LF_ENUMERATE) {
 		if (fl1->entries[i].value != fl2->entries[i].value ||
 		    ((fl1->entries[i].name || fl2->entries[i].name) && (!fl1->entries[i].name || !fl2->entries[i].name || strcmp(fl1->entries[i].name, fl2->entries[i].name)))) {
 		  same = false;
@@ -1171,9 +1171,9 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  break;
 	}
 
-	case CODEVIEW_LF_STRUCTURE:
-	case CODEVIEW_LF_CLASS:
-	case CODEVIEW_LF_UNION:
+	case LF_STRUCTURE:
+	case LF_CLASS:
+	case LF_UNION:
 	{
 	  struct pdb_struct *str1 = (struct pdb_struct*)t->data;
 	  struct pdb_struct *str2 = (struct pdb_struct*)t2->data;
@@ -1196,7 +1196,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  break;
 	}
 
-	case CODEVIEW_LF_ENUM:
+	case LF_ENUM:
 	{
 	  struct pdb_enum *en1 = (struct pdb_enum*)t->data;
 	  struct pdb_enum *en2 = (struct pdb_enum*)t2->data;
@@ -1219,7 +1219,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  break;
 	}
 
-	case CODEVIEW_LF_POINTER:
+	case LF_POINTER:
 	{
 	  struct pdb_pointer *ptr1 = (struct pdb_pointer*)t->data;
 	  struct pdb_pointer *ptr2 = (struct pdb_pointer*)t2->data;
@@ -1237,7 +1237,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  break;
 	}
 
-	case CODEVIEW_LF_ARRAY:
+	case LF_ARRAY:
 	{
 	  struct pdb_array *arr1 = (struct pdb_array*)t->data;
 	  struct pdb_array *arr2 = (struct pdb_array*)t2->data;
@@ -1256,7 +1256,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  break;
 	}
 
-	case CODEVIEW_LF_ARGLIST:
+	case LF_ARGLIST:
 	{
 	  struct pdb_arglist *arglist1 = (struct pdb_arglist*)t->data;
 	  struct pdb_arglist *arglist2 = (struct pdb_arglist*)t2->data;
@@ -1284,7 +1284,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  break;
 	}
 
-	case CODEVIEW_LF_PROCEDURE:
+	case LF_PROCEDURE:
 	{
 	  struct pdb_proc *proc1 = (struct pdb_proc*)t->data;
 	  struct pdb_proc *proc2 = (struct pdb_proc*)t2->data;
@@ -1305,7 +1305,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  break;
 	}
 
-	case CODEVIEW_LF_STRING_ID:
+	case LF_STRING_ID:
 	  if (!strcmp((const char*)t->data, (const char*)t2->data)) {
 	    free(t);
 
@@ -1316,7 +1316,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  }
 	break;
 
-	case CODEVIEW_LF_UDT_SRC_LINE:
+	case LF_UDT_SRC_LINE:
 	  if (!memcmp(t->data, t2->data, sizeof(struct pdb_udt_src_line))) {
 	    free(t);
 
@@ -1327,7 +1327,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  }
 	break;
 
-	case CODEVIEW_LF_MODIFIER:
+	case LF_MODIFIER:
 	  if (!memcmp(t->data, t2->data, sizeof(struct pdb_modifier))) {
 	    free(t);
 
@@ -1338,7 +1338,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  }
 	break;
 
-	case CODEVIEW_LF_BITFIELD:
+	case LF_BITFIELD:
 	  if (!memcmp(t->data, t2->data, sizeof(struct pdb_bitfield))) {
 	    free(t);
 
@@ -1383,7 +1383,7 @@ find_type_bitfield(uint16_t underlying_type, unsigned int size, unsigned int off
 
   type = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_bitfield));
 
-  type->cv_type = CODEVIEW_LF_BITFIELD;
+  type->cv_type = LF_BITFIELD;
   type->tree = NULL;
 
   bf = (struct pdb_bitfield*)type->data;
@@ -1410,9 +1410,9 @@ find_type_struct(tree t, tree parent, struct pdb_type **typeptr)
     strtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
 
     if (TYPE_LANG_SPECIFIC(t) && CLASSTYPE_DECLARED_CLASS(t))
-      strtype->cv_type = CODEVIEW_LF_CLASS;
+      strtype->cv_type = LF_CLASS;
     else
-      strtype->cv_type = CODEVIEW_LF_STRUCTURE;
+      strtype->cv_type = LF_STRUCTURE;
 
     strtype->tree = NULL;
 
@@ -1446,7 +1446,7 @@ find_type_struct(tree t, tree parent, struct pdb_type **typeptr)
     // add fieldlist type
 
     fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
-    fltype->cv_type = CODEVIEW_LF_FIELDLIST;
+    fltype->cv_type = LF_FIELDLIST;
     fltype->tree = NULL;
 
     fieldlist = (struct pdb_fieldlist*)fltype->data;
@@ -1460,7 +1460,7 @@ find_type_struct(tree t, tree parent, struct pdb_type **typeptr)
       if (TREE_CODE(f) == FIELD_DECL) {
 	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
-	ent->cv_type = CODEVIEW_LF_MEMBER;
+	ent->cv_type = LF_MEMBER;
 	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
 	ent->name = DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f)) ? xstrdup(IDENTIFIER_POINTER(DECL_NAME(f))) : NULL;
 
@@ -1488,9 +1488,9 @@ find_type_struct(tree t, tree parent, struct pdb_type **typeptr)
   strtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
 
   if (TYPE_LANG_SPECIFIC(t) && CLASSTYPE_DECLARED_CLASS(t))
-    strtype->cv_type = CODEVIEW_LF_CLASS;
+    strtype->cv_type = LF_CLASS;
   else
-    strtype->cv_type = CODEVIEW_LF_STRUCTURE;
+    strtype->cv_type = LF_STRUCTURE;
 
   strtype->tree = t;
 
@@ -1537,7 +1537,7 @@ find_type_union(tree t, struct pdb_type **typeptr)
     // add fieldlist type
 
     fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
-    fltype->cv_type = CODEVIEW_LF_FIELDLIST;
+    fltype->cv_type = LF_FIELDLIST;
     fltype->tree = NULL;
 
     fieldlist = (struct pdb_fieldlist*)fltype->data;
@@ -1551,7 +1551,7 @@ find_type_union(tree t, struct pdb_type **typeptr)
       if (TREE_CODE(f) == FIELD_DECL) {
 	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
-	ent->cv_type = CODEVIEW_LF_MEMBER;
+	ent->cv_type = LF_MEMBER;
 	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
 	ent->name = DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f)) ? xstrdup(IDENTIFIER_POINTER(DECL_NAME(f))) : NULL;
 
@@ -1577,7 +1577,7 @@ find_type_union(tree t, struct pdb_type **typeptr)
   // add type for union
 
   uniontype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
-  uniontype->cv_type = CODEVIEW_LF_UNION;
+  uniontype->cv_type = LF_UNION;
   uniontype->tree = t;
 
   str = (struct pdb_struct*)uniontype->data;
@@ -1622,7 +1622,7 @@ find_type_enum(tree t, struct pdb_type **typeptr)
   // add fieldlist type
 
   fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
-  fltype->cv_type = CODEVIEW_LF_FIELDLIST;
+  fltype->cv_type = LF_FIELDLIST;
   fltype->tree = NULL;
 
   fieldlist = (struct pdb_fieldlist*)fltype->data;
@@ -1633,7 +1633,7 @@ find_type_enum(tree t, struct pdb_type **typeptr)
   v = TYPE_VALUES(t);
 
   while (v) {
-    ent->cv_type = CODEVIEW_LF_ENUMERATE;
+    ent->cv_type = LF_ENUMERATE;
     ent->fld_attr = 0; // FIXME
 
     if (TREE_CODE(TREE_VALUE(v)) == CONST_DECL)
@@ -1654,7 +1654,7 @@ find_type_enum(tree t, struct pdb_type **typeptr)
   // add type for enum
 
   enumtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_enum));
-  enumtype->cv_type = CODEVIEW_LF_ENUM;
+  enumtype->cv_type = LF_ENUM;
   enumtype->tree = t;
 
   en = (struct pdb_enum*)enumtype->data;
@@ -1703,7 +1703,7 @@ find_type_pointer(tree t, tree parent, struct pdb_type **typeptr)
   }
 
   ptrtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_pointer));
-  ptrtype->cv_type = CODEVIEW_LF_POINTER;
+  ptrtype->cv_type = LF_POINTER;
   ptrtype->tree = t;
 
   ptr = (struct pdb_pointer*)ptrtype->data;
@@ -1734,7 +1734,7 @@ find_type_array(tree t, struct pdb_type **typeptr)
     return 0;
 
   arrtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_array));
-  arrtype->cv_type = CODEVIEW_LF_ARRAY;
+  arrtype->cv_type = LF_ARRAY;
   arrtype->tree = t;
 
   arr = (struct pdb_array*)arrtype->data;
@@ -1767,7 +1767,7 @@ find_type_function(tree t, struct pdb_type **typeptr)
   }
 
   arglisttype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + offsetof(struct pdb_arglist, args) + (num_args * sizeof(uint16_t)));
-  arglisttype->cv_type = CODEVIEW_LF_ARGLIST;
+  arglisttype->cv_type = LF_ARGLIST;
   arglisttype->tree = NULL;
 
   arglist = (struct pdb_arglist*)arglisttype->data;
@@ -1789,7 +1789,7 @@ find_type_function(tree t, struct pdb_type **typeptr)
   // create procedure
 
   proctype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_proc));
-  proctype->cv_type = CODEVIEW_LF_PROCEDURE;
+  proctype->cv_type = LF_PROCEDURE;
   proctype->tree = t;
 
   proc = (struct pdb_proc*)proctype->data;
@@ -1834,7 +1834,7 @@ find_type_modifier(tree t, tree parent, struct pdb_type **typeptr)
   struct pdb_modifier *mod;
 
   type = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_modifier));
-  type->cv_type = CODEVIEW_LF_MODIFIER;
+  type->cv_type = LF_MODIFIER;
   type->tree = t;
 
   mod = (struct pdb_modifier*)type->data;
@@ -2080,7 +2080,7 @@ add_string_type(const char *s)
   size_t len = strlen(s);
 
   type = (struct pdb_type*)xmalloc(offsetof(struct pdb_type, data) + len + 1);
-  type->cv_type = CODEVIEW_LF_STRING_ID;
+  type->cv_type = LF_STRING_ID;
   type->tree = NULL;
 
   memcpy(type->data, s, len + 1);
@@ -2095,7 +2095,7 @@ add_udt_src_line_type(uint16_t type_id, uint16_t source_file, uint32_t line)
   struct pdb_udt_src_line *pusl;
 
   type = (struct pdb_type*)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_udt_src_line));
-  type->cv_type = CODEVIEW_LF_UDT_SRC_LINE;
+  type->cv_type = LF_UDT_SRC_LINE;
   type->tree = NULL;
 
   pusl = (struct pdb_udt_src_line*)type->data;
@@ -2136,9 +2136,9 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 
     if (a->type) {
       switch (a->type->cv_type) {
-	case CODEVIEW_LF_STRUCTURE:
-	case CODEVIEW_LF_CLASS:
-	case CODEVIEW_LF_UNION:
+	case LF_STRUCTURE:
+	case LF_CLASS:
+	case LF_UNION:
 	{
 	  struct pdb_struct *str = (struct pdb_struct*)a->type->data;
 
@@ -2148,7 +2148,7 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 	  break;
 	}
 
-	case CODEVIEW_LF_ENUM:
+	case LF_ENUM:
 	{
 	  struct pdb_enum *en = (struct pdb_enum*)a->type->data;
 
@@ -2174,9 +2174,9 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
     // give name if previously anonymous
 
     switch (type->cv_type) {
-      case CODEVIEW_LF_STRUCTURE:
-      case CODEVIEW_LF_CLASS:
-      case CODEVIEW_LF_UNION:
+      case LF_STRUCTURE:
+      case LF_CLASS:
+      case LF_UNION:
       {
 	struct pdb_struct *str = (struct pdb_struct*)type->data;
 
@@ -2186,7 +2186,7 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
 	break;
       }
 
-      case CODEVIEW_LF_ENUM:
+      case LF_ENUM:
       {
 	struct pdb_enum *en = (struct pdb_enum*)type->data;
 
