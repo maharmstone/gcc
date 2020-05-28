@@ -1156,6 +1156,9 @@ static void pdbout_late_global_decl(tree var)
   if (DECL_CONTEXT(var) && TREE_CODE(DECL_CONTEXT(var)) == FUNCTION_DECL)
     return;
 
+  if (!TREE_ASM_WRITTEN(var))
+    return;
+
   struct pdb_global_var *v = (struct pdb_global_var*)xmalloc(sizeof(struct pdb_global_var));
 
   v->next = global_vars;
