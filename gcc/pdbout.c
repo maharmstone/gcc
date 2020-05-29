@@ -1445,10 +1445,18 @@ renumber_types (void)
   func = funcs;
 
   while (func) {
+    struct pdb_local_var *plv;
+
     if (func->type >= FIRST_TYPE_NUM && func->type < type_num)
       func->type = type_list[func->type - FIRST_TYPE_NUM];
 
-    // FIXME - renumber local variables
+    plv = func->local_vars;
+    while (plv) {
+      if (plv->type >= FIRST_TYPE_NUM && plv->type < type_num)
+	plv->type = type_list[plv->type - FIRST_TYPE_NUM];
+
+      plv = plv->next;
+    }
 
     func = func->next;
   }
