@@ -2202,7 +2202,7 @@ find_type_array(tree t, struct pdb_type **typeptr)
   arr = (struct pdb_array*)arrtype->data;
   arr->type = type;
   arr->index_type = CV_BUILTIN_TYPE_UINT32LONG; // FIXME?
-  arr->length = TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8;
+  arr->length = TYPE_SIZE(t) ? (TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8) : 0;
 
   return add_type(arrtype, typeptr);
 }
