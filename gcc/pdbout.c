@@ -1262,8 +1262,10 @@ mark_referenced_types_used (void)
 
       t->used = is_type_used(pusl->type);
 
-      if (pusl->source_file >= FIRST_TYPE_NUM && pusl->source_file < type_num)
-	mark_type_used(pusl->source_file, NULL);
+      if (t->used) {
+	if (pusl->source_file >= FIRST_TYPE_NUM && pusl->source_file < type_num)
+	  mark_type_used(pusl->source_file, NULL);
+      }
     }
 
     t = t->next;
