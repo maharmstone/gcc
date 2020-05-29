@@ -1271,14 +1271,17 @@ mark_referenced_types_used (void)
 }
 
 static void
-renumber_types ()
+renumber_types (void)
 {
   uint16_t *type_list, *tlptr;
   struct pdb_type *t;
+  struct pdb_global_var *pgv;
   uint16_t new_id = FIRST_TYPE_NUM;
 
   if (type_num == FIRST_TYPE_NUM)
     return;
+
+  // prepare transformation list
 
   type_list = (uint16_t*)xmalloc(sizeof(uint16_t) * (type_num - FIRST_TYPE_NUM));
   tlptr = type_list;
@@ -1295,6 +1298,8 @@ renumber_types ()
     t = t->next;
     tlptr++;
   }
+
+  // change referenced types
 
   t = types;
   while (t) {
@@ -1422,6 +1427,20 @@ renumber_types ()
 
     t = t->next;
   }
+
+  // change global variables
+
+  pgv = global_vars;
+
+  while (pgv) {
+    if (pgv->type >= FIRST_TYPE_NUM && pgv->type < type_num)
+      pgv->type = type_list[pgv->type - FIRST_TYPE_NUM];
+
+    pgv = pgv->next;
+  }
+
+  // FIXME - renumber procedures
+  // FIXME - renumber local variables
 
   free(type_list);
 }
