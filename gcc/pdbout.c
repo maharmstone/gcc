@@ -1422,6 +1422,9 @@ renumber_types (void)
 	if (pusl->type >= FIRST_TYPE_NUM && pusl->type < type_num)
 	  pusl->type = type_list[pusl->type - FIRST_TYPE_NUM];
 
+	if (pusl->source_file >= FIRST_TYPE_NUM && pusl->source_file < type_num)
+	  pusl->source_file = type_list[pusl->source_file - FIRST_TYPE_NUM];
+
 	break;
       }
     }
