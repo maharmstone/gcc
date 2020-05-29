@@ -1628,6 +1628,7 @@ add_type(struct pdb_type *t, struct pdb_type **typeptr) {
 	  if (str1->count == str2->count &&
 	      str1->field == str2->field &&
 	      str1->size == str2->size &&
+	      str1->property.value == str2->property.value &&
 	      ((!str1->name && !str2->name) || (str1->name && str2->name && !strcmp(str1->name, str2->name)))) {
 	    if (str1->name)
 	      free(str1->name);
@@ -1879,12 +1880,12 @@ static uint16_t
 find_type_struct(tree t, struct pdb_type **typeptr)
 {
   tree f;
-  struct pdb_type *fltype, *strtype, *fwddef;
+  struct pdb_type *fltype, *strtype, *fwddef = NULL;
   struct pdb_fieldlist *fieldlist;
   struct pdb_fieldlist_entry *ent;
   struct pdb_struct *str;
   unsigned int num_entries = 0;
-  uint16_t fltypenum = 0;
+  uint16_t fltypenum = 0, new_type;
 
   f = t->type_non_common.values;
 
@@ -1895,7 +1896,8 @@ find_type_struct(tree t, struct pdb_type **typeptr)
     f = f->common.chain;
   }
 
-  add_struct_forward_declaration(t, &fwddef);
+  if (TYPE_SIZE(t) != 0) // not forward declaration
+    add_struct_forward_declaration(t, &fwddef);
 
   if (num_entries > 0) {
     // add fieldlist type
@@ -1938,8 +1940,6 @@ find_type_struct(tree t, struct pdb_type **typeptr)
     fltypenum = add_type(fltype, NULL);
   }
 
-  fwddef->tree = NULL;
-
   // add type for struct
 
   strtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
@@ -1967,7 +1967,12 @@ find_type_struct(tree t, struct pdb_type **typeptr)
   if (!TYPE_SIZE(t)) // forward declaration
     str->property.s.fwdref = 1;
 
-  return add_type(strtype, typeptr);
+  new_type = add_type(strtype, typeptr);
+
+  if (fwddef)
+    fwddef->tree = NULL;
+
+  return new_type;
 }
 
 static uint16_t
