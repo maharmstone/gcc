@@ -1890,7 +1890,7 @@ find_type_struct(tree t, struct pdb_type **typeptr)
   f = t->type_non_common.values;
 
   while (f) {
-    if (TREE_CODE(f) == FIELD_DECL)
+    if (TREE_CODE(f) == FIELD_DECL && DECL_FIELD_OFFSET(f))
       num_entries++;
 
     f = f->common.chain;
