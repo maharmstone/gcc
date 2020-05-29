@@ -2569,11 +2569,6 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
   struct pdb_source_file *psf;
   expanded_location xloc;
 
-  if (DECL_IN_SYSTEM_HEADER(t)) // ignoring system headers for now (FIXME)
-    return;
-
-  // FIXME - if from file in /usr/include or wherever, only include in output if used
-
   if (t->decl_non_common.result) { // typedef
     struct pdb_alias *a;
 
