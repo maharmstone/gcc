@@ -1103,7 +1103,9 @@ mark_type_used (uint16_t id, bool *changed) {
     if (t->id == id) {
       if (!t->used) {
 	t->used = true;
-	*changed = true;
+
+	if (changed)
+	  *changed = true;
       }
 
       return;
@@ -1111,6 +1113,20 @@ mark_type_used (uint16_t id, bool *changed) {
 
     t = t->next;
   }
+}
+
+static bool
+is_type_used (uint16_t id) {
+  struct pdb_type *t = types;
+
+  while (t) {
+    if (t->id == id)
+      return t->used;
+
+    t = t->next;
+  }
+
+  return false;
 }
 
 static void
@@ -1240,8 +1256,19 @@ mark_referenced_types_used (void)
     }
   } while (changed);
 
-  // FIXME - mark LF_UDT_SRC_LINE entries used if type used
-  // FIXME - mark LF_STRING_ID entries used if referenced by LF_UDT_SRC_LINE
+  t = types;
+  while (t) {
+    if (t->cv_type == LF_UDT_SRC_LINE) {
+      struct pdb_udt_src_line *pusl = (struct pdb_udt_src_line *)t->data;
+
+      t->used = is_type_used(pusl->type);
+
+      if (pusl->source_file >= FIRST_TYPE_NUM && pusl->source_file < type_num)
+	mark_type_used(pusl->source_file, NULL);
+    }
+
+    t = t->next;
+  }
 }
 
 static void
