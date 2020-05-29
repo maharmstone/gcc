@@ -1276,6 +1276,7 @@ renumber_types (void)
   uint16_t *type_list, *tlptr;
   struct pdb_type *t;
   struct pdb_global_var *pgv;
+  struct pdb_func *func;
   uint16_t new_id = FIRST_TYPE_NUM;
 
   if (type_num == FIRST_TYPE_NUM)
@@ -1439,8 +1440,18 @@ renumber_types (void)
     pgv = pgv->next;
   }
 
-  // FIXME - renumber procedures
-  // FIXME - renumber local variables
+  // change procedures
+
+  func = funcs;
+
+  while (func) {
+    if (func->type >= FIRST_TYPE_NUM && func->type < type_num)
+      func->type = type_list[func->type - FIRST_TYPE_NUM];
+
+    // FIXME - renumber local variables
+
+    func = func->next;
+  }
 
   free(type_list);
 }
