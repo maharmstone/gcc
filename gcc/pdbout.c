@@ -517,7 +517,7 @@ write_line_numbers()
 }
 
 static void
-write_pdb_section()
+write_pdb_section (void)
 {
   struct pdb_source_file *psf;
   struct pdb_func *func;
@@ -1012,8 +1012,6 @@ write_bitfield(struct pdb_bitfield *t)
 static void
 write_type(struct pdb_type *t)
 {
-  fprintf(stderr, "Type %x (used = %s)\n", t->id, t->used ? "true" : "false");
-
   switch (t->cv_type) {
     case LF_FIELDLIST:
       write_fieldlist((struct pdb_fieldlist*)t->data);
@@ -1067,7 +1065,7 @@ write_type(struct pdb_type *t)
 }
 
 static void
-write_pdb_type_section()
+write_pdb_type_section (void)
 {
   fprintf (asm_out_file, "\t.section\t.debug$T, \"ndr\"\n");
   fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
@@ -1075,7 +1073,8 @@ write_pdb_type_section()
   while (types) {
     struct pdb_type *n;
 
-    write_type(types);
+    if (types->used)
+      write_type(types);
 
     n = types->next;
 
@@ -1272,9 +1271,167 @@ mark_referenced_types_used (void)
 }
 
 static void
+renumber_types ()
+{
+  uint16_t *type_list, *tlptr;
+  struct pdb_type *t;
+  uint16_t new_id = FIRST_TYPE_NUM;
+
+  if (type_num == FIRST_TYPE_NUM)
+    return;
+
+  type_list = (uint16_t*)xmalloc(sizeof(uint16_t) * (type_num - FIRST_TYPE_NUM));
+  tlptr = type_list;
+
+  t = types;
+  while (t) {
+    if (!t->used)
+      *tlptr = 0;
+    else {
+      *tlptr = new_id;
+      new_id++;
+    }
+
+    t = t->next;
+    tlptr++;
+  }
+
+  t = types;
+  while (t) {
+    if (!t->used) {
+      t = t->next;
+      continue;
+    }
+
+    switch (t->cv_type) {
+      case LF_MODIFIER:
+      {
+	struct pdb_modifier *mod = (struct pdb_modifier *)t->data;
+
+	if (mod->type >= FIRST_TYPE_NUM && mod->type < type_num)
+	  mod->type = type_list[mod->type - FIRST_TYPE_NUM];
+
+	break;
+      }
+
+      case LF_POINTER:
+      {
+	struct pdb_pointer *ptr = (struct pdb_pointer *)t->data;
+
+	if (ptr->type >= FIRST_TYPE_NUM && ptr->type < type_num)
+	  ptr->type = type_list[ptr->type - FIRST_TYPE_NUM];
+
+	break;
+      }
+
+      case LF_PROCEDURE:
+      {
+	struct pdb_proc *proc = (struct pdb_proc *)t->data;
+
+	if (proc->arg_list >= FIRST_TYPE_NUM && proc->arg_list < type_num)
+	  proc->arg_list = type_list[proc->arg_list - FIRST_TYPE_NUM];
+
+	if (proc->return_type >= FIRST_TYPE_NUM && proc->return_type < type_num)
+	  proc->return_type = type_list[proc->return_type - FIRST_TYPE_NUM];
+
+	break;
+      }
+
+      case LF_ARGLIST:
+      {
+	struct pdb_arglist *al = (struct pdb_arglist *)t->data;
+
+	for (unsigned int i = 0; i < al->count; i++) {
+	  if (al->args[i] >= FIRST_TYPE_NUM && al->args[i] < type_num)
+	    al->args[i] = type_list[al->args[i] - FIRST_TYPE_NUM];
+	}
+
+	break;
+      }
+
+      case LF_FIELDLIST:
+      {
+	struct pdb_fieldlist *fl = (struct pdb_fieldlist *)t->data;
+
+	for (unsigned int i = 0; i < fl->count; i++) {
+	  if (fl->entries[i].type >= FIRST_TYPE_NUM && fl->entries[i].type < type_num)
+	    fl->entries[i].type = type_list[fl->entries[i].type - FIRST_TYPE_NUM];
+	}
+
+	break;
+      }
+
+      case LF_BITFIELD:
+      {
+	struct pdb_bitfield *bf = (struct pdb_bitfield *)t->data;
+
+	if (bf->underlying_type >= FIRST_TYPE_NUM && bf->underlying_type < type_num)
+	  bf->underlying_type = type_list[bf->underlying_type - FIRST_TYPE_NUM];
+
+	break;
+      }
+
+      case LF_ARRAY:
+      {
+	struct pdb_array *arr = (struct pdb_array *)t->data;
+
+	if (arr->type >= FIRST_TYPE_NUM && arr->type < type_num)
+	  arr->type = type_list[arr->type - FIRST_TYPE_NUM];
+
+	if (arr->index_type >= FIRST_TYPE_NUM && arr->index_type < type_num)
+	  arr->index_type = type_list[arr->index_type - FIRST_TYPE_NUM];
+
+	break;
+      }
+
+      case LF_CLASS:
+      case LF_STRUCTURE:
+      case LF_UNION:
+      {
+	struct pdb_struct *str = (struct pdb_struct *)t->data;
+
+	if (str->field >= FIRST_TYPE_NUM && str->field < type_num)
+	  str->field = type_list[str->field - FIRST_TYPE_NUM];
+
+	break;
+      }
+
+      case LF_ENUM:
+      {
+	struct pdb_enum *en = (struct pdb_enum *)t->data;
+
+	if (en->type >= FIRST_TYPE_NUM && en->type < type_num)
+	  en->type = type_list[en->type - FIRST_TYPE_NUM];
+
+	if (en->field >= FIRST_TYPE_NUM && en->field < type_num)
+	  en->field = type_list[en->field - FIRST_TYPE_NUM];
+
+	break;
+      }
+
+      case LF_UDT_SRC_LINE:
+      {
+	struct pdb_udt_src_line *pusl = (struct pdb_udt_src_line *)t->data;
+
+	if (pusl->type >= FIRST_TYPE_NUM && pusl->type < type_num)
+	  pusl->type = type_list[pusl->type - FIRST_TYPE_NUM];
+
+	break;
+      }
+    }
+
+    t = t->next;
+  }
+
+  free(type_list);
+}
+
+static void
 pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 {
   mark_referenced_types_used();
+
+  renumber_types();
 
   write_pdb_section();
   write_pdb_type_section();
