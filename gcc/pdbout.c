@@ -1879,7 +1879,7 @@ add_struct_forward_declaration(tree t, struct pdb_type **ret)
   else
     strtype->cv_type = LF_STRUCTURE;
 
-  strtype->tree = t;
+  strtype->tree = NULL;
 
   str = (struct pdb_struct*)strtype->data;
   str->count = 0;
@@ -1908,6 +1908,7 @@ find_type_struct(tree t, struct pdb_type **typeptr)
   struct pdb_struct *str;
   unsigned int num_entries = 0;
   uint16_t fltypenum = 0, new_type;
+  bool fwddef_tree_set = false;
 
   f = t->type_non_common.values;
 
@@ -1918,8 +1919,14 @@ find_type_struct(tree t, struct pdb_type **typeptr)
     f = f->common.chain;
   }
 
-  if (TYPE_SIZE(t) != 0) // not forward declaration
+  if (TYPE_SIZE(t) != 0) { // not forward declaration
     add_struct_forward_declaration(t, &fwddef);
+
+    if (!fwddef->tree) {
+      fwddef_tree_set = true;
+      fwddef->tree = t;
+    }
+  }
 
   if (num_entries > 0) {
     // add fieldlist type
@@ -1994,7 +2001,7 @@ find_type_struct(tree t, struct pdb_type **typeptr)
 
   new_type = add_type(strtype, typeptr);
 
-  if (fwddef)
+  if (fwddef_tree_set)
     fwddef->tree = NULL;
 
   return new_type;
