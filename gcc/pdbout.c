@@ -1949,7 +1949,8 @@ find_type_struct(tree t, struct pdb_type **typeptr)
   else
     strtype->cv_type = LF_STRUCTURE;
 
-  strtype->tree = t;
+  if (TYPE_SIZE(t) != 0) // not forward declaration
+    strtype->tree = t;
 
   str = (struct pdb_struct*)strtype->data;
   str->count = num_entries;
