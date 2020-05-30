@@ -1234,6 +1234,28 @@ mark_referenced_types_used (void)
 	  if (str->field >= FIRST_TYPE_NUM && str->field < type_num)
 	    mark_type_used(str->field, &changed);
 
+	  // forward declarations should propagate usedness to actual types
+	  if (str->property.s.fwdref && str->name) {
+	    struct pdb_type *t2 = types;
+
+	    while (t2) {
+	      if (t2->cv_type == t->cv_type) {
+		struct pdb_struct *str2 = (struct pdb_struct *)t2->data;
+
+		if (!str2->property.s.fwdref && str2->name && !strcmp(str->name, str2->name)) {
+		  if (!t2->used) {
+		    t2->used = true;
+		    changed = true;
+		  }
+
+		  break;
+		}
+	      }
+
+	      t2 = t2->next;
+	    }
+	  }
+
 	  break;
 	}
 
