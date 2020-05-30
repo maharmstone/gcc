@@ -216,7 +216,7 @@ struct pdb_pointer {
 struct pdb_array {
   uint16_t type;
   uint16_t index_type;
-  unsigned int length;
+  uint64_t length;
 };
 
 struct pdb_arglist {

@@ -894,17 +894,55 @@ write_pointer(struct pdb_pointer *ptr)
 static void
 write_array(struct pdb_array *arr)
 {
-  fprintf (asm_out_file, "\t.short\t0xe\n");
+  uint16_t len = 15, align;
+
+  if (arr->length >= 0x8000) {
+    if (arr->length <= 0xffff) // LF_USHORT
+      len += 2;
+    else if (arr->length <= 0xffffffff) // LF_ULONG
+      len += 4;
+    else // LF_UQUADWORD
+      len += 8;
+  }
+
+  align = 4 - (len % 4);
+
+  if (align != 4)
+    len += align;
+
+  fprintf (asm_out_file, "\t.short\t0x%lx\n", len - sizeof(uint16_t));
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ARRAY);
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", arr->type);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
   fprintf (asm_out_file, "\t.short\t0x%x\n", arr->index_type);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
-  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->length);
+
+  if (arr->length >= 0x8000) {
+    if (arr->length <= 0xffff) {
+      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_USHORT);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)arr->length);
+    } else if (arr->length <= 0xffffffff) {
+      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ULONG);
+      fprintf (asm_out_file, "\t.long\t0x%x\n", (uint32_t)arr->length);
+    } else {
+      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UQUADWORD);
+      fprintf (asm_out_file, "\t.quad\t0x%" PRIx64 "\n", arr->length);
+    }
+  } else
+    fprintf (asm_out_file, "\t.short\t0x%x\n", (uint32_t)arr->length);
 
   fprintf (asm_out_file, "\t.byte\t0\n"); // empty string
-  fprintf (asm_out_file, "\t.byte\t0xf1\n");
+
+  if (align != 4) {
+    if (align == 3)
+      fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+    if (align >= 2)
+      fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+    fprintf (asm_out_file, "\t.byte\t0xf1\n");
+  }
 }
 
 static void
