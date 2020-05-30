@@ -2687,6 +2687,35 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
   if (!xloc.file)
     return;
 
+  // don't create LF_UDT_SRC_LINE entry for anonymous types
+
+  switch (type->cv_type) {
+    case LF_STRUCTURE:
+    case LF_CLASS:
+    case LF_UNION:
+    {
+      struct pdb_struct *str = (struct pdb_struct*)type->data;
+
+      if (!str->name)
+	return;
+
+      break;
+    }
+
+    case LF_ENUM:
+    {
+      struct pdb_enum *en = (struct pdb_enum*)type->data;
+
+      if (!en->name)
+	return;
+
+      break;
+    }
+
+    default:
+      return;
+  }
+
   string_type = 0;
 
   // add filename as LF_STRING_ID, so linker puts it into string table
