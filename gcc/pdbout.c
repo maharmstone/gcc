@@ -1973,6 +1973,8 @@ find_type_struct(tree t, struct pdb_type **typeptr)
 
   if (TYPE_SIZE(t) != 0) // not forward declaration
     strtype->tree = t;
+  else
+    strtype->tree = NULL;
 
   str = (struct pdb_struct*)strtype->data;
   str->count = num_entries;
