@@ -2371,7 +2371,7 @@ find_type_modifier(tree t, struct pdb_type **typeptr)
 
   mod = (struct pdb_modifier*)type->data;
 
-  mod->type = find_type(t, true, NULL);
+  mod->type = find_type(TYPE_MAIN_VARIANT(t), false, NULL);
   mod->modifier = 0;
 
   if (TYPE_READONLY(t))
