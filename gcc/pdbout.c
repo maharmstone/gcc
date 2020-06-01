@@ -2193,7 +2193,7 @@ find_type_enum(tree t, struct pdb_type **typeptr)
   en->count = num_entries;
   en->field = fltypenum;
 
-  size = TREE_INT_CST_ELT(TYPE_SIZE(t), 0);
+  size = TYPE_SIZE(t) ? TREE_INT_CST_ELT(TYPE_SIZE(t), 0) : 0;
 
   if (size == 8)
     en->type = TYPE_UNSIGNED(t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
