@@ -2598,6 +2598,7 @@ find_type(tree t, struct pdb_type **typeptr)
       return find_type_enum(t, typeptr);
 
     case FUNCTION_TYPE:
+    case METHOD_TYPE:
       return find_type_function(t, typeptr);
 
     default:
