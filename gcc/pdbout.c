@@ -1549,7 +1549,7 @@ pdbout_begin_function (tree func)
   struct pdb_func *f = (struct pdb_func*)xmalloc(sizeof(struct pdb_func));
 
   f->next = funcs;
-  f->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(func)));
+  f->name = xstrdup(IDENTIFIER_POINTER(DECL_ASSEMBLER_NAME(func)));
   f->num = current_function_funcdef_no;
   f->public_flag = func->base.public_flag;
   f->type = find_type(TREE_TYPE(func), &func_type);
