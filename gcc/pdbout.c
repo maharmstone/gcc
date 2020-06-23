@@ -1938,7 +1938,7 @@ add_struct_forward_declaration(tree t, struct pdb_type **ret)
 }
 
 static uint16_t
-find_type_struct(tree t, struct pdb_type **typeptr)
+find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
 {
   tree f;
   struct pdb_type *fltype = NULL, *strtype, *fwddef = NULL;
@@ -2058,7 +2058,9 @@ find_type_struct(tree t, struct pdb_type **typeptr)
 
   strtype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
 
-  if (TYPE_LANG_SPECIFIC(t) && CLASSTYPE_DECLARED_CLASS(t))
+  if (is_union)
+    strtype->cv_type = LF_UNION;
+  else if (TYPE_LANG_SPECIFIC(t) && CLASSTYPE_DECLARED_CLASS(t))
     strtype->cv_type = LF_CLASS;
   else
     strtype->cv_type = LF_STRUCTURE;
@@ -2091,93 +2093,6 @@ find_type_struct(tree t, struct pdb_type **typeptr)
     fwddef->tree = NULL;
 
   return new_type;
-}
-
-static uint16_t
-find_type_union(tree t, struct pdb_type **typeptr)
-{
-  tree f;
-  struct pdb_type *fltype, *uniontype;
-  struct pdb_fieldlist *fieldlist;
-  struct pdb_fieldlist_entry *ent;
-  struct pdb_struct *str;
-  unsigned int num_entries = 0;
-  uint16_t fltypenum = 0;
-
-  f = t->type_non_common.values;
-
-  while (f) {
-    if (TREE_CODE(f) == FIELD_DECL)
-      num_entries++;
-
-    f = f->common.chain;
-  }
-
-  if (num_entries > 0) {
-    // add fieldlist type
-
-    fltype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_fieldlist));
-    fltype->cv_type = LF_FIELDLIST;
-    fltype->tree = NULL;
-
-    fieldlist = (struct pdb_fieldlist*)fltype->data;
-    fieldlist->count = num_entries;
-    fieldlist->entries = (struct pdb_fieldlist_entry*)xmalloc(sizeof(struct pdb_fieldlist_entry) * num_entries);
-
-    ent = fieldlist->entries;
-    f = t->type_non_common.values;
-
-    while (f) {
-      if (TREE_CODE(f) == FIELD_DECL) {
-	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
-
-	ent->cv_type = LF_MEMBER;
-	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
-	ent->name = DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f)) ? xstrdup(IDENTIFIER_POINTER(DECL_NAME(f))) : NULL;
-
-	if (DECL_BIT_FIELD_TYPE(f)) {
-	  uint16_t underlying_type = find_type(DECL_BIT_FIELD_TYPE(f), NULL);
-
-	  ent->type = find_type_bitfield(underlying_type, TREE_INT_CST_ELT(DECL_SIZE(f), 0), TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0));
-	  ent->offset = TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0);
-	} else {
-	  ent->type = find_type(f->common.typed.type, NULL);
-	  ent->offset = bit_offset / 8;
-	}
-
-	ent++;
-      }
-
-      f = f->common.chain;
-    }
-
-    fltypenum = add_type(fltype, &fltype);
-  }
-
-  // add type for union
-
-  uniontype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + sizeof(struct pdb_struct));
-  uniontype->cv_type = LF_UNION;
-  uniontype->tree = t;
-
-  str = (struct pdb_struct*)uniontype->data;
-  str->count = num_entries;
-  str->field = fltypenum;
-  str->field_type = fltype;
-  str->size = TYPE_SIZE(t) ? (TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8) : 0;
-  str->property.value = 0;
-
-  if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
-    str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
-  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL && IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t)))[0] != '.')
-    str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
-  else
-    str->name = NULL;
-
-  if (!TYPE_SIZE(t)) // forward declaration
-    str->property.s.fwdref = 1;
-
-  return add_type(uniontype, typeptr);
 }
 
 static uint16_t
@@ -2638,10 +2553,10 @@ find_type(tree t, struct pdb_type **typeptr)
       return find_type_array(t, typeptr);
 
     case RECORD_TYPE:
-      return find_type_struct(t, typeptr);
+      return find_type_struct(t, typeptr, false);
 
     case UNION_TYPE:
-      return find_type_union(t, typeptr);
+      return find_type_struct(t, typeptr, true);
 
     case ENUMERAL_TYPE:
       return find_type_enum(t, typeptr);
