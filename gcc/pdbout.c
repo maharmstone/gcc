@@ -1922,6 +1922,7 @@ add_struct_forward_declaration(tree t, struct pdb_type **ret)
   str = (struct pdb_struct*)strtype->data;
   str->count = 0;
   str->field = 0;
+  str->field_type = NULL;
   str->size = 0;
   str->property.value = 0;
   str->property.s.fwdref = 1;
@@ -1940,7 +1941,7 @@ static uint16_t
 find_type_struct(tree t, struct pdb_type **typeptr)
 {
   tree f;
-  struct pdb_type *fltype, *strtype, *fwddef = NULL;
+  struct pdb_type *fltype = NULL, *strtype, *fwddef = NULL;
   struct pdb_fieldlist *fieldlist;
   struct pdb_fieldlist_entry *ent;
   struct pdb_struct *str;
@@ -1951,8 +1952,27 @@ find_type_struct(tree t, struct pdb_type **typeptr)
   f = t->type_non_common.values;
 
   while (f) {
-    if (TREE_CODE(f) == FIELD_DECL && DECL_FIELD_OFFSET(f))
-      num_entries++;
+    if (TREE_CODE(f) == FIELD_DECL && DECL_FIELD_OFFSET(f)) {
+      if (DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f)))
+	num_entries++;
+      else { // anonymous field
+	struct pdb_type *type;
+
+	find_type(f->common.typed.type, &type);
+
+	if (type && (type->cv_type == LF_CLASS || type->cv_type == LF_STRUCTURE || type->cv_type == LF_UNION)) {
+	  struct pdb_struct *str2 = (struct pdb_struct *)type->data;
+
+	  if (str2->field_type) {
+	    struct pdb_fieldlist *fl = (struct pdb_fieldlist *)str2->field_type->data;
+
+	    // count fields of anonymous struct or union as our own
+
+	    num_entries += fl->count;
+	  }
+	}
+      }
+    }
 
     f = f->common.chain;
   }
@@ -1984,27 +2004,54 @@ find_type_struct(tree t, struct pdb_type **typeptr)
       if (TREE_CODE(f) == FIELD_DECL && DECL_FIELD_OFFSET(f)) {
 	unsigned int bit_offset = (TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0) * 8) + TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0);
 
-	ent->cv_type = LF_MEMBER;
-	ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
-	ent->name = DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f)) ? xstrdup(IDENTIFIER_POINTER(DECL_NAME(f))) : NULL;
+	if (DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f))) {
 
-	if (DECL_BIT_FIELD_TYPE(f)) {
-	  uint16_t underlying_type = find_type(DECL_BIT_FIELD_TYPE(f), NULL);
+	  ent->cv_type = LF_MEMBER;
+	  ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
+	  ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
 
-	  ent->type = find_type_bitfield(underlying_type, TREE_INT_CST_ELT(DECL_SIZE(f), 0), TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0));
-	  ent->offset = TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0);
-	} else {
-	  ent->type = find_type(f->common.typed.type, NULL);
-	  ent->offset = bit_offset / 8;
+	  if (DECL_BIT_FIELD_TYPE(f)) {
+	    uint16_t underlying_type = find_type(DECL_BIT_FIELD_TYPE(f), NULL);
+
+	    ent->type = find_type_bitfield(underlying_type, TREE_INT_CST_ELT(DECL_SIZE(f), 0), TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0));
+	    ent->offset = TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0);
+	  } else {
+	    ent->type = find_type(f->common.typed.type, NULL);
+	    ent->offset = bit_offset / 8;
+	  }
+
+	  ent++;
+	} else { // anonymous field
+	  struct pdb_type *type;
+
+	  find_type(f->common.typed.type, &type);
+
+	  if (type && (type->cv_type == LF_CLASS || type->cv_type == LF_STRUCTURE || type->cv_type == LF_UNION)) {
+	    struct pdb_struct *str2 = (struct pdb_struct *)type->data;
+
+	    if (str2->field_type) {
+	      struct pdb_fieldlist *fl = (struct pdb_fieldlist *)str2->field_type->data;
+
+	      // treat fields of anonymous struct or union as our own
+
+	      for (unsigned int i = 0; i < fl->count; i++) {
+		ent->cv_type = fl->entries[i].cv_type;
+		ent->type = fl->entries[i].type;
+		ent->offset = (bit_offset / 8) + fl->entries[i].offset;
+		ent->fld_attr = fl->entries[i].fld_attr; // FIXME?
+		ent->name = fl->entries[i].name ? xstrdup(fl->entries[i].name) : NULL;
+
+		ent++;
+	      }
+	    }
+	  }
 	}
-
-	ent++;
       }
 
       f = f->common.chain;
     }
 
-    fltypenum = add_type(fltype, NULL);
+    fltypenum = add_type(fltype, &fltype);
   }
 
   // add type for struct
@@ -2023,6 +2070,7 @@ find_type_struct(tree t, struct pdb_type **typeptr)
 
   str = (struct pdb_struct*)strtype->data;
   str->count = num_entries;
+  str->field_type = fltype;
   str->field = fltypenum;
   str->size = TYPE_SIZE(t) ? (TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8) : 0;
   str->property.value = 0;
@@ -2103,7 +2151,7 @@ find_type_union(tree t, struct pdb_type **typeptr)
       f = f->common.chain;
     }
 
-    fltypenum = add_type(fltype, NULL);
+    fltypenum = add_type(fltype, &fltype);
   }
 
   // add type for union
@@ -2115,6 +2163,7 @@ find_type_union(tree t, struct pdb_type **typeptr)
   str = (struct pdb_struct*)uniontype->data;
   str->count = num_entries;
   str->field = fltypenum;
+  str->field_type = fltype;
   str->size = TYPE_SIZE(t) ? (TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8) : 0;
   str->property.value = 0;
 
