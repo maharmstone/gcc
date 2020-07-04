@@ -3460,7 +3460,9 @@ pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
 
   b = (struct pdb_block*)xmalloc(sizeof(pdb_block));
 
-  b->next = cur_block->last_child;
+  if (cur_block->last_child)
+    cur_block->last_child->next = b;
+
   cur_block->last_child = b;
 
   if (!cur_block->children)
@@ -3469,6 +3471,7 @@ pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
   b->parent = cur_block;
   b->num = blocknum;
   b->children = b->last_child = NULL;
+  b->next = NULL;
 
   cur_block = b;
 }
