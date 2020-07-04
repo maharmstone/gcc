@@ -317,9 +317,15 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
   while (block->children) {
     struct pdb_block *n = block->children->next;
 
+    fprintf (asm_out_file, ".cvblockstart%u:\n", block->children->num);
     fprintf (asm_out_file, "\t.short\t0x16\n"); // reclen
     fprintf (asm_out_file, "\t.short\t0x%x\n", S_BLOCK32);
-    fprintf (asm_out_file, "\t.long\t0\n"); // pParent
+
+    if (block->num != 0)
+      fprintf (asm_out_file, "\t.long\t[.cvblockstart%u]-[.debug$S]\n", block->num); // pParent
+    else
+      fprintf (asm_out_file, "\t.long\t[.cvprocstart%u]-[.debug$S]\n", func->num); // pParent
+
     fprintf (asm_out_file, "\t.long\t[.cvblockend%u]-[.debug$S]\n", block->children->num); // pEnd
     fprintf (asm_out_file, "\t.long\t[.blockend%u]-[.blockstart%u]\n", block->children->num, block->children->num); // length
     fprintf (asm_out_file, "\t.long\t[.blockstart%u]\n", block->children->num); // offset
@@ -353,6 +359,7 @@ pdbout_proc32 (struct pdb_func *func)
   } else
     align = 0;
 
+  fprintf (asm_out_file, ".cvprocstart%u:\n", func->num);
   fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t))); // reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n", func->public_flag ? S_GPROC32 : S_LPROC32);
   fprintf (asm_out_file, "\t.long\t0\n"); // pParent
