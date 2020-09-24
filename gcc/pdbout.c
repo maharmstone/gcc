@@ -3293,8 +3293,6 @@ add_local(const char *name, tree t, uint16_t type, rtx rtl, unsigned int block_n
   memcpy(plv->name, name, name_len + 1);
 
   if (rtl->code == MEM) {
-    // FIXME - can we have MINUS here instead of PLUS?
-
     if (rtl->u.fld[0].rt_rtx->code == PLUS && rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
 	rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
       plv->var_type = pdb_local_var_regrel;
@@ -3311,12 +3309,6 @@ add_local(const char *name, tree t, uint16_t type, rtx rtl, unsigned int block_n
   } else if (rtl->code == REG) {
     plv->var_type = pdb_local_var_register;
     plv->reg = map_register_no(rtl->u.reg.regno, rtl->mode);
-  }
-
-  if (plv->var_type == pdb_local_var_unknown) {
-    fprintf(stderr, "Unhandled argument: "); // FIXME
-    print_rtl(stderr, rtl);
-    fprintf(stderr, "\n");
   }
 
   if (cur_func->last_local_var)
