@@ -1944,6 +1944,61 @@ add_struct_forward_declaration(tree t, struct pdb_type **ret)
   add_type(strtype, ret);
 }
 
+static char*
+get_struct_name(tree t)
+{
+  char *name;
+  tree ns;
+  size_t ns_len;
+
+  if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
+    name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
+  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL && IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t)))[0] != '.')
+    name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
+  else
+    return NULL;
+
+  ns = DECL_CONTEXT(TYPE_NAME(t));
+  ns_len = 0;
+
+  // FIXME - anonymous namespaces
+
+  while (ns && TREE_CODE(ns) == NAMESPACE_DECL) {
+    ns_len += strlen(IDENTIFIER_POINTER(DECL_NAME(ns))) + 2;
+
+    ns = DECL_CONTEXT(ns);
+  }
+
+  if (ns_len > 0) {
+    char *tmp, *s;
+    size_t name_len = strlen(name);
+
+    tmp = (char*)xmalloc(name_len + ns_len + 1);
+    memcpy(&tmp[ns_len], name, name_len + 1);
+    free(name);
+    name = tmp;
+
+    ns = DECL_CONTEXT(TYPE_NAME(t));
+    s = &name[ns_len];
+
+    while (ns && TREE_CODE(ns) == NAMESPACE_DECL) {
+      size_t len = strlen(IDENTIFIER_POINTER(DECL_NAME(ns)));
+
+      s -= 2;
+      memcpy(s, "::", 2);
+
+      s -= len;
+      memcpy(s, IDENTIFIER_POINTER(DECL_NAME(ns)), len);
+
+      ns = DECL_CONTEXT(ns);
+    }
+  }
+
+  // FIXME - templates
+
+  return name;
+}
+
 static uint16_t
 find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
 {
@@ -2083,13 +2138,7 @@ find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
   str->field = fltypenum;
   str->size = TYPE_SIZE(t) ? (TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8) : 0;
   str->property.value = 0;
-
-  if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
-    str->name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
-  else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL && IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t)))[0] != '.')
-    str->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
-  else
-    str->name = NULL;
+  str->name = get_struct_name(t);
 
   if (!TYPE_SIZE(t)) // forward declaration
     str->property.s.fwdref = 1;
