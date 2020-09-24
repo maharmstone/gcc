@@ -3412,7 +3412,6 @@ pdbout_var_location(rtx_insn *loc_note)
   var_loc->next = NULL;
   var_loc->var = var;
   var_loc->var_loc_number = var_loc_number;
-  var_loc->type = pdb_var_loc_unknown;
 
   if (value) {
     switch (GET_CODE(value)) {
@@ -3435,17 +3434,8 @@ pdbout_var_location(rtx_insn *loc_note)
       break;
 
       default:
+	var_loc->type = pdb_var_loc_unknown;
       break;
-    }
-
-    if (var_loc->type == pdb_var_loc_unknown) {
-      if (DECL_NAME(var) && IDENTIFIER_POINTER(DECL_NAME(var)))
-	fprintf(stderr, "Unhandled var_location (%s):\n", IDENTIFIER_POINTER(DECL_NAME(var)));
-      else
-	fprintf(stderr, "Unhandled var_location (no name):\n");
-
-      print_rtl(stderr, value);
-      fprintf(stderr, "\n");
     }
   }
 
