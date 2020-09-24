@@ -3439,7 +3439,11 @@ pdbout_var_location(rtx_insn *loc_note)
     }
 
     if (var_loc->type == pdb_var_loc_unknown) {
-      fprintf(stderr, "Unhandled var_location (%s):\n", IDENTIFIER_POINTER(DECL_NAME(var)));
+      if (DECL_NAME(var) && IDENTIFIER_POINTER(DECL_NAME(var)))
+	fprintf(stderr, "Unhandled var_location (%s):\n", IDENTIFIER_POINTER(DECL_NAME(var)));
+      else
+	fprintf(stderr, "Unhandled var_location (no name):\n");
+
       print_rtl(stderr, value);
       fprintf(stderr, "\n");
     }
