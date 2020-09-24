@@ -1951,6 +1951,8 @@ get_struct_name(tree t)
   tree ns;
   size_t ns_len;
 
+  static const char anon_ns[] = "<anonymous>";
+
   if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == IDENTIFIER_NODE)
     name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
   else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL && IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t)))[0] != '.')
@@ -1958,13 +1960,16 @@ get_struct_name(tree t)
   else
     return NULL;
 
+  /* Prepend any namespaces, if present */
+
   ns = DECL_CONTEXT(TYPE_NAME(t));
   ns_len = 0;
 
-  // FIXME - anonymous namespaces
-
   while (ns && TREE_CODE(ns) == NAMESPACE_DECL) {
-    ns_len += strlen(IDENTIFIER_POINTER(DECL_NAME(ns))) + 2;
+    if (DECL_NAME(ns))
+      ns_len += strlen(IDENTIFIER_POINTER(DECL_NAME(ns))) + 2;
+    else
+      ns_len += sizeof(anon_ns) - 1 + 2;
 
     ns = DECL_CONTEXT(ns);
   }
@@ -1982,13 +1987,19 @@ get_struct_name(tree t)
     s = &name[ns_len];
 
     while (ns && TREE_CODE(ns) == NAMESPACE_DECL) {
-      size_t len = strlen(IDENTIFIER_POINTER(DECL_NAME(ns)));
+      size_t len;
 
       s -= 2;
       memcpy(s, "::", 2);
 
-      s -= len;
-      memcpy(s, IDENTIFIER_POINTER(DECL_NAME(ns)), len);
+      if (DECL_NAME(ns)) {
+	len = strlen(IDENTIFIER_POINTER(DECL_NAME(ns)));
+	s -= len;
+	memcpy(s, IDENTIFIER_POINTER(DECL_NAME(ns)), len);
+      } else {
+	s -= sizeof(anon_ns) - 1;
+	memcpy(s, anon_ns, sizeof(anon_ns) - 1);
+      }
 
       ns = DECL_CONTEXT(ns);
     }
