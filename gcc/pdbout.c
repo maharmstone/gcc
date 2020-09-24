@@ -2801,7 +2801,7 @@ add_source_file(const char *file)
     psf = psf->next;
   }
 
-  path = realpath(file, NULL);
+  path = lrealpath(file);
   if (!path)
     return;
 
