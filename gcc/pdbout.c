@@ -2754,6 +2754,11 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
   add_udt_src_line_type(type_id, string_type, xloc.line);
 }
 
+#ifndef _WIN32
+/* Given a Unix-style path, construct a fake Windows path, which is what windbg
+ * and Visual Studio are expecting. This maps / to Z:\, which is the default
+ * behaviour on Wine. */
+
 static char*
 make_windows_path(char *src)
 {
@@ -2783,6 +2788,7 @@ make_windows_path(char *src)
 
   return dest;
 }
+#endif
 
 static void
 add_source_file(const char *file)
@@ -2805,7 +2811,9 @@ add_source_file(const char *file)
   if (!path)
     return;
 
-  path = make_windows_path(path); // FIXME
+#ifndef _WIN32
+  path = make_windows_path(path);
+#endif
 
   file_len = strlen(file);
   path_len = strlen(path);
