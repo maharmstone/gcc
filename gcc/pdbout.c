@@ -2084,10 +2084,21 @@ append_template_element(char **n, size_t* len, tree arg, char suffix, bool* fail
 // // 	  printf("FIXME - TREE_VEC\n");
 // 	break;
 
-// 	case TYPE_ARGUMENT_PACK:
-// 	  debug(t);
-// // 	  printf("FIXME - TYPE_ARGUMENT_PACK\n");
-// 	break;
+    case TYPE_ARGUMENT_PACK: {
+      static const char str[] = "...";
+
+      tmp = (char*)xmalloc(*len + sizeof(str) + 2);
+      memcpy(tmp, name, *len);
+      free(name);
+      name = tmp;
+
+      memcpy(&name[*len], str, sizeof(str) - 1);
+      name[*len + sizeof(str) - 1] = suffix;
+      name[*len + sizeof(str)] = 0;
+      *len += sizeof(str);
+
+      break;
+    }
 
     default:
       tmp = (char*)xmalloc(*len + 3);
