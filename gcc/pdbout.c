@@ -2058,9 +2058,25 @@ append_template_element(char **n, size_t* len, tree arg, char suffix, bool* fail
 	  *len += sizeof(str);
 	}
       } else {
-// 	__asm("int $3");
-// 	printf("FIXME - INTEGER_CST\n");
-	*failed = true;
+	char s[50];
+	size_t s_len;
+
+	if (TYPE_UNSIGNED(arg))
+	  sprintf(s, "%lu", TREE_INT_CST_ELT_CHECK(arg, 0));
+	else
+	  sprintf(s, "%li", TREE_INT_CST_ELT_CHECK(arg, 0));
+
+	s_len = strlen(s);
+
+	tmp = (char*)xmalloc(*len + s_len + 2);
+	memcpy(tmp, name, *len);
+	free(name);
+	name = tmp;
+
+	memcpy(&name[*len], s, s_len);
+	name[*len + s_len] = suffix;
+	name[*len + s_len + 1] = 0;
+	*len += s_len + 1;
       }
     break;
 
