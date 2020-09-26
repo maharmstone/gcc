@@ -2140,7 +2140,6 @@ get_struct_name(tree t)
 {
   char *name;
   tree ns;
-  size_t ns_len;
 
   static const char anon_ns[] = "<anonymous>";
 
@@ -2154,45 +2153,68 @@ get_struct_name(tree t)
   /* Prepend any namespaces, if present */
 
   ns = DECL_CONTEXT(TYPE_NAME(t));
-  ns_len = 0;
 
-  while (ns && TREE_CODE(ns) == NAMESPACE_DECL) {
-    if (DECL_NAME(ns))
-      ns_len += strlen(IDENTIFIER_POINTER(DECL_NAME(ns))) + 2;
-    else
-      ns_len += sizeof(anon_ns) - 1 + 2;
+  if (ns) {
+    if (TREE_CODE(ns) == NAMESPACE_DECL) {
+      size_t ns_len = 0;
 
-    ns = DECL_CONTEXT(ns);
-  }
+      while (ns && TREE_CODE(ns) == NAMESPACE_DECL) {
+	  if (DECL_NAME(ns))
+	    ns_len += strlen(IDENTIFIER_POINTER(DECL_NAME(ns))) + 2;
+	  else
+	    ns_len += sizeof(anon_ns) - 1 + 2;
 
-  if (ns_len > 0) {
-    char *tmp, *s;
-    size_t name_len = strlen(name);
-
-    tmp = (char*)xmalloc(name_len + ns_len + 1);
-    memcpy(&tmp[ns_len], name, name_len + 1);
-    free(name);
-    name = tmp;
-
-    ns = DECL_CONTEXT(TYPE_NAME(t));
-    s = &name[ns_len];
-
-    while (ns && TREE_CODE(ns) == NAMESPACE_DECL) {
-      size_t len;
-
-      s -= 2;
-      memcpy(s, "::", 2);
-
-      if (DECL_NAME(ns)) {
-	len = strlen(IDENTIFIER_POINTER(DECL_NAME(ns)));
-	s -= len;
-	memcpy(s, IDENTIFIER_POINTER(DECL_NAME(ns)), len);
-      } else {
-	s -= sizeof(anon_ns) - 1;
-	memcpy(s, anon_ns, sizeof(anon_ns) - 1);
+	ns = DECL_CONTEXT(ns);
       }
 
-      ns = DECL_CONTEXT(ns);
+      if (ns_len > 0) {
+	char *tmp, *s;
+	size_t name_len = strlen(name);
+
+	tmp = (char*)xmalloc(name_len + ns_len + 1);
+	memcpy(&tmp[ns_len], name, name_len + 1);
+	free(name);
+	name = tmp;
+
+	ns = DECL_CONTEXT(TYPE_NAME(t));
+	s = &name[ns_len];
+
+	while (ns && TREE_CODE(ns) == NAMESPACE_DECL) {
+	  size_t len;
+
+	  s -= 2;
+	  memcpy(s, "::", 2);
+
+	  if (DECL_NAME(ns)) {
+	    len = strlen(IDENTIFIER_POINTER(DECL_NAME(ns)));
+	    s -= len;
+	    memcpy(s, IDENTIFIER_POINTER(DECL_NAME(ns)), len);
+	  } else {
+	    s -= sizeof(anon_ns) - 1;
+	    memcpy(s, anon_ns, sizeof(anon_ns) - 1);
+	  }
+
+	  ns = DECL_CONTEXT(ns);
+	}
+      }
+    } else if (TREE_CODE(ns) == RECORD_TYPE) {
+      char *s = get_struct_name(ns);
+      char *tmp;
+      size_t name_len = strlen(name);
+      size_t s_len = s ? strlen(s) : 1;
+
+      tmp = (char*)xmalloc(name_len + s_len + 3);
+      memcpy(&tmp[s_len + 2], name, name_len + 1);
+      free(name);
+      name = tmp;
+
+      if (s)
+	memcpy(name, s, s_len);
+      else
+	name[0] = '?';
+
+      name[s_len] = ':';
+      name[s_len + 1] = ':';
     }
   }
 
