@@ -1990,6 +1990,7 @@ append_template_element(char **n, size_t* len, tree arg, char suffix, bool* fail
     case REAL_TYPE:
     case VOID_TYPE:
     case NULLPTR_TYPE:
+    case ENUMERAL_TYPE:
     {
       const char *s;
       size_t s_len;
@@ -2086,10 +2087,6 @@ append_template_element(char **n, size_t* len, tree arg, char suffix, bool* fail
 // 	case TYPE_ARGUMENT_PACK:
 // 	  debug(t);
 // // 	  printf("FIXME - TYPE_ARGUMENT_PACK\n");
-// 	break;
-
-// 	case ENUMERAL_TYPE:
-// 	  printf("enum: %s\n", IDENTIFIER_POINTER(TYPE_IDENTIFIER(arg)));
 // 	break;
 
     default:
