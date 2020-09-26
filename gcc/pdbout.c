@@ -45,6 +45,7 @@ static void pdbout_begin_block(unsigned int line ATTRIBUTE_UNUSED, unsigned int 
 static void pdbout_end_block(unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum);
 
 static uint16_t find_type(tree t, struct pdb_type **typeptr);
+static char *get_struct_name(tree t);
 
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_block *cur_block = NULL;
@@ -1944,6 +1945,172 @@ add_struct_forward_declaration(tree t, struct pdb_type **ret)
   add_type(strtype, ret);
 }
 
+static void
+append_template_element(char **n, size_t* len, tree arg, char suffix, bool* failed)
+{
+  char *tmp;
+  char *name = *n;
+
+  switch (TREE_CODE(arg)) {
+    case RECORD_TYPE:
+    {
+      char *s = get_struct_name(arg);
+
+      if (s) {
+	size_t s_len = strlen(s);
+
+	tmp = (char*)xmalloc(*len + s_len + 2);
+	memcpy(tmp, name, *len);
+	free(name);
+	name = tmp;
+
+	memcpy(&name[*len], s, s_len);
+	name[*len + s_len] = suffix;
+	name[*len + s_len + 1] = 0;
+	*len += s_len + 1;
+
+	free(s);
+      } else {
+	tmp = (char*)xmalloc(*len + 3);
+	memcpy(tmp, name, *len);
+	free(name);
+	name = tmp;
+
+	name[*len] = '?';
+	name[*len + 1] = suffix;
+	name[*len + 2] = 0;
+	*len += 2;
+      }
+
+      break;
+    }
+
+    case INTEGER_TYPE:
+    case BOOLEAN_TYPE:
+    case REAL_TYPE:
+    case VOID_TYPE:
+    case NULLPTR_TYPE:
+    {
+      const char *s;
+      size_t s_len;
+
+      if (TREE_CODE(arg) == NULLPTR_TYPE)
+	s = "std::nullptr_t";
+      else
+	s = IDENTIFIER_POINTER(TYPE_IDENTIFIER(arg));
+
+      s_len = strlen(s);
+
+      tmp = (char*)xmalloc(*len + s_len + 2);
+      memcpy(tmp, name, *len);
+      free(name);
+      name = tmp;
+
+      memcpy(&name[*len], s, s_len);
+      name[*len + s_len] = suffix;
+      name[*len + s_len + 1] = 0;
+      *len += s_len + 1;
+
+      break;
+    }
+
+    case POINTER_TYPE: {
+      append_template_element(&name, len, TREE_TYPE(arg), '*', failed);
+
+      tmp = (char*)xmalloc(*len + 2);
+      memcpy(tmp, name, *len);
+      free(name);
+      name = tmp;
+
+      name[*len] = suffix;
+      name[*len + 1] = 0;
+      (*len)++;
+
+      break;
+    }
+
+    case INTEGER_CST:
+      if (TREE_CODE(TREE_TYPE(arg)) == BOOLEAN_TYPE) {
+	if (TREE_INT_CST_ELT_CHECK(arg, 0) == 0) {
+	  static const char str[] = "false";
+
+	  tmp = (char*)xmalloc(*len + sizeof(str) + 2);
+	  memcpy(tmp, name, *len);
+	  free(name);
+	  name = tmp;
+
+	  memcpy(&name[*len], str, sizeof(str) - 1);
+	  name[*len + sizeof(str) - 1] = suffix;
+	  name[*len + sizeof(str)] = 0;
+	  *len += sizeof(str);
+	} else {
+	  static const char str[] = "true";
+
+	  tmp = (char*)xmalloc(*len + sizeof(str) + 2);
+	  memcpy(tmp, name, *len);
+	  free(name);
+	  name = tmp;
+
+	  memcpy(&name[*len], str, sizeof(str) - 1);
+	  name[*len + sizeof(str) - 1] = suffix;
+	  name[*len + sizeof(str)] = 0;
+	  *len += sizeof(str);
+	}
+      } else {
+// 	__asm("int $3");
+// 	printf("FIXME - INTEGER_CST\n");
+	*failed = true;
+      }
+    break;
+
+    case REFERENCE_TYPE: {
+      append_template_element(&name, len, TREE_TYPE(arg), '&', failed);
+
+      tmp = (char*)xmalloc(*len + 2);
+      memcpy(tmp, name, *len);
+      free(name);
+      name = tmp;
+
+      name[*len] = suffix;
+      name[*len + 1] = 0;
+      (*len)++;
+
+      break;
+    }
+
+// 	case TREE_VEC:
+// 	  debug(arg);
+// // 	  printf("FIXME - TREE_VEC\n");
+// 	break;
+
+// 	case TYPE_ARGUMENT_PACK:
+// 	  debug(t);
+// // 	  printf("FIXME - TYPE_ARGUMENT_PACK\n");
+// 	break;
+
+// 	case ENUMERAL_TYPE:
+// 	  printf("enum: %s\n", IDENTIFIER_POINTER(TYPE_IDENTIFIER(arg)));
+// 	break;
+
+    default:
+      tmp = (char*)xmalloc(*len + 3);
+      memcpy(tmp, name, *len);
+      free(name);
+      name = tmp;
+
+      name[*len] = '?';
+      name[*len + 1] = suffix;
+      name[*len + 2] = 0;
+      *len += 2;
+
+      *failed = true;
+
+      break;
+  }
+
+  *n = name;
+}
+
 static char*
 get_struct_name(tree t)
 {
@@ -2005,7 +2172,45 @@ get_struct_name(tree t)
     }
   }
 
-  // FIXME - templates
+  /* Append template information */
+
+  if (CLASSTYPE_USE_TEMPLATE(t)) {
+    tree args = TI_ARGS(CLASSTYPE_TEMPLATE_INFO(t));
+    size_t len = strlen(name);
+    char *tmp;
+    bool failed = false;
+
+    if (TREE_VEC_LENGTH(args) == 0) {
+      tmp = (char*)xmalloc(len + 3);
+      memcpy(tmp, name, len);
+      free(name);
+
+      tmp[len] = '<';
+      tmp[len + 1] = '>';
+      tmp[len + 2] = 0;
+
+      return tmp;
+    }
+
+    tmp = (char*)xmalloc(len + 2);
+    memcpy(tmp, name, len);
+    free(name);
+    name = tmp;
+
+    name[len] = '<';
+    name[len + 1] = 0;
+    len++;
+
+    for (int i = 0; i < TREE_VEC_LENGTH(args); i++) {
+      append_template_element(&name, &len, TREE_VEC_ELT(args, i),
+			      ((int)i < TREE_VEC_LENGTH(args) - 1) ? ',' : '>', &failed);
+    }
+
+    if (failed) {
+      debug (t);
+      printf("name: %s\n", name); // FIXME
+    }
+  }
 
   return name;
 }
