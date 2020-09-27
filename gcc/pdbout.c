@@ -2234,19 +2234,18 @@ get_struct_name(tree t)
     size_t len = strlen(name);
     char *tmp;
     bool failed = false;
+    tree pack = NULL;
 
     /* If both scope and final part are templated, we're only interested
      * in the final TREE_VEC. */
 
-    if (TREE_VEC_LENGTH(args) > 0 && TREE_CODE(TREE_VEC_ELT(args, 0)) == TREE_VEC) {
+    if (TREE_VEC_LENGTH(args) > 0 && TREE_CODE(TREE_VEC_ELT(args, 0)) == TREE_VEC)
       args = TREE_VEC_ELT(args, TREE_VEC_LENGTH(args) - 1);
-    }
 
     /* If first element is a TYPE_ARGUMENT_PACK, extract the TREE_VEC from it. */
 
-    if (TREE_VEC_LENGTH(args) > 0 && TREE_CODE(TREE_VEC_ELT(args, 0)) == TYPE_ARGUMENT_PACK) {
+    if (TREE_VEC_LENGTH(args) > 0 && TREE_CODE(TREE_VEC_ELT(args, 0)) == TYPE_ARGUMENT_PACK)
       args = TREE_TYPE(TREE_VEC_ELT(args, 0));
-    }
 
     if (TREE_VEC_LENGTH(args) == 0) {
       tmp = (char*)xmalloc(len + 3);
@@ -2270,8 +2269,26 @@ get_struct_name(tree t)
     len++;
 
     for (int i = 0; i < TREE_VEC_LENGTH(args); i++) {
+      if (TREE_CODE(TREE_VEC_ELT(args, i)) == TYPE_ARGUMENT_PACK) {
+	pack = TREE_VEC_ELT(args, i);
+	break;
+      }
+
       append_template_element(&name, &len, TREE_VEC_ELT(args, i),
 			      ((int)i < TREE_VEC_LENGTH(args) - 1) ? ',' : '>', &failed);
+    }
+
+    if (pack) {
+      args = TREE_TYPE(pack);
+
+      /* If TYPE_ARGUMENT_PACK is last element but empty, get rid of trailing comma */
+      if (TREE_VEC_LENGTH(args) == 0)
+	name[strlen(name) - 1] = '>';
+
+      for (int i = 0; i < TREE_VEC_LENGTH(args); i++) {
+	append_template_element(&name, &len, TREE_VEC_ELT(args, i),
+				((int)i < TREE_VEC_LENGTH(args) - 1) ? ',' : '>', &failed);
+      }
     }
 
     if (failed) {
