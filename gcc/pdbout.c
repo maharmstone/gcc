@@ -2095,11 +2095,6 @@ append_template_element(char **n, size_t* len, tree arg, char suffix, bool* fail
       break;
     }
 
-// 	case TREE_VEC:
-// 	  debug(arg);
-// // 	  printf("FIXME - TREE_VEC\n");
-// 	break;
-
     case TYPE_ARGUMENT_PACK: {
       static const char str[] = "...";
 
@@ -2236,6 +2231,13 @@ get_struct_name(tree t)
       tmp[len + 2] = 0;
 
       return tmp;
+    }
+
+    /* If both scope and final part are templated, we're only interested
+     * in the final TREE_VEC. */
+
+    while (TREE_CODE(TREE_VEC_ELT(args, 0)) == TREE_VEC) {
+      args = TREE_VEC_ELT(args, TREE_VEC_LENGTH(args) - 1);
     }
 
     tmp = (char*)xmalloc(len + 2);
