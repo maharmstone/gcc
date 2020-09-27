@@ -2111,6 +2111,47 @@ append_template_element(char **n, size_t* len, tree arg, char suffix)
       break;
     }
 
+    case FUNCTION_TYPE: {
+      tree param = TYPE_ARG_TYPES(arg);
+
+      append_template_element(&name, len, TREE_TYPE(arg), '(');
+
+      if (!param || TREE_CODE(TREE_VALUE(param)) == VOID_TYPE) {
+	tmp = (char*)xmalloc(*len + 3);
+	memcpy(tmp, name, *len);
+	free(name);
+	name = tmp;
+
+	name[*len] = ')';
+	name[*len + 1] = suffix;
+	name[*len + 2] = 0;
+
+	*len += 2;
+      } else {
+	while (param) {
+	  if (TREE_CODE(TREE_VALUE(param)) == VOID_TYPE)
+	    break;
+
+	  append_template_element(&name, len, TREE_VALUE(param),
+				  TREE_CHAIN(param) && TREE_CODE(TREE_VALUE(TREE_CHAIN(param))) != VOID_TYPE ? ',' : ')');
+
+	  param = TREE_CHAIN(param);
+	}
+
+	tmp = (char*)xmalloc(*len + 2);
+	memcpy(tmp, name, *len);
+	free(name);
+	name = tmp;
+
+	name[*len] = suffix;
+	name[*len + 1] = 0;
+
+	(*len)++;
+      }
+
+      break;
+    }
+
     default:
       tmp = (char*)xmalloc(*len + 3);
       memcpy(tmp, name, *len);
