@@ -1946,7 +1946,7 @@ add_struct_forward_declaration(tree t, struct pdb_type **ret)
 }
 
 static void
-append_template_element(char **n, size_t* len, tree arg, char suffix, bool* failed)
+append_template_element(char **n, size_t* len, tree arg, char suffix)
 {
   char *tmp;
   char *name = *n;
@@ -2016,7 +2016,7 @@ append_template_element(char **n, size_t* len, tree arg, char suffix, bool* fail
     }
 
     case POINTER_TYPE: {
-      append_template_element(&name, len, TREE_TYPE(arg), '*', failed);
+      append_template_element(&name, len, TREE_TYPE(arg), '*');
 
       tmp = (char*)xmalloc(*len + 2);
       memcpy(tmp, name, *len);
@@ -2081,7 +2081,7 @@ append_template_element(char **n, size_t* len, tree arg, char suffix, bool* fail
     break;
 
     case REFERENCE_TYPE: {
-      append_template_element(&name, len, TREE_TYPE(arg), '&', failed);
+      append_template_element(&name, len, TREE_TYPE(arg), '&');
 
       tmp = (char*)xmalloc(*len + 2);
       memcpy(tmp, name, *len);
@@ -2121,8 +2121,6 @@ append_template_element(char **n, size_t* len, tree arg, char suffix, bool* fail
       name[*len + 1] = suffix;
       name[*len + 2] = 0;
       *len += 2;
-
-      *failed = true;
 
       break;
   }
@@ -2233,7 +2231,6 @@ get_struct_name(tree t)
   if (args) {
     size_t len = strlen(name);
     char *tmp;
-    bool failed = false;
     tree pack = NULL;
 
     /* If both scope and final part are templated, we're only interested
@@ -2275,7 +2272,7 @@ get_struct_name(tree t)
       }
 
       append_template_element(&name, &len, TREE_VEC_ELT(args, i),
-			      ((int)i < TREE_VEC_LENGTH(args) - 1) ? ',' : '>', &failed);
+			      ((int)i < TREE_VEC_LENGTH(args) - 1) ? ',' : '>');
     }
 
     if (pack) {
@@ -2287,13 +2284,8 @@ get_struct_name(tree t)
 
       for (int i = 0; i < TREE_VEC_LENGTH(args); i++) {
 	append_template_element(&name, &len, TREE_VEC_ELT(args, i),
-				((int)i < TREE_VEC_LENGTH(args) - 1) ? ',' : '>', &failed);
+				((int)i < TREE_VEC_LENGTH(args) - 1) ? ',' : '>');
       }
-    }
-
-    if (failed) {
-      debug (t);
-      printf("name: %s\n", name); // FIXME
     }
   }
 
