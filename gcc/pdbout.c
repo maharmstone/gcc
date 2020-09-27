@@ -2134,7 +2134,7 @@ static char*
 get_struct_name(tree t)
 {
   char *name;
-  tree ns;
+  tree ns, args;
 
   static const char anon_ns[] = "<anonymous>";
 
@@ -2142,15 +2142,23 @@ get_struct_name(tree t)
     name = xstrdup(IDENTIFIER_POINTER(TYPE_NAME(t)));
   else if (TYPE_NAME(t) && TREE_CODE(TYPE_NAME(t)) == TYPE_DECL && IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t)))[0] != '.')
     name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(TYPE_NAME(t))));
+  else if (DECL_NAME(t) && TREE_CODE(DECL_NAME(t)) == IDENTIFIER_NODE)
+    name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(t)));
   else
     return NULL;
 
   /* Prepend any namespaces, if present */
 
-  ns = DECL_CONTEXT(TYPE_NAME(t));
+  if (TYPE_NAME(t))
+    ns = DECL_CONTEXT(TYPE_NAME(t));
+  else if (DECL_NAME(t))
+    ns = DECL_CONTEXT(t);
+  else
+    ns = NULL;
 
   if (ns) {
     if (TREE_CODE(ns) == NAMESPACE_DECL) {
+      tree orig_ns = ns;
       size_t ns_len = 0;
 
       while (ns && TREE_CODE(ns) == NAMESPACE_DECL) {
@@ -2171,7 +2179,7 @@ get_struct_name(tree t)
 	free(name);
 	name = tmp;
 
-	ns = DECL_CONTEXT(TYPE_NAME(t));
+	ns = orig_ns;
 	s = &name[ns_len];
 
 	while (ns && TREE_CODE(ns) == NAMESPACE_DECL) {
@@ -2192,7 +2200,7 @@ get_struct_name(tree t)
 	  ns = DECL_CONTEXT(ns);
 	}
       }
-    } else if (TREE_CODE(ns) == RECORD_TYPE) {
+    } else if (TREE_CODE(ns) == RECORD_TYPE || TREE_CODE(ns) == FUNCTION_DECL) {
       char *s = get_struct_name(ns);
       char *tmp;
       size_t name_len = strlen(name);
@@ -2215,8 +2223,14 @@ get_struct_name(tree t)
 
   /* Append template information */
 
-  if (CLASSTYPE_USE_TEMPLATE(t)) {
-    tree args = TI_ARGS(CLASSTYPE_TEMPLATE_INFO(t));
+  if (TREE_CODE(t) == RECORD_TYPE && CLASSTYPE_USE_TEMPLATE(t))
+    args = TI_ARGS(CLASSTYPE_TEMPLATE_INFO(t));
+  else if (DECL_USE_TEMPLATE(t) && DECL_TEMPLATE_INFO(t))
+    args = TI_ARGS(DECL_TEMPLATE_INFO(t));
+  else
+    args = NULL;
+
+  if (args) {
     size_t len = strlen(name);
     char *tmp;
     bool failed = false;
