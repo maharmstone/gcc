@@ -2221,6 +2221,19 @@ get_struct_name(tree t)
     char *tmp;
     bool failed = false;
 
+    /* If both scope and final part are templated, we're only interested
+     * in the final TREE_VEC. */
+
+    if (TREE_VEC_LENGTH(args) > 0 && TREE_CODE(TREE_VEC_ELT(args, 0)) == TREE_VEC) {
+      args = TREE_VEC_ELT(args, TREE_VEC_LENGTH(args) - 1);
+    }
+
+    /* If first element is a TYPE_ARGUMENT_PACK, extract the TREE_VEC from it. */
+
+    if (TREE_VEC_LENGTH(args) > 0 && TREE_CODE(TREE_VEC_ELT(args, 0)) == TYPE_ARGUMENT_PACK) {
+      args = TREE_TYPE(TREE_VEC_ELT(args, 0));
+    }
+
     if (TREE_VEC_LENGTH(args) == 0) {
       tmp = (char*)xmalloc(len + 3);
       memcpy(tmp, name, len);
@@ -2231,13 +2244,6 @@ get_struct_name(tree t)
       tmp[len + 2] = 0;
 
       return tmp;
-    }
-
-    /* If both scope and final part are templated, we're only interested
-     * in the final TREE_VEC. */
-
-    while (TREE_CODE(TREE_VEC_ELT(args, 0)) == TREE_VEC) {
-      args = TREE_VEC_ELT(args, TREE_VEC_LENGTH(args) - 1);
     }
 
     tmp = (char*)xmalloc(len + 2);
