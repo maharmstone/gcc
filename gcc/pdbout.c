@@ -1953,6 +1953,7 @@ append_template_element(char **n, size_t* len, tree arg, char suffix)
 
   switch (TREE_CODE(arg)) {
     case RECORD_TYPE:
+    case UNION_TYPE:
     {
       char *s = get_struct_name(arg);
 
