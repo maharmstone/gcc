@@ -15,6 +15,8 @@
 #include "insn-config.h"
 #include "reload.h"
 #include "cp/cp-tree.h"
+#include "common/common-target.h"
+#include "except.h"
 #include "print-tree.h" // FIXME - remove this
 #include "print-rtl.h" // FIXME - and this
 
@@ -3701,6 +3703,18 @@ add_local(const char *name, tree t, uint16_t type, rtx rtl, unsigned int block_n
   } else if (rtl->code == REG) {
     plv->var_type = pdb_local_var_register;
     plv->reg = map_register_no(rtl->u.reg.regno, rtl->mode);
+  }
+
+  /* If using sjlj exceptions on x86, the stack will later get shifted by
+   * 16 bytes - we need to account for that now. */
+  if (!TARGET_64BIT) {
+    if (plv->var_type == pdb_local_var_regrel &&
+	plv->reg == CV_X86_EBP &&
+	plv->offset < 0 &&
+	cfun->eh->region_tree &&
+	targetm_common.except_unwind_info (&global_options) == UI_SJLJ) {
+      plv->offset -= 16;
+    }
   }
 
   if (cur_func->last_local_var)
