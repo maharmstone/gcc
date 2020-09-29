@@ -3837,6 +3837,18 @@ pdbout_var_location(rtx_insn *loc_note)
     }
   }
 
+  /* If using sjlj exceptions on x86, the stack will later get shifted by
+   * 16 bytes - we need to account for that now. */
+  if (!TARGET_64BIT) {
+    if (var_loc->type == pdb_var_loc_regrel &&
+	var_loc->reg == CV_X86_EBP &&
+	var_loc->offset < 0 &&
+	cfun->eh->region_tree &&
+	targetm_common.except_unwind_info (&global_options) == UI_SJLJ) {
+      var_loc->offset -= 16;
+    }
+  }
+
   fprintf(asm_out_file, ".varloc%u:\n", var_loc_number);
 
   if (cur_func->last_var_loc)
