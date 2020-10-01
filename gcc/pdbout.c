@@ -3004,14 +3004,14 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
   struct pdb_source_file *psf;
   expanded_location xloc;
 
-  if (t->decl_non_common.result) { // typedef
+  if (DECL_ORIGINAL_TYPE(t)) { // typedef
     struct pdb_alias *a;
 
     a = (struct pdb_alias*)xmalloc(sizeof(struct pdb_alias));
 
     a->next = aliases;
-    a->tree = t->typed.type;
-    a->type_id = find_type(t->decl_non_common.result, &a->type);
+    a->tree = TREE_TYPE(t);
+    a->type_id = find_type(DECL_ORIGINAL_TYPE(t), &a->type);
 
     if (a->type_id == CV_BUILTIN_TYPE_INT32LONG && DECL_NAME(t) && IDENTIFIER_POINTER(DECL_NAME(t)) &&
 	!strcmp(IDENTIFIER_POINTER(DECL_NAME(t)), "HRESULT")) {
@@ -3051,7 +3051,7 @@ static void pdbout_type_decl(tree t, int local ATTRIBUTE_UNUSED)
     return;
   }
 
-  type_id = find_type(t->typed.type, &type);
+  type_id = find_type(TREE_TYPE(t), &type);
 
   if (type_id == 0 || type_id < FIRST_TYPE_NUM)
     return;
