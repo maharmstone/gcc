@@ -1621,7 +1621,7 @@ static void pdbout_late_global_decl(tree var)
   v->next = global_vars;
   v->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(var)));
   v->asm_name = xstrdup((const char*)var->var_decl.common.assembler_name->identifier.id.str); // FIXME - is this guaranteed to be null-terminated?
-  v->public_flag = var->base.public_flag;
+  v->public_flag = TREE_PUBLIC(var);
   v->type = find_type(TREE_TYPE(var), &type);
 
   if (type)
