@@ -3762,19 +3762,19 @@ pdbout_function_decl(tree decl)
   if (!cur_func)
     return;
 
-  f = decl->function_decl.arguments;
+  f = DECL_ARGUMENTS(decl);
   while (f) {
     if (TREE_CODE(f) == PARM_DECL && DECL_NAME(f)) {
       struct pdb_type *type;
 
-      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), f, find_type(f->typed.type, &type),
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), f, find_type(TREE_TYPE(f), &type),
 		f->parm_decl.common.rtl, 0);
 
       if (type)
 	type->used = true;
     }
 
-    f = f->common.chain;
+    f = TREE_CHAIN(f);
   }
 
   pdbout_function_decl_block(DECL_INITIAL(decl));
