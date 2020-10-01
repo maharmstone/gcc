@@ -3743,7 +3743,7 @@ pdbout_function_decl_block(tree block)
 	type->used = true;
     }
 
-    f = f->common.chain;
+    f = TREE_CHAIN(f);
   }
 
   f = BLOCK_SUBBLOCKS(block);
