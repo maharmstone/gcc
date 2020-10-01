@@ -2505,7 +2505,7 @@ find_type_enum(tree t, struct pdb_type **typeptr)
   while (v) {
     num_entries++;
 
-    v = v->common.chain;
+    v = TREE_CHAIN(v);
   }
 
   // add fieldlist type
@@ -2534,7 +2534,7 @@ find_type_enum(tree t, struct pdb_type **typeptr)
 
     ent->name = xstrdup(IDENTIFIER_POINTER(TREE_PURPOSE(v)));
 
-    v = v->common.chain;
+    v = TREE_CHAIN(v);
     ent++;
   }
 
