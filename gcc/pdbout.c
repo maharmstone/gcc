@@ -2649,10 +2649,10 @@ find_type_function(tree t, struct pdb_type **typeptr)
 
   arg = TYPE_ARG_TYPES(t);
   while (arg) {
-    if (TREE_VALUE(arg)->base.code != VOID_TYPE)
+    if (TREE_CODE(TREE_VALUE(arg)) != VOID_TYPE)
       num_args++;
 
-    arg = arg->common.chain;
+    arg = TREE_CHAIN(arg);
   }
 
   arglisttype = (struct pdb_type *)xmalloc(offsetof(struct pdb_type, data) + offsetof(struct pdb_arglist, args) + (num_args * sizeof(uint16_t)));
@@ -2665,12 +2665,12 @@ find_type_function(tree t, struct pdb_type **typeptr)
   argptr = arglist->args;
   arg = TYPE_ARG_TYPES(t);
   while (arg) {
-    if (TREE_VALUE(arg)->base.code != VOID_TYPE) {
+    if (TREE_CODE(TREE_VALUE(arg)) != VOID_TYPE) {
       *argptr = find_type(TREE_VALUE(arg), NULL);
       argptr++;
     }
 
-    arg = arg->common.chain;
+    arg = TREE_CHAIN(arg);
   }
 
   arglisttypenum = add_type(arglisttype, NULL);
