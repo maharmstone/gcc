@@ -1561,7 +1561,7 @@ pdbout_begin_function (tree func)
   f->next = funcs;
   f->name = xstrdup(IDENTIFIER_POINTER(DECL_ASSEMBLER_NAME(func)));
   f->num = current_function_funcdef_no;
-  f->public_flag = func->base.public_flag;
+  f->public_flag = TREE_PUBLIC(func);
   f->type = find_type(TREE_TYPE(func), &func_type);
   f->lines = f->last_line = NULL;
   f->local_vars = f->last_local_var = NULL;
