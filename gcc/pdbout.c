@@ -2348,7 +2348,7 @@ find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
   uint16_t fltypenum = 0, new_type;
   bool fwddef_tree_set = false;
 
-  f = t->type_non_common.values;
+  f = TYPE_FIELDS(t);
 
   while (f) {
     if (TREE_CODE(f) == FIELD_DECL && DECL_FIELD_OFFSET(f)) {
@@ -2357,7 +2357,7 @@ find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
       else { // anonymous field
 	struct pdb_type *type;
 
-	find_type(f->common.typed.type, &type);
+	find_type(TREE_TYPE(f), &type);
 
 	if (type && (type->cv_type == LF_CLASS || type->cv_type == LF_STRUCTURE || type->cv_type == LF_UNION)) {
 	  struct pdb_struct *str2 = (struct pdb_struct *)type->data;
@@ -2373,7 +2373,7 @@ find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
       }
     }
 
-    f = f->common.chain;
+    f = TREE_CHAIN(f);
   }
 
   if (TYPE_SIZE(t) != 0) { // not forward declaration
@@ -2397,7 +2397,7 @@ find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
     fieldlist->entries = (struct pdb_fieldlist_entry*)xmalloc(sizeof(struct pdb_fieldlist_entry) * num_entries);
 
     ent = fieldlist->entries;
-    f = t->type_non_common.values;
+    f = TYPE_FIELDS(t);
 
     while (f) {
       if (TREE_CODE(f) == FIELD_DECL && DECL_FIELD_OFFSET(f)) {
@@ -2415,7 +2415,7 @@ find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
 	    ent->type = find_type_bitfield(underlying_type, TREE_INT_CST_ELT(DECL_SIZE(f), 0), TREE_INT_CST_ELT(DECL_FIELD_BIT_OFFSET(f), 0));
 	    ent->offset = TREE_INT_CST_ELT(DECL_FIELD_OFFSET(f), 0);
 	  } else {
-	    ent->type = find_type(f->common.typed.type, NULL);
+	    ent->type = find_type(TREE_TYPE(f), NULL);
 	    ent->offset = bit_offset / 8;
 	  }
 
@@ -2423,7 +2423,7 @@ find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
 	} else { // anonymous field
 	  struct pdb_type *type;
 
-	  find_type(f->common.typed.type, &type);
+	  find_type(TREE_TYPE(f), &type);
 
 	  if (type && (type->cv_type == LF_CLASS || type->cv_type == LF_STRUCTURE || type->cv_type == LF_UNION)) {
 	    struct pdb_struct *str2 = (struct pdb_struct *)type->data;
@@ -2447,7 +2447,7 @@ find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
 	}
       }
 
-      f = f->common.chain;
+      f = TREE_CHAIN(f);
     }
 
     fltypenum = add_type(fltype, &fltype);
