@@ -1276,7 +1276,7 @@ mark_referenced_types_used (void)
 	case LF_CLASS:
 	case LF_STRUCTURE:
 	case LF_UNION:
-        {
+	{
 	  struct pdb_struct *str = (struct pdb_struct *)t->data;
 
 	  if (str->field >= FIRST_TYPE_NUM && str->field < type_num)
