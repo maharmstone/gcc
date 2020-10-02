@@ -3686,23 +3686,23 @@ add_local(const char *name, tree t, uint16_t type, rtx rtl, unsigned int block_n
   plv->var_type = pdb_local_var_unknown;
   memcpy(plv->name, name, name_len + 1);
 
-  if (rtl->code == MEM) {
-    if (rtl->u.fld[0].rt_rtx->code == PLUS && rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
-	rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
+  if (MEM_P(rtl)) {
+    if (GET_CODE(XEXP(rtl, 0)) == PLUS && GET_CODE(XEXP(XEXP(rtl, 0), 0)) == REG &&
+      GET_CODE(XEXP(XEXP(rtl, 0), 1)) == CONST_INT) {
       plv->var_type = pdb_local_var_regrel;
-      plv->reg = map_register_no(rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno, rtl->u.fld[0].rt_rtx->u.fld[0].rt_rtx->mode);
-      plv->offset = rtl->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
-    } else if (rtl->u.fld[0].rt_rtx->code == REG) {
+      plv->reg = map_register_no(REGNO(XEXP(XEXP(rtl, 0), 0)), GET_MODE(XEXP(XEXP(rtl, 0), 0)));
+      plv->offset = XINT(XEXP(XEXP(rtl, 0), 1), 0);
+    } else if (REG_P(XEXP(rtl, 0))) {
       plv->var_type = pdb_local_var_regrel;
-      plv->reg = map_register_no(rtl->u.fld[0].rt_rtx->u.reg.regno, rtl->u.fld[0].rt_rtx->mode);
+      plv->reg = map_register_no(REGNO(XEXP(rtl, 0)), GET_MODE(XEXP(rtl, 0)));
       plv->offset = 0;
-    } else if (rtl->u.fld[0].rt_rtx->code == SYMBOL_REF) {
+    } else if (SYMBOL_REF_P(XEXP(rtl, 0))) {
       plv->var_type = pdb_local_var_symbol;
-      plv->symbol = xstrdup(rtl->u.fld[0].rt_rtx->u.block_sym.fld[0].rt_str);
+      plv->symbol = xstrdup(XSTR(XEXP(rtl, 0), 0));
     }
-  } else if (rtl->code == REG) {
+  } else if (REG_P(rtl)) {
     plv->var_type = pdb_local_var_register;
-    plv->reg = map_register_no(rtl->u.reg.regno, rtl->mode);
+    plv->reg = map_register_no(REGNO(rtl), GET_MODE(rtl));
   }
 
   /* If using sjlj exceptions on x86, the stack will later get shifted by
