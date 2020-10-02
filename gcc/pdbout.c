@@ -3815,18 +3815,18 @@ pdbout_var_location(rtx_insn *loc_note)
     switch (GET_CODE(value)) {
       case REG:
 	var_loc->type = pdb_var_loc_register;
-	var_loc->reg = map_register_no(value->u.reg.regno, value->mode);
+	var_loc->reg = map_register_no(REGNO(value), GET_MODE(value));
       break;
 
-      case MEM: // FIXME - prettify
-	if (value->u.fld[0].rt_rtx->code == PLUS && value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->code == REG &&
-	  value->u.fld[0].rt_rtx->u.fld[1].rt_rtx->code == CONST_INT) {
+      case MEM:
+	if (GET_CODE(XEXP(value, 0)) == PLUS && GET_CODE(XEXP(XEXP(value, 0), 0)) == REG &&
+	  GET_CODE(XEXP(XEXP(value, 0), 1)) == CONST_INT) {
 	  var_loc->type = pdb_var_loc_regrel;
-	  var_loc->reg = map_register_no(value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->u.reg.regno, value->u.fld[0].rt_rtx->u.fld[0].rt_rtx->mode);
-	  var_loc->offset = value->u.fld[0].rt_rtx->u.fld[1].rt_rtx->u.fld[0].rt_int;
-	} else if (value->u.fld[0].rt_rtx->code == REG) {
+	  var_loc->reg = map_register_no(REGNO(XEXP(XEXP(value, 0), 0)), GET_MODE(XEXP(XEXP(value, 0), 0)));
+	  var_loc->offset = XINT(XEXP(XEXP(value, 0), 1), 0);
+	} else if (GET_CODE(XEXP(value, 0)) == REG) {
 	  var_loc->type = pdb_var_loc_regrel;
-	  var_loc->reg = map_register_no(value->u.fld[0].rt_rtx->u.reg.regno, value->u.fld[0].rt_rtx->mode);
+	  var_loc->reg = map_register_no(REGNO(XEXP(value, 0)), GET_MODE(XEXP(value, 0)));
 	  var_loc->offset = 0;
 	}
       break;
