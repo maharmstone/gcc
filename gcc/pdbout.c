@@ -3736,7 +3736,7 @@ pdbout_function_decl_block(tree block)
     if (TREE_CODE(f) == VAR_DECL && DECL_RTL_SET_P(f) && DECL_NAME(f)) {
       struct pdb_type *type;
 
-      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), f, find_type(f->typed.type, &type),
+      add_local(IDENTIFIER_POINTER(DECL_NAME(f)), f, find_type(TREE_TYPE(f), &type),
 		DECL_RTL(f), BLOCK_NUMBER(block));
 
       if (type)
