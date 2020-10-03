@@ -55,17 +55,18 @@
 #define LF_QUADWORD			0x8009
 #define LF_UQUADWORD			0x800a
 
+/* Format version as of MSVC 7 */
 #define CV_SIGNATURE_C13	4
 
-#define CV_DEBUG_S_SYMBOLS		0xf1
-#define CV_DEBUG_S_LINES		0xf2
-#define CV_DEBUG_S_STRINGTABLE		0xf3
-#define CV_DEBUG_S_FILECHKSMS		0xf4
+#define DEBUG_S_SYMBOLS			0xf1
+#define DEBUG_S_LINES			0xf2
+#define DEBUG_S_STRINGTABLE		0xf3
+#define DEBUG_S_FILECHKSMS		0xf4
 
-#define CV_CHKSUM_TYPE_NONE			0
-#define CV_CHKSUM_TYPE_CHKSUM_TYPE_MD5		1
-#define CV_CHKSUM_TYPE_CHKSUM_TYPE_SHA1		2
-#define CV_CHKSUM_TYPE_CHKSUM_TYPE_SHA_256	3
+#define CHKSUM_TYPE_NONE		0
+#define CHKSUM_TYPE_MD5			1
+#define CHKSUM_TYPE_SHA1		2
+#define CHKSUM_TYPE_SHA_256		3
 
 struct pdb_line
 {

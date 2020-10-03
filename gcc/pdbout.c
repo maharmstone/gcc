@@ -543,7 +543,7 @@ pdbout_ldata32 (struct pdb_global_var *v)
 static void
 write_file_checksums ()
 {
-  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_FILECHKSMS);
+  fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_FILECHKSMS);
   fprintf (asm_out_file, "\t.long\t[.chksumsend]-[.chksumsstart]\n");
   fprintf (asm_out_file, ".chksumsstart:\n");
 
@@ -553,8 +553,7 @@ write_file_checksums ()
 
       fprintf (asm_out_file, "\t.long\t0x%x\n", source_files->str_offset);
       fprintf (asm_out_file, "\t.byte\t0x%x\n", 16);	// length of MD5 hash
-      fprintf (asm_out_file, "\t.byte\t0x%x\n",
-	       CV_CHKSUM_TYPE_CHKSUM_TYPE_MD5);
+      fprintf (asm_out_file, "\t.byte\t0x%x\n", CHKSUM_TYPE_MD5);
 
       for (unsigned int i = 0; i < 16; i++)
 	{
@@ -596,7 +595,7 @@ write_line_numbers ()
 	  l = l->next;
 	}
 
-      fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_LINES);
+      fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_LINES);
       fprintf (asm_out_file, "\t.long\t[.linesend%u]-[.linesstart%u]\n",
 	       func->num, func->num);
       fprintf (asm_out_file, ".linesstart%u:\n", func->num);
@@ -652,7 +651,7 @@ write_pdb_section (void)
 
   fprintf (asm_out_file, "\t.section\t.debug$S, \"ndr\"\n");
   fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
-  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_SYMBOLS);
+  fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_SYMBOLS);
   fprintf (asm_out_file, "\t.long\t[.symend]-[.symstart]\n");
 
   fprintf (asm_out_file, ".symstart:\n");
@@ -686,7 +685,7 @@ write_pdb_section (void)
 
   fprintf (asm_out_file, ".symend:\n");
 
-  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_DEBUG_S_STRINGTABLE);
+  fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_STRINGTABLE);
   fprintf (asm_out_file, "\t.long\t[.strtableend]-[.strtablestart]\n");
   fprintf (asm_out_file, ".strtablestart:\n");
   fprintf (asm_out_file, "\t.byte\t0\n");
