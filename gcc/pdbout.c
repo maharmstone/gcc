@@ -17,6 +17,11 @@
  * along with GCC; see the file COPYING3.  If not see
  * <http://www.gnu.org/licenses/>.  */
 
+/* The CodeView structure is partially documented - definitions of structures
+ * output below can be found at:
+ * https://github.com/microsoft/microsoft-pdb/blob/master/include/cvinfo.h
+ */
+
 #include "config.h"
 #include "system.h"
 #include "coretypes.h"
@@ -123,6 +128,7 @@ const struct gcc_debug_hooks pdb_debug_hooks = {
   TYPE_SYMTAB_IS_ADDRESS	/* tree_type_symtab_field */
 };
 
+/* Add label before function start */
 static void
 pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 		       unsigned int column ATTRIBUTE_UNUSED,
@@ -132,6 +138,7 @@ pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 	   current_function_funcdef_no);
 }
 
+/* Add label after function end */
 static void
 pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 		     const char *file ATTRIBUTE_UNUSED)
@@ -139,6 +146,9 @@ pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
   fprintf (asm_out_file, FUNC_END_LABEL "%u:\n", current_function_funcdef_no);
 }
 
+/* Output DEFRANGESYMREGISTER or DEFRANGESYMREGISTERREL structure, describing
+ * the scope range, register, and offset at which a local variable can be
+ * found. */
 static void
 write_var_location (struct pdb_var_location *var_loc,
 		    unsigned int next_var_loc_number, unsigned int func_num)
@@ -198,6 +208,9 @@ write_var_location (struct pdb_var_location *var_loc,
     }
 }
 
+/* We have encountered an optimized local variable, i.e. one which doesn't
+ * live in the same place for the duration of a function.
+ * Output a LOCALSYM struct. */
 static void
 pdbout_optimized_local_variable (struct pdb_local_var *v,
 				 struct pdb_var_location *var_locs,
@@ -245,6 +258,7 @@ pdbout_optimized_local_variable (struct pdb_local_var *v,
   write_var_location (last_pvl, 0, func_num);
 }
 
+/* Output the information as to where to a local variable can be found. */
 static void
 pdbout_local_variable (struct pdb_local_var *v,
 		       struct pdb_var_location *var_locs,
@@ -269,8 +283,8 @@ pdbout_local_variable (struct pdb_local_var *v,
   switch (v->var_type)
     {
     case pdb_local_var_regrel:
-      if (v->reg == CV_X86_EBP)
-	{			// ebp is a special case
+      if (v->reg == CV_X86_EBP) // ebp is a special case
+	{
 	  len = 13 + name_len;
 
 	  if (len % 4 != 0)
@@ -280,6 +294,8 @@ pdbout_local_variable (struct pdb_local_var *v,
 	    }
 	  else
 	    align = 0;
+
+	  /* Output BPRELSYM32 struct */
 
 	  fprintf (asm_out_file, "\t.short\t0x%x\n",
 		   (uint16_t) (len - sizeof (uint16_t)));	// reclen
@@ -300,6 +316,8 @@ pdbout_local_variable (struct pdb_local_var *v,
 	    }
 	  else
 	    align = 0;
+
+	  /* Output REGREL32 struct */
 
 	  fprintf (asm_out_file, "\t.short\t0x%x\n",
 		   (uint16_t) (len - sizeof (uint16_t)));	// reclen
@@ -328,6 +346,8 @@ pdbout_local_variable (struct pdb_local_var *v,
       else
 	align = 0;
 
+      /* Output REGSYM struct */
+
       fprintf (asm_out_file, "\t.short\t0x%x\n",
 	       (uint16_t) (len - sizeof (uint16_t)));	// reclen
       fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGISTER);
@@ -352,6 +372,8 @@ pdbout_local_variable (struct pdb_local_var *v,
 	}
       else
 	align = 0;
+
+      /* Output DATASYM32 struct */
 
       fprintf (asm_out_file, "\t.short\t0x%x\n",
 	       (uint16_t) (len - sizeof (uint16_t)));	// reclen
@@ -378,6 +400,8 @@ pdbout_local_variable (struct pdb_local_var *v,
     }
 }
 
+/* Output BLOCKSYM32 structure, describing block-level scope
+ * for the purpose of local variables. */
 static void
 pdbout_block (struct pdb_block *block, struct pdb_func *func)
 {
@@ -432,6 +456,8 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
     }
 }
 
+/* Output PROCSYM32 structure, which describes a global function (S_GPROC32)
+ * or a local (i.e. static) one (S_LPROC32). */
 static void
 pdbout_proc32 (struct pdb_func *func)
 {
@@ -509,6 +535,8 @@ pdbout_proc32 (struct pdb_func *func)
     }
 }
 
+/* Output DATASYM32 structure, describing a global variable: either
+ * one with file-level scope (S_LDATA32) or global scope (S_GDATA32). */
 static void
 pdbout_ldata32 (struct pdb_global_var *v)
 {
@@ -540,6 +568,8 @@ pdbout_ldata32 (struct pdb_global_var *v)
   fprintf (asm_out_file, "\t.balign\t4\n");
 }
 
+/* Output names of the files which make up this translation unit,
+ * along with their MD5 checksums. */
 static void
 write_file_checksums ()
 {
@@ -572,6 +602,7 @@ write_file_checksums ()
   fprintf (asm_out_file, ".chksumsend:\n");
 }
 
+/* Loop through each function, and output the line number to address mapping. */
 static void
 write_line_numbers ()
 {
@@ -643,6 +674,14 @@ write_line_numbers ()
     }
 }
 
+/* Output the .debug$S section, which has everything except the
+ * type definitions (global variables, functions, string table,
+ * file checksums, line numbers).
+ * The linker will extract this section from all the object
+ * files, remove any duplicate data, resolve all addresses,
+ * and output the resulting data into a PDB file. The section's
+ * marked as "ndr", so even if the linker doesn't understand it,
+ * the section won't make its way into final binary. */
 static void
 write_pdb_section (void)
 {
@@ -721,6 +760,7 @@ write_pdb_section (void)
     }
 }
 
+/* Free a pdb_type that we've allocated. */
 static void
 free_type (struct pdb_type *t)
 {
@@ -767,6 +807,8 @@ free_type (struct pdb_type *t)
   free (t);
 }
 
+/* Output a lfFieldlist structure, which describes the fields of a struct,
+ * class, or union, or the values of an enum. */
 static void
 write_fieldlist (struct pdb_fieldlist *fl)
 {
@@ -782,8 +824,8 @@ write_fieldlist (struct pdb_fieldlist *fl)
 	{
 	  len += 5;
 
-	  // Positive values less than 0x8000 are stored as they are; otherwise
-	  // we prepend two bytes describing what type it is.
+	  /* Positive values less than 0x8000 are stored as they are; otherwise
+	   * we prepend two bytes describing what type it is. */
 
 	  if (fl->entries[i].value >= 0x8000 || fl->entries[i].value < 0)
 	    {
@@ -944,6 +986,7 @@ write_fieldlist (struct pdb_fieldlist *fl)
     }
 }
 
+/* Output a lfClass / lfStructure struct. */
 static void
 write_struct (uint16_t type, struct pdb_struct *str)
 {
@@ -984,6 +1027,7 @@ write_struct (uint16_t type, struct pdb_struct *str)
     }
 }
 
+/* Output a lfUnion structure. */
 static void
 write_union (struct pdb_struct *str)
 {
@@ -1020,6 +1064,7 @@ write_union (struct pdb_struct *str)
     }
 }
 
+/* Output a lfEnum structure. */
 static void
 write_enum (struct pdb_enum *en)
 {
@@ -1057,6 +1102,7 @@ write_enum (struct pdb_enum *en)
     }
 }
 
+/* Output a lfPointer structure. */
 static void
 write_pointer (struct pdb_pointer *ptr)
 {
@@ -1067,6 +1113,7 @@ write_pointer (struct pdb_pointer *ptr)
   fprintf (asm_out_file, "\t.long\t0x%x\n", ptr->attr.num);
 }
 
+/* Output a lfArray structure. */
 static void
 write_array (struct pdb_array *arr)
 {
@@ -1074,12 +1121,12 @@ write_array (struct pdb_array *arr)
 
   if (arr->length >= 0x8000)
     {
-      if (arr->length <= 0xffff)	// LF_USHORT
-	len += 2;
-      else if (arr->length <= 0xffffffff)	// LF_ULONG
-	len += 4;
-      else			// LF_UQUADWORD
-	len += 8;
+      if (arr->length <= 0xffff)
+	len += 2;	// LF_USHORT
+      else if (arr->length <= 0xffffffff)
+	len += 4;	// LF_ULONG
+      else
+	len += 8;	// LF_UQUADWORD
     }
 
   align = 4 - (len % 4);
@@ -1130,6 +1177,8 @@ write_array (struct pdb_array *arr)
     }
 }
 
+/* Output a lfArgList structure, describing the arguments that a
+ * procedure expects. */
 static void
 write_arglist (struct pdb_arglist *arglist)
 {
@@ -1156,6 +1205,9 @@ write_arglist (struct pdb_arglist *arglist)
     }
 }
 
+/* Output a lfProc structure, which describes the prototype of a
+ * procedure. See also pdbout_proc32, which outputs the details of
+ * a specific procedure. */
 static void
 write_procedure (struct pdb_proc *proc)
 {
@@ -1170,6 +1222,7 @@ write_procedure (struct pdb_proc *proc)
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 }
 
+/* Output lfStringId structure. */
 static void
 write_string_id (struct pdb_type *t)
 {
@@ -1199,6 +1252,10 @@ write_string_id (struct pdb_type *t)
     fprintf (asm_out_file, "\t.byte\t0xf1\n");
 }
 
+/* Output lfUdtSrcLine structure, describing on which line in a file a
+ * type is defined. The linker transforms this into a lfUdtModSrcLine
+ * structure (LF_UDT_MOD_SRC_LINE), which also adds details of the
+ * "module" (i.e. object file). */
 static void
 write_udt_src_line (struct pdb_udt_src_line *t)
 {
@@ -1211,6 +1268,8 @@ write_udt_src_line (struct pdb_udt_src_line *t)
   fprintf (asm_out_file, "\t.long\t0x%x\n", t->line);
 }
 
+/* Output lfModifier structure, representing a const or volatile version
+ * of an existing type. */
 static void
 write_modifier (struct pdb_modifier *t)
 {
@@ -1222,6 +1281,7 @@ write_modifier (struct pdb_modifier *t)
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 }
 
+/* Output lfBitfield structure. */
 static void
 write_bitfield (struct pdb_bitfield *t)
 {
@@ -1236,6 +1296,7 @@ write_bitfield (struct pdb_bitfield *t)
   fprintf (asm_out_file, "\t.byte\t0xf1\n");	// alignment
 }
 
+/* Given a pdb_type, output its definition. */
 static void
 write_type (struct pdb_type *t)
 {
@@ -1292,6 +1353,8 @@ write_type (struct pdb_type *t)
     }
 }
 
+/* Output the .debug$T section, which contains all the types used.
+ * Types defined but not used will not be output. */
 static void
 write_pdb_type_section (void)
 {
@@ -1364,6 +1427,8 @@ is_type_used (uint16_t id)
   return false;
 }
 
+/* Loop through our list of types. If a type is marked as used but a type
+ * it refers to isn't, marked that type as used too. */
 static void
 mark_referenced_types_used (void)
 {
@@ -1534,6 +1599,9 @@ mark_referenced_types_used (void)
     }
   while (changed);
 
+  /* LF_UDT_SRC_LINE entries reference a string in the string table;
+   * mark that as used too. */
+
   t = types;
   while (t)
     {
@@ -1555,6 +1623,10 @@ mark_referenced_types_used (void)
     }
 }
 
+/* Each type gets given a sequential number, starting from 0x1000. Once we've
+ * removed the unused types, we need to renumber the remaining types. The
+ * linker will do a similar thing when it removes duplicate types defined in
+ * multiple object files. */
 static void
 renumber_types (void)
 {
@@ -1773,6 +1845,8 @@ renumber_types (void)
   free (type_list);
 }
 
+/* We've finished compilation - output the .debug$S and .debug$T sections
+ * to the ASM file. */
 static void
 pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 {
