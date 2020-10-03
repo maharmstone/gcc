@@ -17,8 +17,6 @@
 #include "cp/cp-tree.h"
 #include "common/common-target.h"
 #include "except.h"
-#include "print-tree.h" // FIXME - remove this
-#include "print-rtl.h" // FIXME - and this
 
 #define FUNC_BEGIN_LABEL	".startfunc"
 #define FUNC_END_LABEL		".endfunc"
@@ -175,7 +173,7 @@ pdbout_optimized_local_variable (struct pdb_local_var *v, struct pdb_var_locatio
   fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t)(len - sizeof(uint16_t)));
   fprintf (asm_out_file, "\t.short\t0x%x\n", S_LOCAL);
   fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
-  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - flags (CV_LVARFLAGS)
+  fprintf (asm_out_file, "\t.short\t0\n"); // flags
 
   ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
 
@@ -369,20 +367,18 @@ pdbout_proc32 (struct pdb_func *func)
   fprintf (asm_out_file, "\t.long\t[.cvprocend%u]-[.debug$S]\n", func->num); // pEnd
   fprintf (asm_out_file, "\t.long\t0\n"); // pNext
   fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num); // len
-  fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - DbgStart
-  fprintf (asm_out_file, "\t.long\t0\n"); // FIXME - DbgEnd
+  fprintf (asm_out_file, "\t.long\t0\n"); // DbgStart
+  fprintf (asm_out_file, "\t.long\t0\n"); // DbgEnd
   fprintf (asm_out_file, "\t.short\t0x%x\n", func->type);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
   fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n", func->num); // off
   fprintf (asm_out_file, "\t.short\t0\n"); // seg (will get set by the linker)
-  fprintf (asm_out_file, "\t.byte\t0\n"); // FIXME - flags
+  fprintf (asm_out_file, "\t.byte\t0\n"); // flags
   ASM_OUTPUT_ASCII (asm_out_file, func->name, name_len + 1);
 
   for (unsigned int i = 0; i < align; i++) {
     fprintf (asm_out_file, "\t.byte\t0\n");
   }
-
-  // FIXME - S_FRAMEPROC, S_CALLSITEINFO, etc.
 
   pdbout_block(&func->block, func);
 
@@ -792,18 +788,15 @@ write_struct(uint16_t type, struct pdb_struct *str)
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->field);
   fprintf (asm_out_file, "\t.short\t0\n"); // derived
   fprintf (asm_out_file, "\t.short\t0\n"); // vshape
-
-  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME
-  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME
-  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME
+  fprintf (asm_out_file, "\t.short\t0\n");
+  fprintf (asm_out_file, "\t.short\t0\n");
+  fprintf (asm_out_file, "\t.short\t0\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->size);
 
   if (str->name)
     ASM_OUTPUT_ASCII (asm_out_file, str->name, name_len + 1);
   else
     ASM_OUTPUT_ASCII (asm_out_file, unnamed, sizeof(unnamed));
-
-  // FIXME - unique name?
 
   align = 4 - ((3 + name_len) % 4);
 
@@ -832,15 +825,13 @@ write_union(struct pdb_struct *str)
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->property.value);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->field);
-  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME
+  fprintf (asm_out_file, "\t.short\t0\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->size);
 
   if (str->name)
     ASM_OUTPUT_ASCII (asm_out_file, str->name, name_len + 1);
   else
     ASM_OUTPUT_ASCII (asm_out_file, unnamed, sizeof(unnamed));
-
-  // FIXME - unique name?
 
   align = 4 - ((3 + name_len) % 4);
 
@@ -867,7 +858,7 @@ write_enum(struct pdb_enum *en)
   fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ENUM);
   fprintf (asm_out_file, "\t.short\t0x%x\n", en->count);
-  fprintf (asm_out_file, "\t.short\t0\n"); // FIXME - property
+  fprintf (asm_out_file, "\t.short\t0\n"); // property
   fprintf (asm_out_file, "\t.short\t0x%x\n", en->type);
   fprintf (asm_out_file, "\t.short\t0\n"); // padding
   fprintf (asm_out_file, "\t.short\t0x%x\n", en->field);
@@ -2406,7 +2397,7 @@ find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
 	if (DECL_NAME(f) && IDENTIFIER_POINTER(DECL_NAME(f))) {
 
 	  ent->cv_type = LF_MEMBER;
-	  ent->fld_attr = CV_FLDATTR_PUBLIC; // FIXME?
+	  ent->fld_attr = CV_FLDATTR_PUBLIC;
 	  ent->name = xstrdup(IDENTIFIER_POINTER(DECL_NAME(f)));
 
 	  if (DECL_BIT_FIELD_TYPE(f)) {
@@ -2437,7 +2428,7 @@ find_type_struct(tree t, struct pdb_type **typeptr, bool is_union)
 		ent->cv_type = fl->entries[i].cv_type;
 		ent->type = fl->entries[i].type;
 		ent->offset = (bit_offset / 8) + fl->entries[i].offset;
-		ent->fld_attr = fl->entries[i].fld_attr; // FIXME?
+		ent->fld_attr = fl->entries[i].fld_attr;
 		ent->name = fl->entries[i].name ? xstrdup(fl->entries[i].name) : NULL;
 
 		ent++;
@@ -2523,13 +2514,13 @@ find_type_enum(tree t, struct pdb_type **typeptr)
 
   while (v) {
     ent->cv_type = LF_ENUMERATE;
-    ent->fld_attr = 0; // FIXME
+    ent->fld_attr = 0;
 
     if (TREE_CODE(TREE_VALUE(v)) == CONST_DECL)
       ent->value = TREE_INT_CST_ELT(DECL_INITIAL(TREE_VALUE(v)), 0);
     else if (TREE_CODE(TREE_VALUE(v)) == INTEGER_CST)
       ent->value = TREE_INT_CST_ELT(TREE_VALUE(v), 0);
-    else // FIXME - print error or warning?
+    else
       ent->value = 0;
 
     ent->name = xstrdup(IDENTIFIER_POINTER(TREE_PURPOSE(v)));
@@ -2628,7 +2619,7 @@ find_type_array(tree t, struct pdb_type **typeptr)
 
   arr = (struct pdb_array*)arrtype->data;
   arr->type = type;
-  arr->index_type = CV_BUILTIN_TYPE_UINT32LONG; // FIXME?
+  arr->index_type = CV_BUILTIN_TYPE_UINT32LONG;
   arr->length = TYPE_SIZE(t) ? (TREE_INT_CST_ELT(TYPE_SIZE(t), 0) / 8) : 0;
 
   return add_type(arrtype, typeptr);
@@ -3386,7 +3377,7 @@ map_register_no_x86 (unsigned int regno, machine_mode mode)
     }
   }
 
-  fprintf(stderr, "Unhandled register %x, mode %x\n", regno, mode); // FIXME
+  warning(0, "could not map x86 register %u, mode %u to CodeView constant", regno, mode);
 
   return CV_X86_NONE;
 }
@@ -3652,7 +3643,7 @@ map_register_no_amd64 (unsigned int regno, machine_mode mode)
     }
   }
 
-  fprintf(stderr, "Unhandled register %x, mode %x\n", regno, mode); // FIXME
+  warning(0, "could not map amd64 register %u, mode %u to CodeView constant", regno, mode);
 
   return CV_AMD64_NONE;
 }
