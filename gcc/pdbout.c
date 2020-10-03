@@ -152,13 +152,18 @@ write_var_location (struct pdb_var_location *var_loc,
       fprintf (asm_out_file, "\t.short\t0\n");	// range attr
       fprintf (asm_out_file, "\t.long\t[.varloc%u]\n",
 	       var_loc->var_loc_number);
-      fprintf (asm_out_file, "\t.short\t0\n");	// section (will be filled in by the linker)
+
+      // section (will be filled in by the linker)
+      fprintf (asm_out_file, "\t.short\t0\n");
 
       if (next_var_loc_number != 0)
 	fprintf (asm_out_file, "\t.short\t[.varloc%u]-[.varloc%u]\n",
 		 next_var_loc_number, var_loc->var_loc_number);
-      else
-	fprintf (asm_out_file, "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n", func_num, var_loc->var_loc_number);	// to end of function
+      else {
+	fprintf (asm_out_file,
+		 "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n",
+		 func_num, var_loc->var_loc_number);	// to end of function
+      }
 
       break;
 
@@ -166,17 +171,25 @@ write_var_location (struct pdb_var_location *var_loc,
       fprintf (asm_out_file, "\t.short\t0x12\n");
       fprintf (asm_out_file, "\t.short\t0x%x\n", S_DEFRANGE_REGISTER_REL);
       fprintf (asm_out_file, "\t.short\t0x%x\n", var_loc->reg);
-      fprintf (asm_out_file, "\t.short\t0\n");	// spilledUdtMember, padding, offsetParent
+
+      // spilledUdtMember, padding, offsetParent
+      fprintf (asm_out_file, "\t.short\t0\n");
+
       fprintf (asm_out_file, "\t.long\t0x%x\n", var_loc->offset);
       fprintf (asm_out_file, "\t.long\t[.varloc%u]\n",
 	       var_loc->var_loc_number);
-      fprintf (asm_out_file, "\t.short\t0\n");	// section (will be filled in by the linker)
+
+      // section (will be filled in by the linker)
+      fprintf (asm_out_file, "\t.short\t0\n");
 
       if (next_var_loc_number != 0)
 	fprintf (asm_out_file, "\t.short\t[.varloc%u]-[.varloc%u]\n",
 		 next_var_loc_number, var_loc->var_loc_number);
-      else
-	fprintf (asm_out_file, "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n", func_num, var_loc->var_loc_number);	// to end of function
+      else {
+	fprintf (asm_out_file,
+		 "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n",
+		 func_num, var_loc->var_loc_number);	// to end of function
+      }
 
       break;
 
@@ -268,7 +281,8 @@ pdbout_local_variable (struct pdb_local_var *v,
 	  else
 	    align = 0;
 
-	  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
+	  fprintf (asm_out_file, "\t.short\t0x%x\n",
+		   (uint16_t) (len - sizeof (uint16_t)));	// reclen
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", S_BPREL32);
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
@@ -287,7 +301,8 @@ pdbout_local_variable (struct pdb_local_var *v,
 	  else
 	    align = 0;
 
-	  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
+	  fprintf (asm_out_file, "\t.short\t0x%x\n",
+		   (uint16_t) (len - sizeof (uint16_t)));	// reclen
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGREL32);
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
@@ -313,7 +328,8 @@ pdbout_local_variable (struct pdb_local_var *v,
       else
 	align = 0;
 
-      fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
+      fprintf (asm_out_file, "\t.short\t0x%x\n",
+	       (uint16_t) (len - sizeof (uint16_t)));	// reclen
       fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGISTER);
       fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
       fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
@@ -337,7 +353,8 @@ pdbout_local_variable (struct pdb_local_var *v,
       else
 	align = 0;
 
-      fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
+      fprintf (asm_out_file, "\t.short\t0x%x\n",
+	       (uint16_t) (len - sizeof (uint16_t)));	// reclen
       fprintf (asm_out_file, "\t.short\t0x%x\n", S_LDATA32);
       fprintf (asm_out_file, "\t.short\t0x%x\n", v->type);
       fprintf (asm_out_file, "\t.short\t0\n");
@@ -346,7 +363,8 @@ pdbout_local_variable (struct pdb_local_var *v,
       ASM_OUTPUT_LABELREF (asm_out_file, v->symbol);
       fprintf (asm_out_file, "]\n");
 
-      fprintf (asm_out_file, "\t.short\t0\n");	// seg (will get set by the linker)
+      // section (will get set by the linker)
+      fprintf (asm_out_file, "\t.short\t0\n");
       ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
 
       for (unsigned int i = 0; i < align; i++)
@@ -381,15 +399,24 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
       fprintf (asm_out_file, "\t.short\t0x16\n");	// reclen
       fprintf (asm_out_file, "\t.short\t0x%x\n", S_BLOCK32);
 
-      if (block->num != 0)
-	fprintf (asm_out_file, "\t.long\t[.cvblockstart%u]-[.debug$S]\n", block->num);	// pParent
-      else
-	fprintf (asm_out_file, "\t.long\t[.cvprocstart%u]-[.debug$S]\n", func->num);	// pParent
+      // pParent
+      if (block->num != 0) {
+	fprintf (asm_out_file, "\t.long\t[.cvblockstart%u]-[.debug$S]\n",
+		 block->num);
+      } else {
+	fprintf (asm_out_file, "\t.long\t[.cvprocstart%u]-[.debug$S]\n",
+		 func->num);
+      }
 
-      fprintf (asm_out_file, "\t.long\t[.cvblockend%u]-[.debug$S]\n", block->children->num);	// pEnd
-      fprintf (asm_out_file, "\t.long\t[.blockend%u]-[.blockstart%u]\n", block->children->num, block->children->num);	// length
-      fprintf (asm_out_file, "\t.long\t[.blockstart%u]\n", block->children->num);	// offset
-      fprintf (asm_out_file, "\t.short\t0\n");	// section (will be filled in by the linker)
+      fprintf (asm_out_file, "\t.long\t[.cvblockend%u]-[.debug$S]\n",
+	       block->children->num);	// pEnd
+      fprintf (asm_out_file, "\t.long\t[.blockend%u]-[.blockstart%u]\n",
+	       block->children->num, block->children->num);	// length
+      fprintf (asm_out_file, "\t.long\t[.blockstart%u]\n",
+	       block->children->num);	// offset
+
+      // section (will be filled in by the linker)
+      fprintf (asm_out_file, "\t.short\t0\n");
       fprintf (asm_out_file, "\t.byte\t0\n");	// name (zero-length string)
       fprintf (asm_out_file, "\t.byte\t0\n");	// padding
 
@@ -422,19 +449,27 @@ pdbout_proc32 (struct pdb_func *func)
     align = 0;
 
   fprintf (asm_out_file, ".cvprocstart%u:\n", func->num);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   (uint16_t) (len - sizeof (uint16_t)));	// reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n",
 	   func->public_flag ? S_GPROC32 : S_LPROC32);
   fprintf (asm_out_file, "\t.long\t0\n");	// pParent
-  fprintf (asm_out_file, "\t.long\t[.cvprocend%u]-[.debug$S]\n", func->num);	// pEnd
+  fprintf (asm_out_file, "\t.long\t[.cvprocend%u]-[.debug$S]\n",
+	   func->num);	// pEnd
   fprintf (asm_out_file, "\t.long\t0\n");	// pNext
-  fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num);	// len
+  fprintf (asm_out_file,
+	   "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n",
+	   func->num, func->num);	// len
   fprintf (asm_out_file, "\t.long\t0\n");	// DbgStart
   fprintf (asm_out_file, "\t.long\t0\n");	// DbgEnd
   fprintf (asm_out_file, "\t.short\t0x%x\n", func->type);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
-  fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n", func->num);	// off
-  fprintf (asm_out_file, "\t.short\t0\n");	// seg (will get set by the linker)
+  fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n",
+	   func->num);	// off
+
+  // section (will get set by the linker)
+  fprintf (asm_out_file, "\t.short\t0\n");
+
   fprintf (asm_out_file, "\t.byte\t0\n");	// flags
   ASM_OUTPUT_ASCII (asm_out_file, func->name, name_len + 1);
 
@@ -487,7 +522,8 @@ pdbout_ldata32 (struct pdb_global_var *v)
   if (len % 4 != 0)
     len += 4 - (len % 4);
 
-  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   (uint16_t) (len - sizeof (uint16_t)));	// reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n",
 	   v->public_flag ? S_GDATA32 : S_LDATA32);
   fprintf (asm_out_file, "\t.short\t0x%x\n", v->type);
@@ -497,7 +533,8 @@ pdbout_ldata32 (struct pdb_global_var *v)
   ASM_OUTPUT_LABELREF (asm_out_file, v->asm_name);
   fprintf (asm_out_file, "]\n");
 
-  fprintf (asm_out_file, "\t.short\t0\n");	// seg (will get set by the linker)
+  // section (will get set by the linker)
+  fprintf (asm_out_file, "\t.short\t0\n");
   ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
 
   fprintf (asm_out_file, "\t.balign\t4\n");
@@ -564,19 +601,29 @@ write_line_numbers ()
 	       func->num, func->num);
       fprintf (asm_out_file, ".linesstart%u:\n", func->num);
 
-      fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n", func->num);	// address
-      fprintf (asm_out_file, "\t.short\t0\n");	// segment (filled in by linker)
-      fprintf (asm_out_file, "\t.short\t0\n");	// flags
-      fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num);	// length
+      fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n",
+	       func->num);	// address
 
-      fprintf (asm_out_file, "\t.long\t0x%x\n", func->source_file * 0x18);	// file ID (0x18 is size of checksum struct)
+      // section (filled in by linker)
+      fprintf (asm_out_file, "\t.short\t0\n");
+
+      fprintf (asm_out_file, "\t.short\t0\n");	// flags
+      fprintf (asm_out_file,
+	       "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n",
+	       func->num, func->num);	// length
+
+      // file ID (0x18 is size of checksum struct)
+      fprintf (asm_out_file, "\t.long\t0x%x\n", func->source_file * 0x18);
       fprintf (asm_out_file, "\t.long\t0x%x\n", num_entries);
-      fprintf (asm_out_file, "\t.long\t0x%x\n", 0xc + (num_entries * 8));	// length of file block
+      // length of file block
+      fprintf (asm_out_file, "\t.long\t0x%x\n", 0xc + (num_entries * 8));
 
       l = func->lines;
       while (l)
 	{
-	  fprintf (asm_out_file, "\t.long\t[.line%u]-[" FUNC_BEGIN_LABEL "%u]\n", l->entry, func->num);	// offset
+	  fprintf (asm_out_file,
+		   "\t.long\t[.line%u]-[" FUNC_BEGIN_LABEL "%u]\n",
+		   l->entry, func->num);	// offset
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", l->line);	// line no.
 
 	  l = l->next;
@@ -741,18 +788,22 @@ write_fieldlist (struct pdb_fieldlist *fl)
 
 	  if (fl->entries[i].value >= 0x8000 || fl->entries[i].value < 0)
 	    {
-	      if (fl->entries[i].value >= -127 && fl->entries[i].value < 0)	// LF_CHAR
-		len++;
-	      else if (fl->entries[i].value >= -0x7fff && fl->entries[i].value <= 0x7fff)	// LF_SHORT
-		len += 2;
-	      else if (fl->entries[i].value >= 0x8000 && fl->entries[i].value <= 0xffff)	// LF_USHORT
-		len += 2;
-	      else if (fl->entries[i].value >= -0x7fffffff && fl->entries[i].value <= 0x7fffffff)	// LF_LONG
-		len += 4;
-	      else if (fl->entries[i].value >= 0x80000000 && fl->entries[i].value <= 0xffffffff)	// LF_ULONG
-		len += 4;
-	      else		// LF_QUADWORD or LF_UQUADWORD
-		len += 8;
+	      if (fl->entries[i].value >= -127 && fl->entries[i].value < 0)
+		len++; 	// LF_CHAR
+	      else if (fl->entries[i].value >= -0x7fff &&
+		       fl->entries[i].value <= 0x7fff) {
+		len += 2; // LF_SHORT
+	      } else if (fl->entries[i].value >= 0x8000 &&
+			 fl->entries[i].value <= 0xffff) {
+		len += 2; // LF_USHORT
+	      } else if (fl->entries[i].value >= -0x7fffffff &&
+			 fl->entries[i].value <= 0x7fffffff) {
+		len += 4; // LF_LONG
+	      } else if (fl->entries[i].value >= 0x80000000 &&
+			 fl->entries[i].value <= 0xffffffff) {
+		len += 4; // LF_ULONG
+	      } else
+		len += 8;	// LF_QUADWORD or LF_UQUADWORD
 	    }
 
 	  if (fl->entries[i].name)
@@ -1432,7 +1483,8 @@ mark_referenced_types_used (void)
 		if (str->field >= FIRST_TYPE_NUM && str->field < type_num)
 		  mark_type_used (str->field, &changed);
 
-		// forward declarations should propagate usedness to actual types
+		// forward declarations should propagate usedness
+		// to actual types
 		if (str->property.s.fwdref && str->name)
 		  {
 		    struct pdb_type *t2 = types;
@@ -2551,14 +2603,15 @@ get_struct_name (tree t)
       char *tmp;
       tree pack = NULL;
 
-      /* If both scope and final part are templated, we're only interested
-       * in the final TREE_VEC. */
+      // If both scope and final part are templated, we're only interested
+      // in the final TREE_VEC.
 
       if (TREE_VEC_LENGTH (args) > 0
 	  && TREE_CODE (TREE_VEC_ELT (args, 0)) == TREE_VEC)
 	args = TREE_VEC_ELT (args, TREE_VEC_LENGTH (args) - 1);
 
-      /* If first element is a TYPE_ARGUMENT_PACK, extract the TREE_VEC from it. */
+      // If first element is a TYPE_ARGUMENT_PACK, extract the
+      // TREE_VEC from it.
 
       if (TREE_VEC_LENGTH (args) > 0
 	  && TREE_CODE (TREE_VEC_ELT (args, 0)) == TYPE_ARGUMENT_PACK)
@@ -2603,7 +2656,8 @@ get_struct_name (tree t)
 	{
 	  args = TREE_TYPE (pack);
 
-	  /* If TYPE_ARGUMENT_PACK is last element but empty, get rid of trailing comma */
+	  // If TYPE_ARGUMENT_PACK is last element but empty,
+	  // get rid of trailing comma
 	  if (TREE_VEC_LENGTH (args) == 0)
 	    name[strlen (name) - 1] = '>';
 
@@ -2755,7 +2809,8 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 			  struct pdb_fieldlist *fl =
 			    (struct pdb_fieldlist *) str2->field_type->data;
 
-			  // treat fields of anonymous struct or union as our own
+			  // treat fields of anonymous struct or union
+			  // as our own
 
 			  for (unsigned int i = 0; i < fl->count; i++)
 			    {
@@ -2928,7 +2983,7 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
     return 0;
 
   if (type < FIRST_TYPE_NUM && TREE_CODE (t) == POINTER_TYPE)
-    {				// pointers to builtins have their own constants
+    {			// pointers to builtins have their own constants
       if (size == 4)
 	return (CV_TM_NPTR32 << 8) | type;
       else if (size == 8)
@@ -3411,11 +3466,12 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
       a->tree = TREE_TYPE (t);
       a->type_id = find_type (DECL_ORIGINAL_TYPE (t), &a->type);
 
+      // HRESULTs have their own value
       if (a->type_id == CV_BUILTIN_TYPE_INT32LONG && DECL_NAME (t)
 	  && IDENTIFIER_POINTER (DECL_NAME (t))
 	  && !strcmp (IDENTIFIER_POINTER (DECL_NAME (t)), "HRESULT"))
 	{
-	  a->type_id = CV_BUILTIN_TYPE_HRESULT;	// HRESULTs have their own value
+	  a->type_id = CV_BUILTIN_TYPE_HRESULT;
 	}
 
       // give name if previously anonymous
@@ -3543,7 +3599,8 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
       psf = psf->next;
     }
 
-  // add LF_UDT_SRC_LINE entry, which linker transforms into LF_UDT_MOD_SRC_LINE
+  // add LF_UDT_SRC_LINE entry, which linker transforms
+  // into LF_UDT_MOD_SRC_LINE
 
   add_udt_src_line_type (type_id, string_type, xloc.line);
 }
