@@ -435,6 +435,7 @@ Objective-C and Objective-C++ Dialects}.
 -gstabs  -gstabs+  -gstrict-dwarf  -gno-strict-dwarf @gol
 -gas-loc-support  -gno-as-loc-support @gol
 -gas-locview-support  -gno-as-locview-support @gol
+-gcodeview @gol
 -gcolumn-info  -gno-column-info @gol
 -gstatement-frontiers  -gno-statement-frontiers @gol
 -gvariable-location-views  -gno-variable-location-views @gol
@@ -8706,6 +8707,12 @@ assembler (GAS) to fail with an error.
 @opindex gvms
 Produce debugging information in Alpha/VMS debug format (if that is
 supported).  This is the format used by DEBUG on Alpha/VMS systems.
+
+@item -gcodeview
+@opindex gcodeview
+Produce debugging information in CodeView debug format (if that is
+supported).  This is the format used by Microsoft Visual C++ on
+Windows.
 
 @item -g@var{level}
 @itemx -ggdb@var{level}
