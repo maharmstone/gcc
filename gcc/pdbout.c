@@ -1858,6 +1858,8 @@ pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
   write_pdb_type_section ();
 }
 
+/* We've been passed a function definition - allocate and initialize a pdb_func
+ * struct to represent it. */
 static void
 pdbout_begin_function (tree func)
 {
@@ -1908,6 +1910,8 @@ pdbout_begin_function (tree func)
     pdbout_source_line (xloc.line, 0, NULL, 0, 0);
 }
 
+/* We've been passed a late global declaration, i.e. a global function -
+ * allocate a pdb_global_var struct and add it to the list of globals. */
 static void
 pdbout_late_global_decl (tree var)
 {
@@ -1941,6 +1945,9 @@ pdbout_late_global_decl (tree var)
   global_vars = v;
 }
 
+/* Given a new type t, search through the list of existing types. If it's a
+ * duplicate of an existing type, free t and return the old type in typeptr.
+ * Otherwise, add t to the end of the list. */
 static uint16_t
 add_type (struct pdb_type *t, struct pdb_type **typeptr)
 {
@@ -1965,42 +1972,36 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 
 		    for (unsigned int i = 0; i < fl1->count; i++)
 		      {
-			if (fl1->entries[i].cv_type !=
-			    fl2->entries[i].cv_type)
+			struct pdb_fieldlist_entry *pfe1 =
+			  (struct pdb_fieldlist_entry *)&fl1->entries[i];
+			struct pdb_fieldlist_entry *pfe2 =
+			  (struct pdb_fieldlist_entry *)&fl2->entries[i];
+
+			if (pfe1->cv_type != pfe2->cv_type)
 			  {
 			    same = false;
 			    break;
 			  }
 
-			if (fl1->entries[i].cv_type == LF_MEMBER)
+			  if (pfe1->cv_type == LF_MEMBER)
 			  {
-			    if (fl1->entries[i].type != fl2->entries[i].type
-				|| fl1->entries[i].offset !=
-				fl2->entries[i].offset
-				|| fl1->entries[i].fld_attr !=
-				fl2->entries[i].fld_attr
-				||
-				((fl1->entries[i].name
-				  || fl2->entries[i].name)
-				 && (!fl1->entries[i].name
-				     || !fl2->entries[i].name
-				     || strcmp (fl1->entries[i].name,
-						fl2->entries[i].name))))
+			    if (pfe1->type != pfe2->type ||
+				pfe1->offset != pfe2->offset ||
+				pfe1->fld_attr != pfe2->fld_attr ||
+				((pfe1->name || pfe2->name) &&
+				(!pfe1->name || !pfe2->name ||
+				strcmp (pfe1->name, pfe2->name))))
 			      {
 				same = false;
 				break;
 			      }
 			  }
-			else if (fl1->entries[i].cv_type == LF_ENUMERATE)
+			  else if (pfe1->cv_type == LF_ENUMERATE)
 			  {
-			    if (fl1->entries[i].value != fl2->entries[i].value
-				||
-				((fl1->entries[i].name
-				  || fl2->entries[i].name)
-				 && (!fl1->entries[i].name
-				     || !fl2->entries[i].name
-				     || strcmp (fl1->entries[i].name,
-						fl2->entries[i].name))))
+			    if (pfe1->value != pfe2->value ||
+				((pfe1->name || pfe2->name) &&
+				(!pfe1->name || !pfe2->name ||
+				strcmp (pfe1->name, pfe2->name))))
 			      {
 				same = false;
 				break;
@@ -2012,8 +2013,11 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 		      {
 			for (unsigned int i = 0; i < fl1->count; i++)
 			  {
-			    if (fl1->entries[i].name)
-			      free (fl1->entries[i].name);
+			    struct pdb_fieldlist_entry *pfe1 =
+			      (struct pdb_fieldlist_entry *)&fl1->entries[i];
+
+			    if (pfe1->name)
+			      free (pfe1->name);
 			  }
 
 			free (t);
@@ -2253,6 +2257,7 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
   return t->id;
 }
 
+/* Allocate a new pdb_type for a bitfield. */
 static uint16_t
 find_type_bitfield (uint16_t underlying_type, unsigned int size,
 		    unsigned int offset)
@@ -2276,6 +2281,9 @@ find_type_bitfield (uint16_t underlying_type, unsigned int size,
   return add_type (type, NULL);
 }
 
+/* Allocate a pdb_type for a forward declaration for a struct. The debugger
+ * will resolve this automatically, by searching for a substantive
+ * struct definition with the same name. */
 static void
 add_struct_forward_declaration (tree t, struct pdb_type **ret)
 {
@@ -2311,6 +2319,10 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
   add_type (strtype, ret);
 }
 
+/* Reallocate the string n, adding the type name of arg and the character
+ * suffix.
+ * We can't use the C++ pretty printer for this as this file gets
+ * compiled into libbackend.a. */
 static void
 append_template_element (char **n, size_t * len, tree arg, char suffix)
 {
@@ -2558,6 +2570,8 @@ append_template_element (char **n, size_t * len, tree arg, char suffix)
   *n = name;
 }
 
+/* For a tree t, construct the struct type name - namespaces, plus the
+ * base name of the struct, plus the template information. */
 static char *
 get_struct_name (tree t)
 {
@@ -2747,6 +2761,8 @@ get_struct_name (tree t)
   return name;
 }
 
+/* For a given struct, class, or union, allocate a new pdb_type and
+ * add it to the type list. */
 static uint16_t
 find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 {
@@ -2946,6 +2962,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
   return new_type;
 }
 
+/* For a given enum, allocate a new pdb_type and add it to the type list. */
 static uint16_t
 find_type_enum (tree t, struct pdb_type **typeptr)
 {
@@ -3044,6 +3061,8 @@ find_type_enum (tree t, struct pdb_type **typeptr)
   return add_type (enumtype, typeptr);
 }
 
+/* Given a pointer type t, allocate a new pdb_type and add it to the
+ * type list. */
 static uint16_t
 find_type_pointer (tree t, struct pdb_type **typeptr)
 {
@@ -3087,6 +3106,8 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
   return add_type (ptrtype, typeptr);
 }
 
+/* Given an array type t, allocate a new pdb_type and add it to the
+ * type list. */
 static uint16_t
 find_type_array (tree t, struct pdb_type **typeptr)
 {
@@ -3111,6 +3132,8 @@ find_type_array (tree t, struct pdb_type **typeptr)
   return add_type (arrtype, typeptr);
 }
 
+/* Given a function type t, allocate a new pdb_type and add it to the
+ * type list. */
 static uint16_t
 find_type_function (tree t, struct pdb_type **typeptr)
 {
@@ -3135,8 +3158,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
 
   arglisttype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
-				 offsetof (struct pdb_arglist,
-					   args) +
+				 offsetof (struct pdb_arglist, args) +
 				 (num_args * sizeof (uint16_t)));
   arglisttype->cv_type = LF_ARGLIST;
   arglisttype->tree = NULL;
@@ -3204,6 +3226,8 @@ find_type_function (tree t, struct pdb_type **typeptr)
   return add_type (proctype, typeptr);
 }
 
+/* Given a CV-modified type t, allocate a new pdb_type modifying
+ * the base type, and add it to the type list. */
 static uint16_t
 find_type_modifier (tree t, struct pdb_type **typeptr)
 {
@@ -3230,6 +3254,9 @@ find_type_modifier (tree t, struct pdb_type **typeptr)
   return add_type (type, typeptr);
 }
 
+/* Resolve a type t to a type number. If it's a builtin type, such as bool or
+ * the various ints, return its constant. Otherwise, allocate a new pdb_type,
+ * add it to the type list, and return it in typeptr. */
 static uint16_t
 find_type (tree t, struct pdb_type **typeptr)
 {
@@ -3484,6 +3511,8 @@ find_type (tree t, struct pdb_type **typeptr)
     }
 }
 
+/* Add a string as a type. This is only used by add_udt_src_line_type,
+ * which uses it to deduplicate source filenames. */
 static uint16_t
 add_string_type (const char *s)
 {
@@ -3500,6 +3529,10 @@ add_string_type (const char *s)
   return add_type (type, NULL);
 }
 
+/* Add a pdb_udt_src_line fake type to the type list, which records the file
+ * and line number where an actual type is defined.
+ * The linker will transform this into a LF_UDT_MOD_SRC_LINE, which also
+ * records the object file. */
 static uint16_t
 add_udt_src_line_type (uint16_t type_id, uint16_t source_file, uint32_t line)
 {
@@ -3521,6 +3554,7 @@ add_udt_src_line_type (uint16_t type_id, uint16_t source_file, uint32_t line)
   return add_type (type, NULL);
 }
 
+/* We've encountered a type definition - add it to the type list. */
 static void
 pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 {
@@ -3529,8 +3563,13 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
   struct pdb_source_file *psf;
   expanded_location xloc;
 
-  if (DECL_ORIGINAL_TYPE (t))
-    {				// typedef
+  /* We need to record the typedefs to ensure e.g. that Windows'
+   * LPWSTR gets mapped to wchar_t* rather than uint16_t*.
+   * There is a LF_ALIAS / lfAlias in Microsoft's header files, but
+   * it seems to have been forgotten about - MSVC won't generate it. */
+
+  if (DECL_ORIGINAL_TYPE (t))	// typedef
+    {
       struct pdb_alias *a;
 
       a = (struct pdb_alias *) xmalloc (sizeof (struct pdb_alias));
@@ -3717,6 +3756,12 @@ make_windows_path (char *src)
 }
 #endif
 
+/* Add a source file to the list of files making up this translation unit.
+ * Non-Windows systems will see the filename being given a fake Windows-style
+ * path, so as not to confuse Microsoft's debuggers.
+ * This also includes a MD5 checksum, which MSVC uses to tell if a file has
+ * been modified since compilation. Recent versions of MSVC seem to use SHA1
+ * instead. */
 static void
 add_source_file (const char *file)
 {
@@ -3785,6 +3830,8 @@ add_source_file (const char *file)
   num_source_files++;
 }
 
+/* We've encountered an #include - add the header file to the
+ * list of source files. */
 static void
 pdbout_start_source_file (unsigned int line ATTRIBUTE_UNUSED,
 			  const char *file)
@@ -3792,12 +3839,15 @@ pdbout_start_source_file (unsigned int line ATTRIBUTE_UNUSED,
   add_source_file (file);
 }
 
+/* Start of compilation - add the main source file to the list. */
 static void
 pdbout_init (const char *file)
 {
   add_source_file (file);
 }
 
+/* We've encountered a new line of source code. Add an ASM label for this,
+ * and record the mapping for later. */
 static void
 pdbout_source_line (unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
 		    const char *text ATTRIBUTE_UNUSED,
@@ -3831,6 +3881,7 @@ pdbout_source_line (unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
   num_line_number_entries++;
 }
 
+/* Given an x86 gcc register no., return the CodeView equivalent. */
 static enum pdb_x86_register
 map_register_no_x86 (unsigned int regno, machine_mode mode)
 {
@@ -3951,6 +4002,7 @@ map_register_no_x86 (unsigned int regno, machine_mode mode)
   return CV_X86_NONE;
 }
 
+/* Given an amd64 gcc register no., return the CodeView equivalent. */
 static enum pdb_amd64_register
 map_register_no_amd64 (unsigned int regno, machine_mode mode)
 {
@@ -4232,6 +4284,7 @@ map_register_no_amd64 (unsigned int regno, machine_mode mode)
   return CV_AMD64_NONE;
 }
 
+/* Map a gcc register constant to its CodeView equivalent. */
 static unsigned int
 map_register_no (unsigned int regno, machine_mode mode)
 {
@@ -4244,6 +4297,8 @@ map_register_no (unsigned int regno, machine_mode mode)
     return (unsigned int) map_register_no_x86 (regno, mode);
 }
 
+/* We've been given a declaration for a local variable. Allocate a
+ * pdb_local_var and add it to the list for this scope block. */
 static void
 add_local (const char *name, tree t, uint16_t type, rtx rtl,
 	   unsigned int block_num)
@@ -4318,6 +4373,9 @@ add_local (const char *name, tree t, uint16_t type, rtx rtl,
     cur_func->local_vars = plv;
 }
 
+/* We've encountered a scope block within a function - loop through and
+ * add any function declarations, then call recursively for any
+ * sub-blocks. */
 static void
 pdbout_function_decl_block (tree block)
 {
@@ -4350,6 +4408,8 @@ pdbout_function_decl_block (tree block)
     }
 }
 
+/* We've encountered a function declaration. Add the parameters as local
+ * variables, then loop through and add its scope blocks. */
 static void
 pdbout_function_decl (tree decl)
 {
@@ -4382,6 +4442,14 @@ pdbout_function_decl (tree decl)
   cur_block = NULL;
 }
 
+/* We've been given the details of where an optimized local variable resides,
+ * i.e. one that doesn't stay in the same place on the stack for the function
+ * duration. Record them so we can output them later.
+ * CodeView seems quite limited in this regard compared to DWARF - e.g. there's
+ * no way of saying that we know a variable would always have a constant value
+ * at such-and-such a point. There's hints in the header files that such
+ * functionality once existed, but MSVC won't output it and the debugger
+ * doesn't seem to understand it. */
 static void
 pdbout_var_location (rtx_insn * loc_note)
 {
@@ -4474,6 +4542,8 @@ pdbout_var_location (rtx_insn * loc_note)
   var_loc_number++;
 }
 
+/* We've encountered the start of a scope block - output an ASM label so
+ * it can be referred to elsewhere. */
 static void
 pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
 {
@@ -4499,6 +4569,8 @@ pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
   cur_block = b;
 }
 
+/* We've encountered the end of a scope block - output an ASM label so
+ * it can be referred to elsewhere. */
 static void
 pdbout_end_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
 {
