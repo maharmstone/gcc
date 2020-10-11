@@ -1352,7 +1352,8 @@ write_type (struct pdb_type *t)
     }
 }
 
-/* Output the .debug$T section, which contains all the types used. */
+/* Output the .debug$T section, which contains all the types used.
+ * Types defined but not used will not be output. */
 static void
 write_pdb_type_section (void)
 {
@@ -1363,7 +1364,8 @@ write_pdb_type_section (void)
     {
       struct pdb_type *n;
 
-      write_type (types);
+      if (types->used)
+	write_type (types);
 
       n = types->next;
 
@@ -1384,11 +1386,473 @@ write_pdb_type_section (void)
     }
 }
 
+static void
+mark_type_used (uint16_t id, bool * changed)
+{
+  struct pdb_type *t = types;
+
+  while (t)
+    {
+      if (t->id == id)
+	{
+	  if (!t->used)
+	    {
+	      t->used = true;
+
+	      if (changed)
+		*changed = true;
+	    }
+
+	  return;
+	}
+
+      t = t->next;
+    }
+}
+
+static bool
+is_type_used (uint16_t id)
+{
+  struct pdb_type *t = types;
+
+  while (t)
+    {
+      if (t->id == id)
+	return t->used;
+
+      t = t->next;
+    }
+
+  return false;
+}
+
+/* Loop through our list of types. If a type is marked as used but a type
+ * it refers to isn't, marked that type as used too. */
+static void
+mark_referenced_types_used (void)
+{
+  struct pdb_type *t;
+  bool changed;
+
+  do
+    {
+      changed = false;
+
+      t = types;
+      while (t)
+	{
+	  if (!t->used)
+	    {
+	      t = t->next;
+	      continue;
+	    }
+
+	  switch (t->cv_type)
+	    {
+	    case LF_MODIFIER:
+	      {
+		struct pdb_modifier *mod = (struct pdb_modifier *) t->data;
+
+		if (mod->type >= FIRST_TYPE_NUM && mod->type < type_num)
+		  mark_type_used (mod->type, &changed);
+
+		break;
+	      }
+
+	    case LF_POINTER:
+	      {
+		struct pdb_pointer *ptr = (struct pdb_pointer *) t->data;
+
+		if (ptr->type >= FIRST_TYPE_NUM && ptr->type < type_num)
+		  mark_type_used (ptr->type, &changed);
+
+		break;
+	      }
+
+	    case LF_PROCEDURE:
+	      {
+		struct pdb_proc *proc = (struct pdb_proc *) t->data;
+
+		if (proc->arg_list >= FIRST_TYPE_NUM
+		    && proc->arg_list < type_num)
+		  mark_type_used (proc->arg_list, &changed);
+
+		if (proc->return_type >= FIRST_TYPE_NUM
+		    && proc->return_type < type_num)
+		  mark_type_used (proc->return_type, &changed);
+
+		break;
+	      }
+
+	    case LF_ARGLIST:
+	      {
+		struct pdb_arglist *al = (struct pdb_arglist *) t->data;
+
+		for (unsigned int i = 0; i < al->count; i++)
+		  {
+		    if (al->args[i] >= FIRST_TYPE_NUM
+			&& al->args[i] < type_num)
+		      mark_type_used (al->args[i], &changed);
+		  }
+
+		break;
+	      }
+
+	    case LF_FIELDLIST:
+	      {
+		struct pdb_fieldlist *fl = (struct pdb_fieldlist *) t->data;
+
+		for (unsigned int i = 0; i < fl->count; i++)
+		  {
+		    if (fl->entries[i].type >= FIRST_TYPE_NUM
+			&& fl->entries[i].type < type_num)
+		      mark_type_used (fl->entries[i].type, &changed);
+		  }
+
+		break;
+	      }
+
+	    case LF_BITFIELD:
+	      {
+		struct pdb_bitfield *bf = (struct pdb_bitfield *) t->data;
+
+		if (bf->underlying_type >= FIRST_TYPE_NUM
+		    && bf->underlying_type < type_num)
+		  mark_type_used (bf->underlying_type, &changed);
+
+		break;
+	      }
+
+	    case LF_ARRAY:
+	      {
+		struct pdb_array *arr = (struct pdb_array *) t->data;
+
+		if (arr->type >= FIRST_TYPE_NUM && arr->type < type_num)
+		  mark_type_used (arr->type, &changed);
+
+		if (arr->index_type >= FIRST_TYPE_NUM
+		    && arr->index_type < type_num)
+		  mark_type_used (arr->index_type, &changed);
+
+		break;
+	      }
+
+	    case LF_CLASS:
+	    case LF_STRUCTURE:
+	    case LF_UNION:
+	      {
+		struct pdb_struct *str = (struct pdb_struct *) t->data;
+
+		if (str->field >= FIRST_TYPE_NUM && str->field < type_num)
+		  mark_type_used (str->field, &changed);
+
+		// forward declarations should propagate usedness
+		// to actual types
+		if (str->property.s.fwdref && str->name)
+		  {
+		    struct pdb_type *t2 = types;
+
+		    while (t2)
+		      {
+			if (t2->cv_type == t->cv_type)
+			  {
+			    struct pdb_struct *str2 =
+			      (struct pdb_struct *) t2->data;
+
+			    if (!str2->property.s.fwdref && str2->name
+				&& !strcmp (str->name, str2->name))
+			      {
+				if (!t2->used)
+				  {
+				    t2->used = true;
+				    changed = true;
+				  }
+
+				break;
+			      }
+			  }
+
+			t2 = t2->next;
+		      }
+		  }
+
+		break;
+	      }
+
+	    case LF_ENUM:
+	      {
+		struct pdb_enum *en = (struct pdb_enum *) t->data;
+
+		if (en->type >= FIRST_TYPE_NUM && en->type < type_num)
+		  mark_type_used (en->type, &changed);
+
+		if (en->field >= FIRST_TYPE_NUM && en->field < type_num)
+		  mark_type_used (en->field, &changed);
+
+		break;
+	      }
+	    }
+
+	  t = t->next;
+	}
+    }
+  while (changed);
+
+  /* LF_UDT_SRC_LINE entries reference a string in the string table;
+   * mark that as used too. */
+
+  t = types;
+  while (t)
+    {
+      if (t->cv_type == LF_UDT_SRC_LINE)
+	{
+	  struct pdb_udt_src_line *pusl = (struct pdb_udt_src_line *) t->data;
+
+	  t->used = is_type_used (pusl->type);
+
+	  if (t->used)
+	    {
+	      if (pusl->source_file >= FIRST_TYPE_NUM
+		  && pusl->source_file < type_num)
+		mark_type_used (pusl->source_file, NULL);
+	    }
+	}
+
+      t = t->next;
+    }
+}
+
+/* Each type gets given a sequential number, starting from 0x1000. Once we've
+ * removed the unused types, we need to renumber the remaining types. The
+ * linker will do a similar thing when it removes duplicate types defined in
+ * multiple object files. */
+static void
+renumber_types (void)
+{
+  uint16_t *type_list, *tlptr;
+  struct pdb_type *t;
+  struct pdb_global_var *pgv;
+  struct pdb_func *func;
+  uint16_t new_id = FIRST_TYPE_NUM;
+
+  if (type_num == FIRST_TYPE_NUM)
+    return;
+
+  // prepare transformation list
+
+  type_list =
+    (uint16_t *) xmalloc (sizeof (uint16_t) * (type_num - FIRST_TYPE_NUM));
+  tlptr = type_list;
+
+  t = types;
+  while (t)
+    {
+      if (!t->used)
+	*tlptr = 0;
+      else
+	{
+	  *tlptr = new_id;
+	  new_id++;
+	}
+
+      t = t->next;
+      tlptr++;
+    }
+
+  // change referenced types
+
+  t = types;
+  while (t)
+    {
+      if (!t->used)
+	{
+	  t = t->next;
+	  continue;
+	}
+
+      switch (t->cv_type)
+	{
+	case LF_MODIFIER:
+	  {
+	    struct pdb_modifier *mod = (struct pdb_modifier *) t->data;
+
+	    if (mod->type >= FIRST_TYPE_NUM && mod->type < type_num)
+	      mod->type = type_list[mod->type - FIRST_TYPE_NUM];
+
+	    break;
+	  }
+
+	case LF_POINTER:
+	  {
+	    struct pdb_pointer *ptr = (struct pdb_pointer *) t->data;
+
+	    if (ptr->type >= FIRST_TYPE_NUM && ptr->type < type_num)
+	      ptr->type = type_list[ptr->type - FIRST_TYPE_NUM];
+
+	    break;
+	  }
+
+	case LF_PROCEDURE:
+	  {
+	    struct pdb_proc *proc = (struct pdb_proc *) t->data;
+
+	    if (proc->arg_list >= FIRST_TYPE_NUM && proc->arg_list < type_num)
+	      proc->arg_list = type_list[proc->arg_list - FIRST_TYPE_NUM];
+
+	    if (proc->return_type >= FIRST_TYPE_NUM
+		&& proc->return_type < type_num)
+	      proc->return_type =
+		type_list[proc->return_type - FIRST_TYPE_NUM];
+
+	    break;
+	  }
+
+	case LF_ARGLIST:
+	  {
+	    struct pdb_arglist *al = (struct pdb_arglist *) t->data;
+
+	    for (unsigned int i = 0; i < al->count; i++)
+	      {
+		if (al->args[i] >= FIRST_TYPE_NUM && al->args[i] < type_num)
+		  al->args[i] = type_list[al->args[i] - FIRST_TYPE_NUM];
+	      }
+
+	    break;
+	  }
+
+	case LF_FIELDLIST:
+	  {
+	    struct pdb_fieldlist *fl = (struct pdb_fieldlist *) t->data;
+
+	    for (unsigned int i = 0; i < fl->count; i++)
+	      {
+		if (fl->entries[i].type >= FIRST_TYPE_NUM
+		    && fl->entries[i].type < type_num)
+		  fl->entries[i].type =
+		    type_list[fl->entries[i].type - FIRST_TYPE_NUM];
+	      }
+
+	    break;
+	  }
+
+	case LF_BITFIELD:
+	  {
+	    struct pdb_bitfield *bf = (struct pdb_bitfield *) t->data;
+
+	    if (bf->underlying_type >= FIRST_TYPE_NUM
+		&& bf->underlying_type < type_num)
+	      bf->underlying_type =
+		type_list[bf->underlying_type - FIRST_TYPE_NUM];
+
+	    break;
+	  }
+
+	case LF_ARRAY:
+	  {
+	    struct pdb_array *arr = (struct pdb_array *) t->data;
+
+	    if (arr->type >= FIRST_TYPE_NUM && arr->type < type_num)
+	      arr->type = type_list[arr->type - FIRST_TYPE_NUM];
+
+	    if (arr->index_type >= FIRST_TYPE_NUM
+		&& arr->index_type < type_num)
+	      arr->index_type = type_list[arr->index_type - FIRST_TYPE_NUM];
+
+	    break;
+	  }
+
+	case LF_CLASS:
+	case LF_STRUCTURE:
+	case LF_UNION:
+	  {
+	    struct pdb_struct *str = (struct pdb_struct *) t->data;
+
+	    if (str->field >= FIRST_TYPE_NUM && str->field < type_num)
+	      str->field = type_list[str->field - FIRST_TYPE_NUM];
+
+	    break;
+	  }
+
+	case LF_ENUM:
+	  {
+	    struct pdb_enum *en = (struct pdb_enum *) t->data;
+
+	    if (en->type >= FIRST_TYPE_NUM && en->type < type_num)
+	      en->type = type_list[en->type - FIRST_TYPE_NUM];
+
+	    if (en->field >= FIRST_TYPE_NUM && en->field < type_num)
+	      en->field = type_list[en->field - FIRST_TYPE_NUM];
+
+	    break;
+	  }
+
+	case LF_UDT_SRC_LINE:
+	  {
+	    struct pdb_udt_src_line *pusl =
+	      (struct pdb_udt_src_line *) t->data;
+
+	    if (pusl->type >= FIRST_TYPE_NUM && pusl->type < type_num)
+	      pusl->type = type_list[pusl->type - FIRST_TYPE_NUM];
+
+	    if (pusl->source_file >= FIRST_TYPE_NUM
+		&& pusl->source_file < type_num)
+	      pusl->source_file =
+		type_list[pusl->source_file - FIRST_TYPE_NUM];
+
+	    break;
+	  }
+	}
+
+      t = t->next;
+    }
+
+  // change global variables
+
+  pgv = global_vars;
+
+  while (pgv)
+    {
+      if (pgv->type >= FIRST_TYPE_NUM && pgv->type < type_num)
+	pgv->type = type_list[pgv->type - FIRST_TYPE_NUM];
+
+      pgv = pgv->next;
+    }
+
+  // change procedures
+
+  func = funcs;
+
+  while (func)
+    {
+      struct pdb_local_var *plv;
+
+      if (func->type >= FIRST_TYPE_NUM && func->type < type_num)
+	func->type = type_list[func->type - FIRST_TYPE_NUM];
+
+      plv = func->local_vars;
+      while (plv)
+	{
+	  if (plv->type >= FIRST_TYPE_NUM && plv->type < type_num)
+	    plv->type = type_list[plv->type - FIRST_TYPE_NUM];
+
+	  plv = plv->next;
+	}
+
+      func = func->next;
+    }
+
+  free (type_list);
+}
+
 /* We've finished compilation - output the .debug$S and .debug$T sections
  * to the ASM file. */
 static void
 pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 {
+  mark_referenced_types_used ();
+
+  renumber_types ();
+
   write_pdb_section ();
   write_pdb_type_section ();
 }
@@ -1411,6 +1875,9 @@ pdbout_begin_function (tree func)
   f->lines = f->last_line = NULL;
   f->local_vars = f->last_local_var = NULL;
   f->var_locs = f->last_var_loc = NULL;
+
+  if (func_type)
+    func_type->used = true;
 
   f->block.next = NULL;
   f->block.parent = NULL;
@@ -1448,6 +1915,7 @@ static void
 pdbout_late_global_decl (tree var)
 {
   struct pdb_global_var *v;
+  struct pdb_type *type;
 
   if (TREE_CODE (var) != VAR_DECL)
     return;
@@ -1468,7 +1936,10 @@ pdbout_late_global_decl (tree var)
   v->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (var)));
   v->asm_name = xstrdup (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME_RAW (var)));
   v->public_flag = TREE_PUBLIC (var);
-  v->type = find_type (TREE_TYPE (var), NULL);
+  v->type = find_type (TREE_TYPE (var), &type);
+
+  if (type)
+    type->used = true;
 
   global_vars = v;
 }
@@ -1766,6 +2237,7 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
   // add new
 
   t->next = NULL;
+  t->used = false;
 
   t->id = type_num;
   type_num++;
@@ -3071,6 +3543,7 @@ add_udt_src_line_type (uint16_t type_id, uint16_t source_file, uint32_t line)
 				 sizeof (struct pdb_udt_src_line));
   type->cv_type = LF_UDT_SRC_LINE;
   type->tree = NULL;
+  type->used = false;
 
   pusl = (struct pdb_udt_src_line *) type->data;
   pusl->type = type_id;
@@ -3912,9 +4385,14 @@ pdbout_function_decl_block (tree block)
     {
       if (TREE_CODE (f) == VAR_DECL && DECL_RTL_SET_P (f) && DECL_NAME (f))
 	{
+	  struct pdb_type *type;
+
 	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
-		     find_type (TREE_TYPE (f), NULL), DECL_RTL (f),
+		     find_type (TREE_TYPE (f), &type), DECL_RTL (f),
 		     BLOCK_NUMBER (block));
+
+	  if (type)
+	    type->used = true;
 	}
 
       f = TREE_CHAIN (f);
@@ -3944,9 +4422,14 @@ pdbout_function_decl (tree decl)
     {
       if (TREE_CODE (f) == PARM_DECL && DECL_NAME (f))
 	{
+	  struct pdb_type *type;
+
 	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
-		     find_type (TREE_TYPE (f), NULL),
+		     find_type (TREE_TYPE (f), &type),
 		     f->parm_decl.common.rtl, 0);
+
+	  if (type)
+	    type->used = true;
 	}
 
       f = TREE_CHAIN (f);

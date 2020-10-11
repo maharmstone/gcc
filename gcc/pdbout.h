@@ -286,6 +286,7 @@ struct pdb_type
   uint16_t id;
   tree_node *tree;
   uint16_t cv_type;
+  bool used;
   uint8_t data[1];
 };
 
