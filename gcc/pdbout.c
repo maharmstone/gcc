@@ -32,6 +32,7 @@
 #include "function.h"
 #include "output.h"
 #include "target.h"
+#include "config/i386/i386-protos.h"
 #include "md5.h"
 #include "rtl.h"
 #include "insn-config.h"
@@ -42,6 +43,8 @@
 
 #define FUNC_BEGIN_LABEL	".startfunc"
 #define FUNC_END_LABEL		".endfunc"
+
+#define FIRST_TYPE_NUM		0x1000
 
 static void pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 				   unsigned int column ATTRIBUTE_UNUSED,
@@ -71,6 +74,8 @@ static uint16_t find_type (tree t);
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_block *cur_block = NULL;
 static struct pdb_global_var *global_vars = NULL;
+static struct pdb_type *types = NULL, *last_type = NULL;
+static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
 static unsigned int num_line_number_entries = 0;
@@ -749,12 +754,102 @@ write_pdb_section (void)
     }
 }
 
-/* We've finished compilation - output the .debug$S section
+/* Free a pdb_type that we've allocated. */
+static void
+free_type (struct pdb_type *t)
+{
+  free (t);
+}
+
+/* Output a lfArgList structure, describing the arguments that a
+ * procedure expects. */
+static void
+write_arglist (struct pdb_arglist *arglist)
+{
+  unsigned int len = 8 + (4 * arglist->count);
+
+  if (arglist->count == 0)	// zero-length arglist has dummy entry
+    len += 4;
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ARGLIST);
+  fprintf (asm_out_file, "\t.long\t0x%x\n",
+	   arglist->count == 0 ? 1 : arglist->count);
+
+  for (unsigned int i = 0; i < arglist->count; i++)
+    {
+      fprintf (asm_out_file, "\t.short\t0x%x\n", arglist->args[i]);
+      fprintf (asm_out_file, "\t.short\t0\n");	// padding
+    }
+
+  if (arglist->count == 0)
+    {
+      fprintf (asm_out_file, "\t.short\t0\n");	// empty type
+      fprintf (asm_out_file, "\t.short\t0\n");	// padding
+    }
+}
+
+/* Output a lfProc structure, which describes the prototype of a
+ * procedure. See also pdbout_proc32, which outputs the details of
+ * a specific procedure. */
+static void
+write_procedure (struct pdb_proc *proc)
+{
+  fprintf (asm_out_file, "\t.short\t0xe\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_PROCEDURE);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->return_type);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->calling_convention);
+  fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->attributes);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->num_args);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->arg_list);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+}
+
+/* Given a pdb_type, output its definition. */
+static void
+write_type (struct pdb_type *t)
+{
+  switch (t->cv_type)
+    {
+    case LF_ARGLIST:
+      write_arglist ((struct pdb_arglist *) t->data);
+      break;
+
+    case LF_PROCEDURE:
+      write_procedure ((struct pdb_proc *) t->data);
+      break;
+    }
+}
+
+/* Output the .debug$T section, which contains all the types used. */
+static void
+write_pdb_type_section (void)
+{
+  fprintf (asm_out_file, "\t.section\t.debug$T, \"ndr\"\n");
+  fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
+
+  while (types)
+    {
+      struct pdb_type *n;
+
+      write_type (types);
+
+      n = types->next;
+
+      free_type (types);
+
+      types = n;
+    }
+}
+
+/* We've finished compilation - output the .debug$S and .debug$T sections
  * to the ASM file. */
 static void
 pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 {
   write_pdb_section ();
+  write_pdb_type_section ();
 }
 
 /* We've been passed a function definition - allocate and initialize a pdb_func
@@ -836,11 +931,210 @@ pdbout_late_global_decl (tree var)
   global_vars = v;
 }
 
+/* Given a new type t, search through the list of existing types. If it's a
+ * duplicate of an existing type, free t. Otherwise, add t to the end of
+ * the list. */
+static uint16_t
+add_type (struct pdb_type *t)
+{
+  struct pdb_type *t2 = types;
+
+  // check for dupes
+
+  while (t2)
+    {
+      if (t2->cv_type == t->cv_type)
+	{
+	  switch (t2->cv_type)
+	    {
+	    case LF_ARGLIST:
+	      {
+		struct pdb_arglist *arglist1 = (struct pdb_arglist *) t->data;
+		struct pdb_arglist *arglist2 =
+		  (struct pdb_arglist *) t2->data;
+
+		if (arglist1->count == arglist2->count)
+		  {
+		    bool same = true;
+
+		    for (unsigned int i = 0; i < arglist1->count; i++)
+		      {
+			if (arglist1->args[i] != arglist2->args[i])
+			  {
+			    same = false;
+			    break;
+			  }
+		      }
+
+		    if (same)
+		      {
+			free (t);
+
+			return t2->id;
+		      }
+		  }
+
+		break;
+	      }
+
+	    case LF_PROCEDURE:
+	      {
+		struct pdb_proc *proc1 = (struct pdb_proc *) t->data;
+		struct pdb_proc *proc2 = (struct pdb_proc *) t2->data;
+
+		if (proc1->return_type == proc2->return_type &&
+		    proc1->calling_convention == proc2->calling_convention &&
+		    proc1->attributes == proc2->attributes &&
+		    proc1->num_args == proc2->num_args &&
+		    proc1->arg_list == proc2->arg_list)
+		  {
+		    free (t);
+
+		    return t2->id;
+		  }
+
+		break;
+	      }
+	    }
+	}
+
+      t2 = t2->next;
+    }
+
+  // add new
+
+  t->next = NULL;
+
+  t->id = type_num;
+  type_num++;
+
+  if (last_type)
+    last_type->next = t;
+
+  if (!types)
+    types = t;
+
+  last_type = t;
+
+  return t->id;
+}
+
+/* Given a function type t, allocate a new pdb_type and add it to the
+ * type list. */
+static uint16_t
+find_type_function (tree t)
+{
+  struct pdb_type *arglisttype, *proctype;
+  struct pdb_arglist *arglist;
+  struct pdb_proc *proc;
+  tree arg;
+  unsigned int num_args = 0;
+  uint16_t *argptr;
+  uint16_t arglisttypenum;
+
+  // create arglist
+
+  arg = TYPE_ARG_TYPES (t);
+  while (arg)
+    {
+      if (TREE_CODE (TREE_VALUE (arg)) != VOID_TYPE)
+	num_args++;
+
+      arg = TREE_CHAIN (arg);
+    }
+
+  arglisttype =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 offsetof (struct pdb_arglist, args) +
+				 (num_args * sizeof (uint16_t)));
+  arglisttype->cv_type = LF_ARGLIST;
+  arglisttype->tree = NULL;
+
+  arglist = (struct pdb_arglist *) arglisttype->data;
+  arglist->count = num_args;
+
+  argptr = arglist->args;
+  arg = TYPE_ARG_TYPES (t);
+  while (arg)
+    {
+      if (TREE_CODE (TREE_VALUE (arg)) != VOID_TYPE)
+	{
+	  *argptr = find_type (TREE_VALUE (arg));
+	  argptr++;
+	}
+
+      arg = TREE_CHAIN (arg);
+    }
+
+  arglisttypenum = add_type (arglisttype);
+
+  // create procedure
+
+  proctype =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_proc));
+  proctype->cv_type = LF_PROCEDURE;
+  proctype->tree = t;
+
+  proc = (struct pdb_proc *) proctype->data;
+
+  proc->return_type = find_type (TREE_TYPE (t));
+  proc->attributes = 0;
+  proc->num_args = num_args;
+  proc->arg_list = arglisttypenum;
+
+  if (TARGET_64BIT)
+    proc->calling_convention = CV_CALL_NEAR_C;
+  else
+    {
+      switch (ix86_get_callcvt (t))
+	{
+	case IX86_CALLCVT_CDECL:
+	  proc->calling_convention = CV_CALL_NEAR_C;
+	  break;
+
+	case IX86_CALLCVT_STDCALL:
+	  proc->calling_convention = CV_CALL_NEAR_STD;
+	  break;
+
+	case IX86_CALLCVT_FASTCALL:
+	  proc->calling_convention = CV_CALL_NEAR_FAST;
+	  break;
+
+	case IX86_CALLCVT_THISCALL:
+	  proc->calling_convention = CV_CALL_THISCALL;
+	  break;
+
+	default:
+	  proc->calling_convention = CV_CALL_NEAR_C;
+	}
+    }
+
+  return add_type (proctype);
+}
+
 /* Resolve a type t to a type number. If it's a builtin type, such as bool or
- * the various ints, return its constant. */
+ * the various ints, return its constant. Otherwise, allocate a new pdb_type,
+ * and add it to the type list. */
 static uint16_t
 find_type (tree t)
 {
+  struct pdb_type *type;
+
+  if (!t)
+    return 0;
+
+  // search through existing types
+
+  type = types;
+  while (type)
+    {
+      if (type->tree == t)
+	return type->id;
+
+      type = type->next;
+    }
+
   switch (TREE_CODE (t))
     {
     case INTEGER_TYPE:
@@ -1002,7 +1296,27 @@ find_type (tree t)
       break;
     }
 
-  return 0;
+  if (TYPE_MAIN_VARIANT (t) != t)
+    {
+      type = types;
+      while (type)
+	{
+	  if (type->tree == TYPE_MAIN_VARIANT (t))
+	      return type->id;
+
+	  type = type->next;
+	}
+    }
+
+  switch (TREE_CODE (t))
+    {
+    case FUNCTION_TYPE:
+    case METHOD_TYPE:
+      return find_type_function (t);
+
+    default:
+      return 0;
+    }
 }
 
 #ifndef _WIN32
