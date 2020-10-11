@@ -4289,6 +4289,12 @@ driver_handle_option (struct gcc_options *opts,
       handle_foffload_option (arg);
       break;
 
+    case OPT_gcodeview:
+      /* If we've generated CodeView debugging information, make sure
+       * linker creates a PDB file for it. */
+      add_infile ("--pdb=", "*");
+      break;
+
     default:
       /* Various driver options need no special processing at this
 	 point, having been handled in a prescan above or being
