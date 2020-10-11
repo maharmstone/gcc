@@ -37,6 +37,13 @@
 #define CV_SIGNATURE_C13	4
 
 #define DEBUG_S_SYMBOLS			0xf1
+#define DEBUG_S_STRINGTABLE		0xf3
+#define DEBUG_S_FILECHKSMS		0xf4
+
+#define CHKSUM_TYPE_NONE		0
+#define CHKSUM_TYPE_MD5			1
+#define CHKSUM_TYPE_SHA1		2
+#define CHKSUM_TYPE_SHA_256		3
 
 enum pdb_local_var_type
 {
@@ -151,6 +158,15 @@ struct pdb_global_var
 #define CV_TM_NPTR			1
 #define CV_TM_NPTR32			4
 #define CV_TM_NPTR64			6
+
+struct pdb_source_file
+{
+  struct pdb_source_file *next;
+  uint8_t hash[16];
+  uint32_t str_offset;
+  unsigned int num;
+  char name[1];
+};
 
 enum pdb_x86_register
 {

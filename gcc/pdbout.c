@@ -32,6 +32,7 @@
 #include "function.h"
 #include "output.h"
 #include "target.h"
+#include "md5.h"
 #include "rtl.h"
 #include "insn-config.h"
 #include "reload.h"
@@ -47,9 +48,12 @@ static void pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 				   const char *file ATTRIBUTE_UNUSED);
 static void pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 				 const char *file ATTRIBUTE_UNUSED);
+static void pdbout_init (const char *filename);
 static void pdbout_finish (const char *filename);
 static void pdbout_begin_function (tree func);
 static void pdbout_late_global_decl (tree var);
+static void pdbout_start_source_file (unsigned int line ATTRIBUTE_UNUSED,
+				      const char *file);
 static void pdbout_function_decl (tree decl);
 static void pdbout_var_location (rtx_insn * loc_note);
 static void pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED,
@@ -62,16 +66,19 @@ static uint16_t find_type (tree t);
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_block *cur_block = NULL;
 static struct pdb_global_var *global_vars = NULL;
+static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
+static uint32_t source_file_string_offset = 1;
+static unsigned int num_source_files = 0;
 static unsigned int var_loc_number = 1;
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
-  debug_nothing_charstar,	/* init */
+  pdbout_init,
   pdbout_finish,
   debug_nothing_charstar,	/* early_finish */
   debug_nothing_void,		/* assembly_start */
   debug_nothing_int_charstar,	/* define */
   debug_nothing_int_charstar,	/* undef */
-  debug_nothing_int_charstar,	/* start_source_file */
+  pdbout_start_source_file,
   debug_nothing_int,		/* end_source_file */
   pdbout_begin_block,
   pdbout_end_block,
@@ -544,6 +551,40 @@ pdbout_ldata32 (struct pdb_global_var *v)
   fprintf (asm_out_file, "\t.balign\t4\n");
 }
 
+/* Output names of the files which make up this translation unit,
+ * along with their MD5 checksums. */
+static void
+write_file_checksums ()
+{
+  fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_FILECHKSMS);
+  fprintf (asm_out_file, "\t.long\t[.chksumsend]-[.chksumsstart]\n");
+  fprintf (asm_out_file, ".chksumsstart:\n");
+
+  while (source_files)
+    {
+      struct pdb_source_file *n;
+
+      fprintf (asm_out_file, "\t.long\t0x%x\n", source_files->str_offset);
+      fprintf (asm_out_file, "\t.byte\t0x%x\n", 16);	// length of MD5 hash
+      fprintf (asm_out_file, "\t.byte\t0x%x\n", CHKSUM_TYPE_MD5);
+
+      for (unsigned int i = 0; i < 16; i++)
+	{
+	  fprintf (asm_out_file, "\t.byte\t0x%x\n", source_files->hash[i]);
+	}
+
+      fprintf (asm_out_file, "\t.short\t0\n");
+
+      n = source_files->next;
+
+      free (source_files);
+
+      source_files = n;
+    }
+
+  fprintf (asm_out_file, ".chksumsend:\n");
+}
+
 /* Output the .debug$S section, which has everything except the
  * type definitions (global variables, functions, string table,
  * file checksums, line numbers).
@@ -555,6 +596,7 @@ pdbout_ldata32 (struct pdb_global_var *v)
 static void
 write_pdb_section (void)
 {
+  struct pdb_source_file *psf;
   struct pdb_func *func;
 
   fprintf (asm_out_file, "\t.section\t.debug$S, \"ndr\"\n");
@@ -592,6 +634,27 @@ write_pdb_section (void)
     }
 
   fprintf (asm_out_file, ".symend:\n");
+
+  fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_STRINGTABLE);
+  fprintf (asm_out_file, "\t.long\t[.strtableend]-[.strtablestart]\n");
+  fprintf (asm_out_file, ".strtablestart:\n");
+  fprintf (asm_out_file, "\t.byte\t0\n");
+
+  psf = source_files;
+  while (psf)
+    {
+      size_t name_len = strlen (psf->name);
+
+      ASM_OUTPUT_ASCII (asm_out_file, psf->name + name_len + 1,
+			strlen (psf->name + name_len + 1) + 1);
+
+      psf = psf->next;
+    }
+
+  fprintf (asm_out_file, "\t.balign\t4\n");
+  fprintf (asm_out_file, ".strtableend:\n");
+
+  write_file_checksums ();
 
   while (funcs)
     {
@@ -838,6 +901,135 @@ find_type (tree t)
     }
 
   return 0;
+}
+
+#ifndef _WIN32
+/* Given a Unix-style path, construct a fake Windows path, which is what windbg
+ * and Visual Studio are expecting. This maps / to Z:\, which is the default
+ * behaviour on Wine. */
+
+static char *
+make_windows_path (char *src)
+{
+  size_t len = strlen (src);
+  char *dest = (char *) xmalloc (len + 3);
+  char *in, *ptr;
+
+  ptr = dest;
+  *ptr = 'Z';
+  ptr++;
+  *ptr = ':';
+  ptr++;
+
+  in = src;
+
+  for (unsigned int i = 0; i < len; i++)
+    {
+      if (*in == '/')
+	*ptr = '\\';
+      else
+	*ptr = *in;
+
+      in++;
+      ptr++;
+    }
+
+  *ptr = 0;
+
+  free (src);
+
+  return dest;
+}
+#endif
+
+/* Add a source file to the list of files making up this translation unit.
+ * Non-Windows systems will see the filename being given a fake Windows-style
+ * path, so as not to confuse Microsoft's debuggers.
+ * This also includes a MD5 checksum, which MSVC uses to tell if a file has
+ * been modified since compilation. Recent versions of MSVC seem to use SHA1
+ * instead. */
+static void
+add_source_file (const char *file)
+{
+  struct pdb_source_file *psf;
+  char *path;
+  size_t file_len, path_len;
+  FILE *f;
+
+  // check not already added
+  psf = source_files;
+  while (psf)
+    {
+      if (!strcmp (psf->name, file))
+	return;
+
+      psf = psf->next;
+    }
+
+  path = lrealpath (file);
+  if (!path)
+    return;
+
+#ifndef _WIN32
+  path = make_windows_path (path);
+#endif
+
+  file_len = strlen (file);
+  path_len = strlen (path);
+
+  f = fopen (file, "r");
+
+  if (!f)
+    {
+      free (path);
+      return;
+    }
+
+  psf =
+    (struct pdb_source_file *)
+    xmalloc (offsetof (struct pdb_source_file, name) + file_len + 1 +
+	     path_len + 1);
+
+  md5_stream (f, psf->hash);
+
+  fclose (f);
+
+  psf->next = NULL;
+  psf->str_offset = source_file_string_offset;
+  memcpy (psf->name, file, file_len + 1);
+  memcpy (psf->name + file_len + 1, path, path_len + 1);
+
+  free (path);
+
+  source_file_string_offset += path_len + 1;
+
+  if (last_source_file)
+    last_source_file->next = psf;
+
+  last_source_file = psf;
+
+  if (!source_files)
+    source_files = psf;
+
+  psf->num = num_source_files;
+
+  num_source_files++;
+}
+
+/* We've encountered an #include - add the header file to the
+ * list of source files. */
+static void
+pdbout_start_source_file (unsigned int line ATTRIBUTE_UNUSED,
+			  const char *file)
+{
+  add_source_file (file);
+}
+
+/* Start of compilation - add the main source file to the list. */
+static void
+pdbout_init (const char *file)
+{
+  add_source_file (file);
 }
 
 /* Given an x86 gcc register no., return the CodeView equivalent. */
