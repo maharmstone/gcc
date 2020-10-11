@@ -922,6 +922,9 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 #elif defined XCOFF_DEBUGGING_INFO
 #define PREFERRED_DEBUGGING_TYPE XCOFF_DEBUG
 
+#elif defined PDB_DEBUGGING_INFO
+#define PREFERRED_DEBUGGING_TYPE PDB_DEBUG
+
 #else
 /* No debugging format is supported by this target.  */
 #define PREFERRED_DEBUGGING_TYPE NO_DEBUG
