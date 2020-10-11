@@ -46,6 +46,8 @@
 
 #define FIRST_TYPE_NUM		0x1000
 
+static const char unnamed[] = "<unnamed-tag>";
+
 static void pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 				   unsigned int column ATTRIBUTE_UNUSED,
 				   const char *file ATTRIBUTE_UNUSED);
@@ -760,7 +762,217 @@ write_pdb_section (void)
 static void
 free_type (struct pdb_type *t)
 {
+  switch (t->cv_type)
+    {
+    case LF_FIELDLIST:
+      {
+	struct pdb_fieldlist *fl = (struct pdb_fieldlist *) t->data;
+
+	for (unsigned int i = 0; i < fl->count; i++)
+	  {
+	    if (fl->entries[i].name)
+	      free (fl->entries[i].name);
+	  }
+
+	free (fl->entries);
+
+	break;
+      }
+
+    case LF_ENUM:
+      {
+	struct pdb_enum *en = (struct pdb_enum *) t->data;
+
+	if (en->name)
+	  free (en->name);
+
+	break;
+      }
+    }
+
   free (t);
+}
+
+/* Output a lfFieldlist structure, which describes the values of an enum. */
+static void
+write_fieldlist (struct pdb_fieldlist *fl)
+{
+  unsigned int len = 4;
+
+  for (unsigned int i = 0; i < fl->count; i++)
+    {
+      len += 2;
+
+      if (fl->entries[i].cv_type == LF_ENUMERATE)
+	{
+	  len += 5;
+
+	  /* Positive values less than 0x8000 are stored as they are; otherwise
+	   * we prepend two bytes describing what type it is. */
+
+	  if (fl->entries[i].value >= 0x8000 || fl->entries[i].value < 0)
+	    {
+	      if (fl->entries[i].value >= -127 && fl->entries[i].value < 0)
+		len++; 	// LF_CHAR
+	      else if (fl->entries[i].value >= -0x7fff &&
+		       fl->entries[i].value <= 0x7fff) {
+		len += 2; // LF_SHORT
+	      } else if (fl->entries[i].value >= 0x8000 &&
+			 fl->entries[i].value <= 0xffff) {
+		len += 2; // LF_USHORT
+	      } else if (fl->entries[i].value >= -0x7fffffff &&
+			 fl->entries[i].value <= 0x7fffffff) {
+		len += 4; // LF_LONG
+	      } else if (fl->entries[i].value >= 0x80000000 &&
+			 fl->entries[i].value <= 0xffffffff) {
+		len += 4; // LF_ULONG
+	      } else
+		len += 8;	// LF_QUADWORD or LF_UQUADWORD
+	    }
+
+	  if (fl->entries[i].name)
+	    len += strlen (fl->entries[i].name);
+	}
+
+      if (len % 4 != 0)
+	len += 4 - (len % 4);
+    }
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_FIELDLIST);
+
+  for (unsigned int i = 0; i < fl->count; i++)
+    {
+      fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].cv_type);
+
+      if (fl->entries[i].cv_type == LF_ENUMERATE)
+	{
+	  size_t name_len =
+	    fl->entries[i].name ? strlen (fl->entries[i].name) : 0;
+	  unsigned int align;
+
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].fld_attr);
+
+	  align = (3 + name_len) % 4;
+
+	  if (fl->entries[i].value >= 0 && fl->entries[i].value < 0x8000)
+	    fprintf (asm_out_file, "\t.short\t0x%x\n",
+		     (uint16_t) fl->entries[i].value);
+	  else if (fl->entries[i].value >= -127 && fl->entries[i].value < 0)
+	    {
+	      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_CHAR);
+	      fprintf (asm_out_file, "\t.byte\t0x%x\n",
+		       (unsigned int) ((int8_t) fl->entries[i].value & 0xff));
+
+	      align = (align + 1) % 4;
+	    }
+	  else if (fl->entries[i].value >= -0x7fff
+		   && fl->entries[i].value <= 0x7fff)
+	    {
+	      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_SHORT);
+	      fprintf (asm_out_file, "\t.short\t0x%x\n",
+		       (unsigned int) ((int16_t) fl->entries[i].
+				       value & 0xffff));
+
+	      align = (align + 2) % 4;
+	    }
+	  else if (fl->entries[i].value >= 0x8000
+		   && fl->entries[i].value <= 0xffff)
+	    {
+	      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_USHORT);
+	      fprintf (asm_out_file, "\t.short\t0x%x\n",
+		       (unsigned int) ((uint16_t) fl->entries[i].
+				       value & 0xffff));
+
+	      align = (align + 2) % 4;
+	    }
+	  else if (fl->entries[i].value >= -0x7fffffff
+		   && fl->entries[i].value <= 0x7fffffff)
+	    {
+	      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_LONG);
+	      fprintf (asm_out_file, "\t.long\t0x%x\n",
+		       (int32_t) fl->entries[i].value);
+	    }
+	  else if (fl->entries[i].value >= 0x80000000
+		   && fl->entries[i].value <= 0xffffffff)
+	    {
+	      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ULONG);
+	      fprintf (asm_out_file, "\t.long\t0x%x\n",
+		       (uint32_t) fl->entries[i].value);
+	    }
+	  else if (fl->entries[i].value < 0)
+	    {
+	      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_QUADWORD);
+	      fprintf (asm_out_file, "\t.quad\t0x%" PRIx64 "\n",
+		       (int64_t) fl->entries[i].value);
+	    }
+	  else
+	    {
+	      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UQUADWORD);
+	      fprintf (asm_out_file, "\t.quad\t0x%" PRIx64 "\n",
+		       (uint64_t) fl->entries[i].value);
+	    }
+
+	  if (fl->entries[i].name)
+	    ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name,
+			      name_len + 1);
+	  else
+	    fprintf (asm_out_file, "\t.byte\t0\n");
+
+	  // handle alignment padding
+
+	  align = 4 - align;
+
+	  if (align != 4)
+	    {
+	      if (align == 3)
+		fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+	      if (align >= 2)
+		fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+	      fprintf (asm_out_file, "\t.byte\t0xf1\n");
+	    }
+	}
+    }
+}
+
+/* Output a lfEnum structure. */
+static void
+write_enum (struct pdb_enum *en)
+{
+  size_t name_len = en->name ? strlen (en->name) : (sizeof (unnamed) - 1);
+  unsigned int len = 17 + name_len, align;
+
+  if (len % 4 != 0)
+    len += 4 - (len % 4);
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ENUM);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", en->count);
+  fprintf (asm_out_file, "\t.short\t0\n");	// property
+  fprintf (asm_out_file, "\t.short\t0x%x\n", en->type);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n", en->field);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+
+  if (en->name)
+    ASM_OUTPUT_ASCII (asm_out_file, en->name, name_len + 1);
+  else
+    ASM_OUTPUT_ASCII (asm_out_file, unnamed, sizeof (unnamed));
+
+  align = 4 - ((1 + name_len) % 4);
+
+  if (align != 4)
+    {
+      if (align == 3)
+	fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+      if (align >= 2)
+	fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+      fprintf (asm_out_file, "\t.byte\t0xf1\n");
+    }
 }
 
 /* Output a lfPointer structure. */
@@ -902,6 +1114,14 @@ write_type (struct pdb_type *t)
 {
   switch (t->cv_type)
     {
+    case LF_FIELDLIST:
+      write_fieldlist ((struct pdb_fieldlist *) t->data);
+      break;
+
+    case LF_ENUM:
+      write_enum ((struct pdb_enum *) t->data);
+      break;
+
     case LF_POINTER:
       write_pointer ((struct pdb_pointer *) t->data);
       break;
@@ -1060,6 +1280,84 @@ add_type (struct pdb_type *t)
 	{
 	  switch (t2->cv_type)
 	    {
+	    case LF_FIELDLIST:
+	      {
+		struct pdb_fieldlist *fl1 = (struct pdb_fieldlist *) t->data;
+		struct pdb_fieldlist *fl2 = (struct pdb_fieldlist *) t2->data;
+
+		if (fl1->count == fl2->count)
+		  {
+		    bool same = true;
+
+		    for (unsigned int i = 0; i < fl1->count; i++)
+		      {
+			struct pdb_fieldlist_entry *pfe1 =
+			  (struct pdb_fieldlist_entry *)&fl1->entries[i];
+			struct pdb_fieldlist_entry *pfe2 =
+			  (struct pdb_fieldlist_entry *)&fl2->entries[i];
+
+			if (pfe1->cv_type != pfe2->cv_type)
+			  {
+			    same = false;
+			    break;
+			  }
+
+			  if (pfe1->cv_type == LF_ENUMERATE)
+			  {
+			    if (pfe1->value != pfe2->value ||
+				((pfe1->name || pfe2->name) &&
+				(!pfe1->name || !pfe2->name ||
+				strcmp (pfe1->name, pfe2->name))))
+			      {
+				same = false;
+				break;
+			      }
+			  }
+		      }
+
+		    if (same)
+		      {
+			for (unsigned int i = 0; i < fl1->count; i++)
+			  {
+			    struct pdb_fieldlist_entry *pfe1 =
+			      (struct pdb_fieldlist_entry *)&fl1->entries[i];
+
+			    if (pfe1->name)
+			      free (pfe1->name);
+			  }
+
+			free (t);
+
+			return t2->id;
+		      }
+		  }
+
+		break;
+	      }
+
+	    case LF_ENUM:
+	      {
+		struct pdb_enum *en1 = (struct pdb_enum *) t->data;
+		struct pdb_enum *en2 = (struct pdb_enum *) t2->data;
+
+		if (en1->count == en2->count &&
+		    en1->type == en2->type &&
+		    en1->field == en2->field &&
+		    ((!en1->name && !en2->name)
+		     || (en1->name && en2->name
+			 && !strcmp (en1->name, en2->name))))
+		  {
+		    if (en1->name)
+		      free (en1->name);
+
+		    free (t);
+
+		    return t2->id;
+		  }
+
+		break;
+	      }
+
 	    case LF_POINTER:
 	      {
 		struct pdb_pointer *ptr1 = (struct pdb_pointer *) t->data;
@@ -1172,6 +1470,105 @@ add_type (struct pdb_type *t)
   last_type = t;
 
   return t->id;
+}
+
+/* For a given enum, allocate a new pdb_type and add it to the type list. */
+static uint16_t
+find_type_enum (tree t)
+{
+  tree v;
+  struct pdb_type *fltype, *enumtype;
+  struct pdb_fieldlist *fieldlist;
+  struct pdb_fieldlist_entry *ent;
+  struct pdb_enum *en;
+  unsigned int num_entries, size;
+  uint16_t fltypenum;
+
+  v = TYPE_VALUES (t);
+  num_entries = 0;
+
+  while (v)
+    {
+      num_entries++;
+
+      v = TREE_CHAIN (v);
+    }
+
+  // add fieldlist type
+
+  fltype =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_fieldlist));
+  fltype->cv_type = LF_FIELDLIST;
+  fltype->tree = NULL;
+
+  fieldlist = (struct pdb_fieldlist *) fltype->data;
+  fieldlist->count = num_entries;
+  fieldlist->entries =
+    (struct pdb_fieldlist_entry *)
+    xmalloc (sizeof (struct pdb_fieldlist_entry) * num_entries);
+
+  ent = fieldlist->entries;
+  v = TYPE_VALUES (t);
+
+  while (v)
+    {
+      ent->cv_type = LF_ENUMERATE;
+      ent->fld_attr = 0;
+
+      if (TREE_CODE (TREE_VALUE (v)) == CONST_DECL)
+	ent->value = TREE_INT_CST_ELT (DECL_INITIAL (TREE_VALUE (v)), 0);
+      else if (TREE_CODE (TREE_VALUE (v)) == INTEGER_CST)
+	ent->value = TREE_INT_CST_ELT (TREE_VALUE (v), 0);
+      else
+	ent->value = 0;
+
+      ent->name = xstrdup (IDENTIFIER_POINTER (TREE_PURPOSE (v)));
+
+      v = TREE_CHAIN (v);
+      ent++;
+    }
+
+  fltypenum = add_type (fltype);
+
+  // add type for enum
+
+  enumtype =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_enum));
+  enumtype->cv_type = LF_ENUM;
+  enumtype->tree = t;
+
+  en = (struct pdb_enum *) enumtype->data;
+  en->count = num_entries;
+  en->field = fltypenum;
+
+  size = TYPE_SIZE (t) ? TREE_INT_CST_ELT (TYPE_SIZE (t), 0) : 0;
+
+  if (size == 8)
+    en->type =
+      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
+  else if (size == 16)
+    en->type =
+      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
+  else if (size == 32)
+    en->type =
+      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
+  else if (size == 64)
+    en->type =
+      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
+  else
+    en->type = 0;
+
+  if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == IDENTIFIER_NODE)
+    en->name = xstrdup (IDENTIFIER_POINTER (TYPE_NAME (t)));
+  else if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == TYPE_DECL
+	   && IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (t)))[0] != '.')
+    en->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (t))));
+  else
+    en->name = NULL;
+
+  return add_type (enumtype);
 }
 
 /* Given a pointer type t, allocate a new pdb_type and add it to the
@@ -1587,6 +1984,9 @@ find_type (tree t)
 
     case ARRAY_TYPE:
       return find_type_array (t);
+
+    case ENUMERAL_TYPE:
+      return find_type_enum (t);
 
     case FUNCTION_TYPE:
     case METHOD_TYPE:
