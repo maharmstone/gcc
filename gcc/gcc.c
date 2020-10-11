@@ -44,7 +44,7 @@ compilation is specified by a string called a "spec".  */
 #include "filenames.h"
 #include "spellcheck.h"
 
-
+
 
 /* Manage the manipulation of env vars.
 
@@ -167,7 +167,7 @@ env_manager::restore ()
 #pragma GCC poison getenv putenv
 #endif
 
-
+
 
 /* By default there is no special suffix for target executables.  */
 #ifdef TARGET_EXECUTABLE_SUFFIX
@@ -409,7 +409,7 @@ static const char *greater_than_spec_func (int, const char **);
 static const char *debug_level_greater_than_spec_func (int, const char **);
 static const char *find_fortran_preinclude_file (int, const char **);
 static char *convert_white_space (char *);
-
+
 /* The Specs Language
 
 Specs are strings containing lines, each of which (if not blank)
@@ -626,7 +626,7 @@ to tell which compilers to run.
 GCC also knows implicitly that arguments starting in `-l' are to be
 treated as compiler output files, and passed to the linker in their
 proper position among the other output files.  */
-
+
 /* Define the macros used for specs %a, %l, %L, %S, %C, %1.  */
 
 /* config.h can define ASM_SPEC to provide extra args to the assembler
@@ -1245,7 +1245,7 @@ struct user_specs
 
 static struct user_specs *user_specs_head, *user_specs_tail;
 
-
+
 /* Record the mapping from file suffixes for compilation specs.  */
 
 struct compiler
@@ -1390,7 +1390,7 @@ static vec<char_p> assembler_options;
    These options are accumulated by -Wp,
    and substituted into the preprocessor command with %Z.  */
 static vec<char_p> preprocessor_options;
-
+
 static char *
 skip_whitespace (char *p)
 {
@@ -1533,7 +1533,7 @@ static const char *multilib_os_dir;
    set_multilib_dir based on the compilation options.  */
 
 static const char *multiarch_dir;
-
+
 /* Structure to keep track of the specs that have been defined so far.
    These are accessed using %(specname) in a compiler or link
    spec.  */
@@ -1624,7 +1624,7 @@ static struct spec_list *extra_specs = (struct spec_list *) 0;
 /* List of dynamically allocates specs that have been defined so far.  */
 
 static struct spec_list *specs = (struct spec_list *) 0;
-
+
 /* List of static spec functions.  */
 
 static const struct spec_function static_spec_functions[] =
@@ -1655,7 +1655,7 @@ static const struct spec_function static_spec_functions[] =
 };
 
 static int processing_spec_function;
-
+
 /* Add appropriate libgcc specs to OBSTACK, taking into account
    various permutations of -shared-libgcc, -shared, and such.  */
 
@@ -1865,7 +1865,7 @@ init_spec (void)
 
   specs = sl;
 }
-
+
 /* Change the value of spec NAME to SPEC.  If SPEC is empty, then the spec is
    removed; If the spec starts with a + then SPEC is added to the end of the
    current spec.  */
@@ -1927,7 +1927,7 @@ set_spec (const char *name, const char *spec, bool user_p)
   sl->user_p = user_p;
   sl->alloc_p = true;
 }
-
+
 /* Accumulate a command (program name and args), and run it.  */
 
 typedef const char *const_char_p; /* For DEF_VEC_P.  */
@@ -1973,7 +1973,7 @@ static int execution_count;
 /* Number of commands that exited with a signal.  */
 
 static int signal_count;
-
+
 /* Allocate the argument vector.  */
 
 static void
@@ -2079,7 +2079,7 @@ close_at_file (void)
 
   record_temp_file (temp_file, !save_temps_flag, !save_temps_flag);
 }
-
+
 /* Load specs from a file name named FILENAME, replacing occurrences of
    various different types of line-endings, \r\n, \n\r and just \r, with
    a single \n.  */
@@ -2404,7 +2404,7 @@ read_specs (const char *filename, bool main_p, bool user_p)
 
   XDELETEVEC (buffer);
 }
-
+
 /* Record the names of temporary files we tell compilers to write,
    and delete them at the end of the run.  */
 
@@ -2544,7 +2544,7 @@ clear_failure_queue (void)
 {
   failure_delete_queue = 0;
 }
-
+
 /* Call CALLBACK for each path in PATHS, breaking out early if CALLBACK
    returns non-NULL.
    If DO_MULTI is true iterate over the paths twice, first with multilib
@@ -2787,7 +2787,7 @@ putenv_from_prefixes (const struct path_prefix *paths, const char *env_var,
 {
   xputenv (build_search_list (paths, env_var, true, do_multi));
 }
-
+
 /* Check whether NAME can be accessed in MODE.  This is like access,
    except that it never considers directories to be executable.  */
 
@@ -3013,7 +3013,7 @@ add_sysrooted_hdrs_prefix (struct path_prefix *pprefix, const char *prefix,
 	      require_machine_suffix, os_multilib);
 }
 
-
+
 /* Execute the command specified by the arguments on the current line of spec.
    When using pipes, this includes several piped-together commands
    with `|' between them.
@@ -3369,7 +3369,7 @@ execute (void)
     return ret_code;
   }
 }
-
+
 /* Find all the switches given to us
    and make a vector describing them.
    The elements of the vector are strings, one per switch given.
@@ -3479,7 +3479,7 @@ static int added_libraries;
 /* And a vector of corresponding output files is made up later.  */
 
 const char **outfiles;
-
+
 #if defined(HAVE_TARGET_OBJECT_SUFFIX) || defined(HAVE_TARGET_EXECUTABLE_SUFFIX)
 
 /* Convert NAME to a new name if it is the standard suffix.  DO_EXE
@@ -3535,7 +3535,7 @@ convert_filename (const char *name, int do_exe ATTRIBUTE_UNUSED,
   return name;
 }
 #endif
-
+
 /* Display the command line switches accepted by gcc.  */
 static void
 display_help (void)
@@ -3630,7 +3630,7 @@ add_linker_option (const char *option, int len)
 {
   linker_options.safe_push (save_string (option, len));
 }
-
+
 /* Allocate space for an input file in infiles.  */
 
 static void
@@ -4291,7 +4291,7 @@ driver_handle_option (struct gcc_options *opts,
 
     case OPT_gcodeview:
       /* If we've generated CodeView debugging information, make sure
-         linker creates a PDB file for them. */
+       * linker creates a PDB file for it. */
       add_infile ("--pdb=\"\"", "*");
       break;
 
@@ -4852,7 +4852,7 @@ set_collect_gcc_options (void)
   obstack_grow (&collect_obstack, "\0", 1);
   xputenv (XOBFINISH (&collect_obstack, char *));
 }
-
+
 /* Process a spec string, accumulating and running commands.  */
 
 /* These variables describe the input file name.
@@ -6029,7 +6029,7 @@ do_spec_1 (const char *spec, int inswitch, const char *soft_matched_part)
 		     "%{foo=*:bar%*}%{foo=*:one%*two}"
 
 		   matches -foo=hello then it will produce:
-
+		   
 		     barhello onehellotwo
 		*/
 		if (*p == 0 || *p == '}')
@@ -6667,7 +6667,7 @@ process_brace_body (const char *p, const char *atom, const char *end_atom,
  invalid:
   fatal_error (input_location, "braced spec body %qs is invalid", body);
 }
-
+
 /* Return 0 iff switch number SWITCHNUM is obsoleted by a later switch
    on the command line.  PREFIX_LENGTH is the length of XXX in an {XXX*}
    spec, or -1 if either exact match or %* is used.
@@ -6748,7 +6748,7 @@ check_live_switch (int switchnum, int prefix_length)
   switches[switchnum].live_cond |= SWITCH_LIVE;
   return 1;
 }
-
+
 /* Pass a switch to the current accumulating command
    in the same form that we received it.
    SWITCHNUM identifies the switch; it is an index into
@@ -6802,7 +6802,7 @@ give_switch (int switchnum, int omit_first_word)
   do_spec_1 (" ", 0, NULL);
   switches[switchnum].validated = true;
 }
-
+
 /* Print GCC configuration (e.g. version, thread model, target,
    configuration_arguments) to a given FILE.  */
 
@@ -7238,7 +7238,7 @@ set_input (const char *filename)
      INPUT_STAT_SET signals that the stat is needed.  */
   input_stat_set = 0;
 }
-
+
 /* On fatal signals, delete all the temporary files.  */
 
 static void
@@ -8523,7 +8523,7 @@ lookup_compiler (const char *name, size_t length, const char *language)
     }
   return 0;
 }
-
+
 static char *
 save_string (const char *s, int len)
 {
@@ -8535,7 +8535,7 @@ save_string (const char *s, int len)
   return result;
 }
 
-
+
 static inline void
 validate_switches_from_spec (const char *spec, bool user)
 {
@@ -8643,7 +8643,7 @@ next_member:
   return p;
 #undef SKIP_WHITE
 }
-
+
 struct mdswitchstr
 {
   const char *str;
@@ -9361,7 +9361,7 @@ print_multilib_info (void)
       ++p;
     }
 }
-
+
 /* getenv built-in spec function.
 
    Returns the value of the environment variable given by its first argument,
@@ -9715,9 +9715,9 @@ static unsigned HOST_WIDE_INT
 get_random_number (void)
 {
   unsigned HOST_WIDE_INT ret = 0;
-  int fd;
+  int fd; 
 
-  fd = open ("/dev/urandom", O_RDONLY);
+  fd = open ("/dev/urandom", O_RDONLY); 
   if (fd >= 0)
     {
       read (fd, &ret, sizeof (HOST_WIDE_INT));
@@ -10077,16 +10077,16 @@ find_fortran_preinclude_file (int argc, const char **argv)
 }
 
 
-/* Insert backslash before spaces in ORIG (usually a file path), to
+/* Insert backslash before spaces in ORIG (usually a file path), to 
    avoid being broken by spec parser.
 
    This function is needed as do_spec_1 treats white space (' ' and '\t')
    as the end of an argument. But in case of -plugin /usr/gcc install/xxx.so,
    the file name should be treated as a single argument rather than being
-   broken into multiple. Solution is to insert '\\' before the space in a
+   broken into multiple. Solution is to insert '\\' before the space in a 
    file name.
-
-   This function converts and only converts all occurrence of ' '
+   
+   This function converts and only converts all occurrence of ' ' 
    to '\\' + ' ' and '\t' to '\\' + '\t'.  For example:
    "a b"  -> "a\\ b"
    "a  b" -> "a\\ \\ b"

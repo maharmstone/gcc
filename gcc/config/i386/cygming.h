@@ -194,13 +194,13 @@ along with GCC; see the file COPYING3.  If not see
 /* Windows64 continues to use a 32-bit long type.  */
 #undef LONG_TYPE_SIZE
 #define LONG_TYPE_SIZE 32
-
+
 #define drectve_section() \
   (fprintf (asm_out_file, "\t.section .drectve\n"), \
    in_section = NULL)
 
 /* Older versions of gas don't handle 'r' as data.
-   Explicitly set data flag with 'd'.  */
+   Explicitly set data flag with 'd'.  */  
 #define READONLY_DATA_SECTION_ASM_OP "\t.section .rdata,\"dr\""
 
 /* Don't allow flag_pic to propagate since gas may produce invalid code
@@ -264,7 +264,7 @@ do {						\
 #undef TARGET_MANGLE_ASSEMBLER_NAME
 #define TARGET_MANGLE_ASSEMBLER_NAME i386_pe_mangle_assembler_name
 
-
+
 /* Emit code to check the stack when allocating more than 4000
    bytes in one go.  */
 #define CHECK_STACK_LIMIT 4000
