@@ -772,6 +772,70 @@ write_pointer (struct pdb_pointer *ptr)
   fprintf (asm_out_file, "\t.long\t0x%x\n", ptr->attr.num);
 }
 
+/* Output a lfArray structure. */
+static void
+write_array (struct pdb_array *arr)
+{
+  uint16_t len = 15, align;
+
+  if (arr->length >= 0x8000)
+    {
+      if (arr->length <= 0xffff)
+	len += 2;	// LF_USHORT
+      else if (arr->length <= 0xffffffff)
+	len += 4;	// LF_ULONG
+      else
+	len += 8;	// LF_UQUADWORD
+    }
+
+  align = 4 - (len % 4);
+
+  if (align != 4)
+    len += align;
+
+  fprintf (asm_out_file, "\t.short\t0x%lx\n", len - sizeof (uint16_t));
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ARRAY);
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->type);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->index_type);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+
+  if (arr->length >= 0x8000)
+    {
+      if (arr->length <= 0xffff)
+	{
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_USHORT);
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) arr->length);
+	}
+      else if (arr->length <= 0xffffffff)
+	{
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ULONG);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", (uint32_t) arr->length);
+	}
+      else
+	{
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UQUADWORD);
+	  fprintf (asm_out_file, "\t.quad\t0x%" PRIx64 "\n", arr->length);
+	}
+    }
+  else
+    fprintf (asm_out_file, "\t.short\t0x%x\n", (uint32_t) arr->length);
+
+  fprintf (asm_out_file, "\t.byte\t0\n");	// empty string
+
+  if (align != 4)
+    {
+      if (align == 3)
+	fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+      if (align >= 2)
+	fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+      fprintf (asm_out_file, "\t.byte\t0xf1\n");
+    }
+}
+
 /* Output a lfArgList structure, describing the arguments that a
  * procedure expects. */
 static void
@@ -838,6 +902,10 @@ write_type (struct pdb_type *t)
     {
     case LF_POINTER:
       write_pointer ((struct pdb_pointer *) t->data);
+      break;
+
+    case LF_ARRAY:
+      write_array ((struct pdb_array *) t->data);
       break;
 
     case LF_ARGLIST:
@@ -995,6 +1063,23 @@ add_type (struct pdb_type *t)
 		break;
 	      }
 
+	    case LF_ARRAY:
+	      {
+		struct pdb_array *arr1 = (struct pdb_array *) t->data;
+		struct pdb_array *arr2 = (struct pdb_array *) t2->data;
+
+		if (arr1->type == arr2->type &&
+		    arr1->index_type == arr2->index_type &&
+		    arr1->length == arr2->length)
+		  {
+		    free (t);
+
+		    return t2->id;
+		  }
+
+		break;
+	      }
+
 	    case LF_ARGLIST:
 	      {
 		struct pdb_arglist *arglist1 = (struct pdb_arglist *) t->data;
@@ -1119,6 +1204,32 @@ find_type_pointer (tree t)
       TYPE_REF_IS_RVALUE (t) ? CV_PTR_MODE_RVREF : CV_PTR_MODE_LVREF;
 
   return add_type (ptrtype);
+}
+
+/* Given an array type t, allocate a new pdb_type and add it to the
+ * type list. */
+static uint16_t
+find_type_array (tree t)
+{
+  struct pdb_type *arrtype;
+  struct pdb_array *arr;
+  uint16_t type = find_type (TREE_TYPE (t));
+
+  if (type == 0)
+    return 0;
+
+  arrtype =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_array));
+  arrtype->cv_type = LF_ARRAY;
+  arrtype->tree = t;
+
+  arr = (struct pdb_array *) arrtype->data;
+  arr->type = type;
+  arr->index_type = CV_BUILTIN_TYPE_UINT32LONG;
+  arr->length = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
+
+  return add_type (arrtype);
 }
 
 /* Given a function type t, allocate a new pdb_type and add it to the
@@ -1448,6 +1559,9 @@ find_type (tree t)
     case POINTER_TYPE:
     case REFERENCE_TYPE:
       return find_type_pointer (t);
+
+    case ARRAY_TYPE:
+      return find_type_array (t);
 
     case FUNCTION_TYPE:
     case METHOD_TYPE:
