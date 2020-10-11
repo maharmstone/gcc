@@ -761,6 +761,17 @@ free_type (struct pdb_type *t)
   free (t);
 }
 
+/* Output a lfPointer structure. */
+static void
+write_pointer (struct pdb_pointer *ptr)
+{
+  fprintf (asm_out_file, "\t.short\t0xa\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_POINTER);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", ptr->type);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.long\t0x%x\n", ptr->attr.num);
+}
+
 /* Output a lfArgList structure, describing the arguments that a
  * procedure expects. */
 static void
@@ -812,6 +823,10 @@ write_type (struct pdb_type *t)
 {
   switch (t->cv_type)
     {
+    case LF_POINTER:
+      write_pointer ((struct pdb_pointer *) t->data);
+      break;
+
     case LF_ARGLIST:
       write_arglist ((struct pdb_arglist *) t->data);
       break;
@@ -947,6 +962,22 @@ add_type (struct pdb_type *t)
 	{
 	  switch (t2->cv_type)
 	    {
+	    case LF_POINTER:
+	      {
+		struct pdb_pointer *ptr1 = (struct pdb_pointer *) t->data;
+		struct pdb_pointer *ptr2 = (struct pdb_pointer *) t2->data;
+
+		if (ptr1->type == ptr2->type &&
+		    ptr1->attr.num == ptr2->attr.num)
+		  {
+		    free (t);
+
+		    return t2->id;
+		  }
+
+		break;
+	      }
+
 	    case LF_ARGLIST:
 	      {
 		struct pdb_arglist *arglist1 = (struct pdb_arglist *) t->data;
@@ -1017,6 +1048,51 @@ add_type (struct pdb_type *t)
   last_type = t;
 
   return t->id;
+}
+
+/* Given a pointer type t, allocate a new pdb_type and add it to the
+ * type list. */
+static uint16_t
+find_type_pointer (tree t)
+{
+  struct pdb_type *ptrtype;
+  struct pdb_pointer *ptr;
+  unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8;
+  uint16_t type = find_type (TREE_TYPE (t));
+
+  if (type == 0)
+    return 0;
+
+  if (type < FIRST_TYPE_NUM && TREE_CODE (t) == POINTER_TYPE)
+    {			// pointers to builtins have their own constants
+      if (size == 4)
+	return (CV_TM_NPTR32 << 8) | type;
+      else if (size == 8)
+	return (CV_TM_NPTR64 << 8) | type;
+    }
+
+  ptrtype =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_pointer));
+  ptrtype->cv_type = LF_POINTER;
+  ptrtype->tree = t;
+
+  ptr = (struct pdb_pointer *) ptrtype->data;
+  ptr->type = type;
+  ptr->attr.num = 0;
+
+  ptr->attr.s.size = size;
+
+  if (size == 8)
+    ptr->attr.s.ptrtype = CV_PTR_64;
+  else if (size == 4)
+    ptr->attr.s.ptrtype = CV_PTR_NEAR32;
+
+  if (TREE_CODE (t) == REFERENCE_TYPE)
+    ptr->attr.s.ptrmode =
+      TYPE_REF_IS_RVALUE (t) ? CV_PTR_MODE_RVREF : CV_PTR_MODE_LVREF;
+
+  return add_type (ptrtype);
 }
 
 /* Given a function type t, allocate a new pdb_type and add it to the
@@ -1310,6 +1386,10 @@ find_type (tree t)
 
   switch (TREE_CODE (t))
     {
+    case POINTER_TYPE:
+    case REFERENCE_TYPE:
+      return find_type_pointer (t);
+
     case FUNCTION_TYPE:
     case METHOD_TYPE:
       return find_type_function (t);
