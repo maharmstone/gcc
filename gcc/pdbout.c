@@ -51,6 +51,7 @@ static void pdbout_finish (const char *filename);
 static void pdbout_begin_function (tree func);
 static void pdbout_late_global_decl (tree var);
 static void pdbout_function_decl (tree decl);
+static void pdbout_var_location (rtx_insn * loc_note);
 static void pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED,
 				unsigned int blocknum);
 static void pdbout_end_block (unsigned int line ATTRIBUTE_UNUSED,
@@ -61,6 +62,7 @@ static uint16_t find_type (tree t);
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_block *cur_block = NULL;
 static struct pdb_global_var *global_vars = NULL;
+static unsigned int var_loc_number = 1;
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   debug_nothing_charstar,	/* init */
@@ -93,7 +95,7 @@ const struct gcc_debug_hooks pdb_debug_hooks = {
   debug_nothing_tree,		/* outlining_inline_function */
   debug_nothing_rtx_code_label,	/* label */
   debug_nothing_int,		/* handle_pch */
-  debug_nothing_rtx_insn,	/* var_location */
+  pdbout_var_location,
   debug_nothing_tree,		/* inline_entry */
   debug_nothing_tree,		/* size_function */
   debug_nothing_void,		/* switch_text_section */
@@ -120,13 +122,139 @@ pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
   fprintf (asm_out_file, FUNC_END_LABEL "%u:\n", current_function_funcdef_no);
 }
 
+/* Output DEFRANGESYMREGISTER or DEFRANGESYMREGISTERREL structure, describing
+ * the scope range, register, and offset at which a local variable can be
+ * found. */
+static void
+write_var_location (struct pdb_var_location *var_loc,
+		    unsigned int next_var_loc_number, unsigned int func_num)
+{
+  switch (var_loc->type)
+    {
+    case pdb_var_loc_register:
+      fprintf (asm_out_file, "\t.short\t0xe\n");
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_DEFRANGE_REGISTER);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", var_loc->reg);
+      fprintf (asm_out_file, "\t.short\t0\n");	// range attr
+      fprintf (asm_out_file, "\t.long\t[.varloc%u]\n",
+	       var_loc->var_loc_number);
+
+      // section (will be filled in by the linker)
+      fprintf (asm_out_file, "\t.short\t0\n");
+
+      if (next_var_loc_number != 0)
+	fprintf (asm_out_file, "\t.short\t[.varloc%u]-[.varloc%u]\n",
+		 next_var_loc_number, var_loc->var_loc_number);
+      else {
+	fprintf (asm_out_file,
+		 "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n",
+		 func_num, var_loc->var_loc_number);	// to end of function
+      }
+
+      break;
+
+    case pdb_var_loc_regrel:
+      fprintf (asm_out_file, "\t.short\t0x12\n");
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_DEFRANGE_REGISTER_REL);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", var_loc->reg);
+
+      // spilledUdtMember, padding, offsetParent
+      fprintf (asm_out_file, "\t.short\t0\n");
+
+      fprintf (asm_out_file, "\t.long\t0x%x\n", var_loc->offset);
+      fprintf (asm_out_file, "\t.long\t[.varloc%u]\n",
+	       var_loc->var_loc_number);
+
+      // section (will be filled in by the linker)
+      fprintf (asm_out_file, "\t.short\t0\n");
+
+      if (next_var_loc_number != 0)
+	fprintf (asm_out_file, "\t.short\t[.varloc%u]-[.varloc%u]\n",
+		 next_var_loc_number, var_loc->var_loc_number);
+      else {
+	fprintf (asm_out_file,
+		 "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n",
+		 func_num, var_loc->var_loc_number);	// to end of function
+      }
+
+      break;
+
+    case pdb_var_loc_unknown:
+      break;
+    }
+}
+
+/* We have encountered an optimized local variable, i.e. one which doesn't
+ * live in the same place for the duration of a function.
+ * Output a LOCALSYM struct. */
+static void
+pdbout_optimized_local_variable (struct pdb_local_var *v,
+				 struct pdb_var_location *var_locs,
+				 unsigned int func_num)
+{
+  uint16_t len, align;
+  size_t name_len = strlen (v->name);
+  struct pdb_var_location *last_pvl = var_locs, *pvl;
+
+  len = 11 + name_len;
+
+  if (len % 4 != 0)
+    {
+      align = 4 - (len % 4);
+      len += 4 - (len % 4);
+    }
+  else
+    align = 0;
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   (uint16_t) (len - sizeof (uint16_t)));
+  fprintf (asm_out_file, "\t.short\t0x%x\n", S_LOCAL);
+  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+  fprintf (asm_out_file, "\t.short\t0\n");	// flags
+
+  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+
+  for (unsigned int i = 0; i < align; i++)
+    {
+      fprintf (asm_out_file, "\t.byte\t0\n");
+    }
+
+  pvl = var_locs->next;
+  while (pvl)
+    {
+      if (pvl->var == v->t)
+	{
+	  write_var_location (last_pvl, pvl->var_loc_number, func_num);
+	  last_pvl = pvl;
+	}
+
+      pvl = pvl->next;
+    }
+
+  write_var_location (last_pvl, 0, func_num);
+}
+
 /* Output the information as to where to a local variable can be found. */
 static void
 pdbout_local_variable (struct pdb_local_var *v,
+		       struct pdb_var_location *var_locs,
 		       unsigned int func_num)
 {
   uint16_t len, align;
   size_t name_len = strlen (v->name);
+  struct pdb_var_location *pvl;
+
+  pvl = var_locs;
+  while (pvl)
+    {
+      if (pvl->var == v->t)
+	{
+	  pdbout_optimized_local_variable (v, pvl, func_num);
+	  return;
+	}
+
+      pvl = pvl->next;
+    }
 
   switch (v->var_type)
     {
@@ -258,7 +386,7 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
   while (local_var)
     {
       if (local_var->block_num == block->num)
-	pdbout_local_variable (local_var, func->num);
+	pdbout_local_variable (local_var, func->var_locs, func->num);
 
       local_var = local_var->next;
     }
@@ -371,6 +499,15 @@ pdbout_proc32 (struct pdb_func *func)
       free (func->local_vars);
 
       func->local_vars = n;
+    }
+
+  while (func->var_locs)
+    {
+      struct pdb_var_location *n = func->var_locs->next;
+
+      free (func->var_locs);
+
+      func->var_locs = n;
     }
 }
 
@@ -490,6 +627,7 @@ pdbout_begin_function (tree func)
   f->public_flag = TREE_PUBLIC (func);
   f->type = find_type (TREE_TYPE (func));
   f->local_vars = f->last_local_var = NULL;
+  f->var_locs = f->last_var_loc = NULL;
 
   f->block.next = NULL;
   f->block.parent = NULL;
@@ -1251,6 +1389,109 @@ pdbout_function_decl (tree decl)
 
   cur_func = NULL;
   cur_block = NULL;
+}
+
+/* We've been given the details of where an optimized local variable resides,
+ * i.e. one that doesn't stay in the same place on the stack for the function
+ * duration. Record them so we can output them later.
+ * CodeView seems quite limited in this regard compared to DWARF - e.g. there's
+ * no way of saying that we know a variable would always have a constant value
+ * at such-and-such a point. There's hints in the header files that such
+ * functionality once existed, but MSVC won't output it and the debugger
+ * doesn't seem to understand it. */
+static void
+pdbout_var_location (rtx_insn * loc_note)
+{
+  rtx value;
+  tree var;
+  struct pdb_var_location *var_loc;
+
+  if (!cur_func)
+    return;
+
+  if (!NOTE_P (loc_note))
+    return;
+
+  if (NOTE_KIND (loc_note) != NOTE_INSN_VAR_LOCATION)
+    return;
+
+  var = NOTE_VAR_LOCATION_DECL (loc_note);
+  value = NOTE_VAR_LOCATION_LOC (loc_note);
+
+  if (value)
+    value = eliminate_regs (value, VOIDmode, NULL_RTX);
+
+  var_loc =
+    (struct pdb_var_location *) xmalloc (sizeof (struct pdb_var_location));
+
+  var_loc->next = NULL;
+  var_loc->var = var;
+  var_loc->var_loc_number = var_loc_number;
+
+  if (value)
+    {
+      switch (GET_CODE (value))
+	{
+	case REG:
+	  var_loc->type = pdb_var_loc_register;
+	  var_loc->reg = map_register_no (REGNO (value), GET_MODE (value));
+	  break;
+
+	case MEM:
+	  if (GET_CODE (XEXP (value, 0)) == PLUS
+	      && GET_CODE (XEXP (XEXP (value, 0), 0)) == REG
+	      && GET_CODE (XEXP (XEXP (value, 0), 1)) == CONST_INT)
+	    {
+	      var_loc->type = pdb_var_loc_regrel;
+	      var_loc->reg =
+		map_register_no (REGNO (XEXP (XEXP (value, 0), 0)),
+				 GET_MODE (XEXP (XEXP (value, 0), 0)));
+	      var_loc->offset = XINT (XEXP (XEXP (value, 0), 1), 0);
+	    }
+	  else if (GET_CODE (XEXP (value, 0)) == REG)
+	    {
+	      var_loc->type = pdb_var_loc_regrel;
+	      var_loc->reg =
+		map_register_no (REGNO (XEXP (value, 0)),
+				 GET_MODE (XEXP (value, 0)));
+	      var_loc->offset = 0;
+	    }
+	  else
+	    var_loc->type = pdb_var_loc_unknown;
+
+	  break;
+
+	default:
+	  var_loc->type = pdb_var_loc_unknown;
+	  break;
+	}
+    }
+
+  /* If using sjlj exceptions on x86, the stack will later get shifted by
+   * 16 bytes - we need to account for that now. */
+  if (!TARGET_64BIT)
+    {
+      if (var_loc->type == pdb_var_loc_regrel &&
+	  var_loc->reg == CV_X86_EBP &&
+	  var_loc->offset < 0 &&
+	  cfun->eh->region_tree &&
+	  targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
+	{
+	  var_loc->offset -= 16;
+	}
+    }
+
+  fprintf (asm_out_file, ".varloc%u:\n", var_loc_number);
+
+  if (cur_func->last_var_loc)
+    cur_func->last_var_loc->next = var_loc;
+
+  cur_func->last_var_loc = var_loc;
+
+  if (!cur_func->var_locs)
+    cur_func->var_locs = var_loc;
+
+  var_loc_number++;
 }
 
 /* We've encountered the start of a scope block - output an ASM label so

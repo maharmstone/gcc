@@ -29,6 +29,9 @@
 #define S_LPROC32			0x110f
 #define S_GPROC32			0x1110
 #define S_REGREL32			0x1111
+#define S_LOCAL				0x113e
+#define S_DEFRANGE_REGISTER		0x1141
+#define S_DEFRANGE_REGISTER_REL		0x1145
 
 /* Format version as of MSVC 7 */
 #define CV_SIGNATURE_C13	4
@@ -56,6 +59,23 @@ struct pdb_local_var
   char name[1];
 };
 
+enum pdb_var_loc_type
+{
+  pdb_var_loc_unknown,
+  pdb_var_loc_register,
+  pdb_var_loc_regrel
+};
+
+struct pdb_var_location
+{
+  struct pdb_var_location *next;
+  tree var;
+  unsigned int var_loc_number;
+  enum pdb_var_loc_type type;
+  unsigned int reg;
+  int32_t offset;
+};
+
 struct pdb_block
 {
   struct pdb_block *next;
@@ -72,6 +92,7 @@ struct pdb_func
   unsigned int public_flag;
   uint16_t type;
   struct pdb_local_var *local_vars, *last_local_var;
+  struct pdb_var_location *var_locs, *last_var_loc;
   struct pdb_block block;
 };
 
