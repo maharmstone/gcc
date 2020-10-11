@@ -817,6 +817,19 @@ write_procedure (struct pdb_proc *proc)
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 }
 
+/* Output lfModifier structure, representing a const or volatile version
+ * of an existing type. */
+static void
+write_modifier (struct pdb_modifier *t)
+{
+  fprintf (asm_out_file, "\t.short\t0xa\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_MODIFIER);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->type);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->modifier);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+}
+
 /* Given a pdb_type, output its definition. */
 static void
 write_type (struct pdb_type *t)
@@ -833,6 +846,10 @@ write_type (struct pdb_type *t)
 
     case LF_PROCEDURE:
       write_procedure ((struct pdb_proc *) t->data);
+      break;
+
+    case LF_MODIFIER:
+      write_modifier ((struct pdb_modifier *) t->data);
       break;
     }
 }
@@ -1026,6 +1043,15 @@ add_type (struct pdb_type *t)
 
 		break;
 	      }
+
+	    case LF_MODIFIER:
+	      if (!memcmp (t->data, t2->data, sizeof (struct pdb_modifier)))
+		{
+		  free (t);
+
+		  return t2->id;
+		}
+	      break;
 	    }
 	}
 
@@ -1189,6 +1215,34 @@ find_type_function (tree t)
   return add_type (proctype);
 }
 
+/* Given a CV-modified type t, allocate a new pdb_type modifying
+ * the base type, and add it to the type list. */
+static uint16_t
+find_type_modifier (tree t)
+{
+  struct pdb_type *type;
+  struct pdb_modifier *mod;
+
+  type =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_modifier));
+  type->cv_type = LF_MODIFIER;
+  type->tree = t;
+
+  mod = (struct pdb_modifier *) type->data;
+
+  mod->type = find_type (TYPE_MAIN_VARIANT (t));
+  mod->modifier = 0;
+
+  if (TYPE_READONLY (t))
+    mod->modifier |= CV_MODIFIER_CONST;
+
+  if (TYPE_VOLATILE (t))
+    mod->modifier |= CV_MODIFIER_VOLATILE;
+
+  return add_type (type);
+}
+
 /* Resolve a type t to a type number. If it's a builtin type, such as bool or
  * the various ints, return its constant. Otherwise, allocate a new pdb_type,
  * and add it to the type list. */
@@ -1210,6 +1264,11 @@ find_type (tree t)
 
       type = type->next;
     }
+
+  // add modifier type if const or volatile
+
+  if (TYPE_READONLY (t) || TYPE_VOLATILE (t))
+    return find_type_modifier (t);
 
   switch (TREE_CODE (t))
     {

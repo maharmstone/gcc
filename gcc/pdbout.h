@@ -21,6 +21,7 @@
 #define GCC_PDBOUT_H 1
 
 #define S_END				0x0006
+#define LF_MODIFIER			0x1001
 #define LF_POINTER			0x1002
 #define LF_PROCEDURE			0x1008
 #define S_BLOCK32			0x1103
@@ -244,6 +245,16 @@ struct pdb_source_file
   uint32_t str_offset;
   unsigned int num;
   char name[1];
+};
+
+#define CV_MODIFIER_CONST	0x1
+#define CV_MODIFIER_VOLATILE	0x2
+#define CV_MODIFIER_UNALIGNED	0x4
+
+struct pdb_modifier
+{
+  uint16_t type;
+  uint16_t modifier;
 };
 
 enum pdb_x86_register
