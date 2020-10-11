@@ -196,6 +196,13 @@ struct pdb_type
   uint8_t data[1];
 };
 
+struct pdb_alias
+{
+  struct pdb_alias *next;
+  tree_node *tree;
+  uint16_t type_id;
+};
+
 #define CV_BUILTIN_TYPE_VOID			0x0003
 #define CV_BUILTIN_TYPE_HRESULT			0x0008
 #define CV_BUILTIN_TYPE_SIGNED_CHARACTER	0x0010

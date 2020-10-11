@@ -55,6 +55,7 @@ static void pdbout_init (const char *filename);
 static void pdbout_finish (const char *filename);
 static void pdbout_begin_function (tree func);
 static void pdbout_late_global_decl (tree var);
+static void pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED);
 static void pdbout_start_source_file (unsigned int line ATTRIBUTE_UNUSED,
 				      const char *file);
 static void pdbout_source_line (unsigned int line,
@@ -75,6 +76,7 @@ static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_block *cur_block = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
+static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
@@ -105,7 +107,7 @@ const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_function_decl,
   debug_nothing_tree,		/* early_global_decl */
   pdbout_late_global_decl,
-  debug_nothing_tree_int,	/* type_decl */
+  pdbout_type_decl,
   debug_nothing_tree_tree_tree_bool_bool,	/* imported_module_or_decl */
   debug_false_tree_charstarstar_uhwistar,	/* die_ref_for_decl */
   debug_nothing_tree_charstar_uhwi,	/* register_external_die */
@@ -941,6 +943,17 @@ write_pdb_type_section (void)
 
       types = n;
     }
+
+  while (aliases)
+    {
+      struct pdb_alias *n;
+
+      n = aliases->next;
+
+      free (aliases);
+
+      aliases = n;
+    }
 }
 
 /* We've finished compilation - output the .debug$S and .debug$T sections
@@ -1361,9 +1374,21 @@ static uint16_t
 find_type (tree t)
 {
   struct pdb_type *type;
+  struct pdb_alias *al;
 
   if (!t)
     return 0;
+
+  // search through typedefs
+
+  al = aliases;
+  while (al)
+    {
+      if (al->tree == t)
+	return al->type_id;
+
+      al = al->next;
+    }
 
   // search through existing types
 
@@ -1570,6 +1595,41 @@ find_type (tree t)
     default:
       return 0;
     }
+}
+
+/* We've encountered a type definition - add it to the type list. */
+static void
+pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
+{
+  /* We need to record the typedefs to ensure e.g. that Windows'
+   * LPWSTR gets mapped to wchar_t* rather than uint16_t*.
+   * There is a LF_ALIAS / lfAlias in Microsoft's header files, but
+   * it seems to have been forgotten about - MSVC won't generate it. */
+
+  if (DECL_ORIGINAL_TYPE (t))	// typedef
+    {
+      struct pdb_alias *a;
+
+      a = (struct pdb_alias *) xmalloc (sizeof (struct pdb_alias));
+
+      a->next = aliases;
+      a->tree = TREE_TYPE (t);
+      a->type_id = find_type (DECL_ORIGINAL_TYPE (t));
+
+      // HRESULTs have their own value
+      if (a->type_id == CV_BUILTIN_TYPE_INT32LONG && DECL_NAME (t)
+	  && IDENTIFIER_POINTER (DECL_NAME (t))
+	  && !strcmp (IDENTIFIER_POINTER (DECL_NAME (t)), "HRESULT"))
+	{
+	  a->type_id = CV_BUILTIN_TYPE_HRESULT;
+	}
+
+      aliases = a;
+
+      return;
+    }
+
+  find_type (TREE_TYPE (t));
 }
 
 #ifndef _WIN32
