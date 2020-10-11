@@ -2963,6 +2963,9 @@ find_type (tree t, struct pdb_type **typeptr)
 static void
 pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 {
+  uint16_t type_id;
+  struct pdb_type *type;
+
   /* We need to record the typedefs to ensure e.g. that Windows'
    * LPWSTR gets mapped to wchar_t* rather than uint16_t*.
    * There is a LF_ALIAS / lfAlias in Microsoft's header files, but
@@ -2986,12 +2989,76 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 	  a->type_id = CV_BUILTIN_TYPE_HRESULT;
 	}
 
+      // give name if previously anonymous
+
+      if (a->type)
+	{
+	  switch (a->type->cv_type)
+	    {
+	    case LF_STRUCTURE:
+	    case LF_CLASS:
+	    case LF_UNION:
+	      {
+		struct pdb_struct *str = (struct pdb_struct *) a->type->data;
+
+		if (!str->name)
+		  str->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+
+		break;
+	      }
+
+	    case LF_ENUM:
+	      {
+		struct pdb_enum *en = (struct pdb_enum *) a->type->data;
+
+		if (!en->name)
+		  en->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+
+		break;
+	      }
+	    }
+	}
+
       aliases = a;
 
       return;
     }
 
-  find_type (TREE_TYPE (t), NULL);
+  type_id = find_type (TREE_TYPE (t), &type);
+
+  if (type_id == 0 || type_id < FIRST_TYPE_NUM)
+    return;
+
+  if (type && DECL_NAME (t) && IDENTIFIER_POINTER (DECL_NAME (t))
+      && IDENTIFIER_POINTER (DECL_NAME (t))[0] != '.')
+    {
+      // give name if previously anonymous
+
+      switch (type->cv_type)
+	{
+	case LF_STRUCTURE:
+	case LF_CLASS:
+	case LF_UNION:
+	  {
+	    struct pdb_struct *str = (struct pdb_struct *) type->data;
+
+	    if (!str->name)
+	      str->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+
+	    break;
+	  }
+
+	case LF_ENUM:
+	  {
+	    struct pdb_enum *en = (struct pdb_enum *) type->data;
+
+	    if (!en->name)
+	      en->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+
+	    break;
+	  }
+	}
+    }
 }
 
 #ifndef _WIN32
