@@ -781,6 +781,7 @@ free_type (struct pdb_type *t)
 
     case LF_CLASS:
     case LF_STRUCTURE:
+    case LF_UNION:
       {
 	struct pdb_struct *str = (struct pdb_struct *) t->data;
 
@@ -804,8 +805,8 @@ free_type (struct pdb_type *t)
   free (t);
 }
 
-/* Output a lfFieldlist structure, which describes the fields of a struct
- * or class, or the values of an enum. */
+/* Output a lfFieldlist structure, which describes the fields of a struct,
+ * class, or union, or the values of an enum. */
 static void
 write_fieldlist (struct pdb_fieldlist *fl)
 {
@@ -1024,6 +1025,43 @@ write_struct (uint16_t type, struct pdb_struct *str)
     }
 }
 
+/* Output a lfUnion structure. */
+static void
+write_union (struct pdb_struct *str)
+{
+  size_t name_len = str->name ? strlen (str->name) : (sizeof (unnamed) - 1);
+  unsigned int len = 15 + name_len, align;
+
+  if (len % 4 != 0)
+    len += 4 - (len % 4);
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UNION);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->property.value);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->field);
+  fprintf (asm_out_file, "\t.short\t0\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->size);
+
+  if (str->name)
+    ASM_OUTPUT_ASCII (asm_out_file, str->name, name_len + 1);
+  else
+    ASM_OUTPUT_ASCII (asm_out_file, unnamed, sizeof (unnamed));
+
+  align = 4 - ((3 + name_len) % 4);
+
+  if (align != 4)
+    {
+      if (align == 3)
+	fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+      if (align >= 2)
+	fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+      fprintf (asm_out_file, "\t.byte\t0xf1\n");
+    }
+}
+
 /* Output a lfEnum structure. */
 static void
 write_enum (struct pdb_enum *en)
@@ -1208,6 +1246,10 @@ write_type (struct pdb_type *t)
     case LF_CLASS:
     case LF_STRUCTURE:
       write_struct (t->cv_type, (struct pdb_struct *) t->data);
+      break;
+
+    case LF_UNION:
+      write_union ((struct pdb_struct *) t->data);
       break;
 
     case LF_ENUM:
@@ -1446,6 +1488,7 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 
 	    case LF_STRUCTURE:
 	    case LF_CLASS:
+	    case LF_UNION:
 	      {
 		struct pdb_struct *str1 = (struct pdb_struct *) t->data;
 		struct pdb_struct *str2 = (struct pdb_struct *) t2->data;
@@ -1668,10 +1711,10 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
   add_type (strtype, ret);
 }
 
-/* For a given struct or class, allocate a new pdb_type and
+/* For a given struct, class, or union, allocate a new pdb_type and
  * add it to the type list. */
 static uint16_t
-find_type_struct (tree t, struct pdb_type **typeptr)
+find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 {
   tree f;
   struct pdb_type *fltype = NULL, *strtype, *fwddef = NULL;
@@ -1698,7 +1741,8 @@ find_type_struct (tree t, struct pdb_type **typeptr)
 
 	      if (type
 		  && (type->cv_type == LF_CLASS
-		      || type->cv_type == LF_STRUCTURE))
+		      || type->cv_type == LF_STRUCTURE
+		      || type->cv_type == LF_UNION))
 		{
 		  struct pdb_struct *str2 = (struct pdb_struct *) type->data;
 
@@ -1776,7 +1820,8 @@ find_type_struct (tree t, struct pdb_type **typeptr)
 
 		  if (type
 		      && (type->cv_type == LF_CLASS
-			  || type->cv_type == LF_STRUCTURE))
+			  || type->cv_type == LF_STRUCTURE
+			  || type->cv_type == LF_UNION))
 		    {
 		      struct pdb_struct *str2 =
 			(struct pdb_struct *) type->data;
@@ -1819,7 +1864,9 @@ find_type_struct (tree t, struct pdb_type **typeptr)
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
 				 sizeof (struct pdb_struct));
 
-  if (TYPE_LANG_SPECIFIC (t) && CLASSTYPE_DECLARED_CLASS (t))
+  if (is_union)
+    strtype->cv_type = LF_UNION;
+  else if (TYPE_LANG_SPECIFIC (t) && CLASSTYPE_DECLARED_CLASS (t))
     strtype->cv_type = LF_CLASS;
   else
     strtype->cv_type = LF_STRUCTURE;
@@ -2389,7 +2436,10 @@ find_type (tree t, struct pdb_type **typeptr)
       return find_type_array (t, typeptr);
 
     case RECORD_TYPE:
-      return find_type_struct (t, typeptr);
+      return find_type_struct (t, typeptr, false);
+
+    case UNION_TYPE:
+      return find_type_struct (t, typeptr, true);
 
     case ENUMERAL_TYPE:
       return find_type_enum (t, typeptr);
