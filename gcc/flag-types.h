@@ -28,7 +28,7 @@ enum debug_info_type
   XCOFF_DEBUG,	    /* Write IBM/Xcoff debug info (using dbxout.c).  */
   VMS_DEBUG,        /* Write VMS debug info (using vmsdbgout.c).  */
   VMS_AND_DWARF2_DEBUG, /* Write VMS debug info (using vmsdbgout.c).
-                          and DWARF v2 debug info (using dwarf2out.c).  */
+			   and DWARF v2 debug info (using dwarf2out.c).  */
   PDB_DEBUG	    /* Write CodeView debug info.  */
 };
 
