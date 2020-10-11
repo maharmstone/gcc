@@ -37,6 +37,7 @@
 #define CV_SIGNATURE_C13	4
 
 #define DEBUG_S_SYMBOLS			0xf1
+#define DEBUG_S_LINES			0xf2
 #define DEBUG_S_STRINGTABLE		0xf3
 #define DEBUG_S_FILECHKSMS		0xf4
 
@@ -44,6 +45,13 @@
 #define CHKSUM_TYPE_MD5			1
 #define CHKSUM_TYPE_SHA1		2
 #define CHKSUM_TYPE_SHA_256		3
+
+struct pdb_line
+{
+  struct pdb_line *next;
+  unsigned int line;
+  unsigned int entry;
+};
 
 enum pdb_local_var_type
 {
@@ -98,6 +106,8 @@ struct pdb_func
   int num;
   unsigned int public_flag;
   uint16_t type;
+  unsigned int source_file;
+  struct pdb_line *lines, *last_line;
   struct pdb_local_var *local_vars, *last_local_var;
   struct pdb_var_location *var_locs, *last_var_loc;
   struct pdb_block block;
