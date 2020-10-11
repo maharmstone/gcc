@@ -29,14 +29,25 @@
 #include "tree.h"
 #include "debug.h"
 #include "pdbout.h"
+#include "function.h"
 #include "output.h"
 #include "target.h"
 
+#define FUNC_BEGIN_LABEL	".startfunc"
+#define FUNC_END_LABEL		".endfunc"
+
+static void pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
+				   unsigned int column ATTRIBUTE_UNUSED,
+				   const char *file ATTRIBUTE_UNUSED);
+static void pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
+				 const char *file ATTRIBUTE_UNUSED);
 static void pdbout_finish (const char *filename);
+static void pdbout_begin_function (tree func);
 static void pdbout_late_global_decl (tree var);
 
 static uint16_t find_type (tree t);
 
+static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_global_var *global_vars = NULL;
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
@@ -52,11 +63,11 @@ const struct gcc_debug_hooks pdb_debug_hooks = {
   debug_nothing_int_int,	/* end_block */
   debug_true_const_tree,	/* ignore_block */
   debug_nothing_int_int_charstar_int_bool,	/* source_line */
-  debug_nothing_int_int_charstar,	/* begin_prologue */
+  pdbout_begin_prologue,
   debug_nothing_int_charstar,	/* end_prologue */
   debug_nothing_int_charstar,	/* begin_epilogue */
-  debug_nothing_int_charstar,	/* end_epilogue */
-  debug_nothing_tree,		/* begin_function */
+  pdbout_end_epilogue,
+  pdbout_begin_function,
   debug_nothing_int,		/* end_function */
   debug_nothing_tree,		/* register_main_translation_unit */
   debug_nothing_tree,		/* function_decl */
@@ -78,6 +89,80 @@ const struct gcc_debug_hooks pdb_debug_hooks = {
   0,				/* start_end_main_source_file */
   TYPE_SYMTAB_IS_ADDRESS	/* tree_type_symtab_field */
 };
+
+/* Add label before function start */
+static void
+pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
+		       unsigned int column ATTRIBUTE_UNUSED,
+		       const char *file ATTRIBUTE_UNUSED)
+{
+  fprintf (asm_out_file, FUNC_BEGIN_LABEL "%u:\n",
+	   current_function_funcdef_no);
+}
+
+/* Add label after function end */
+static void
+pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
+		     const char *file ATTRIBUTE_UNUSED)
+{
+  fprintf (asm_out_file, FUNC_END_LABEL "%u:\n", current_function_funcdef_no);
+}
+
+/* Output PROCSYM32 structure, which describes a global function (S_GPROC32)
+ * or a local (i.e. static) one (S_LPROC32). */
+static void
+pdbout_proc32 (struct pdb_func *func)
+{
+  size_t name_len = strlen (func->name);
+  uint16_t len = 40 + name_len, align;
+
+  // start procedure
+
+  if (len % 4 != 0)
+    {
+      align = 4 - (len % 4);
+      len += 4 - (len % 4);
+    }
+  else
+    align = 0;
+
+  fprintf (asm_out_file, ".cvprocstart%u:\n", func->num);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   (uint16_t) (len - sizeof (uint16_t)));	// reclen
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   func->public_flag ? S_GPROC32 : S_LPROC32);
+  fprintf (asm_out_file, "\t.long\t0\n");	// pParent
+  fprintf (asm_out_file, "\t.long\t[.cvprocend%u]-[.debug$S]\n",
+	   func->num);	// pEnd
+  fprintf (asm_out_file, "\t.long\t0\n");	// pNext
+  fprintf (asm_out_file,
+	   "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n",
+	   func->num, func->num);	// len
+  fprintf (asm_out_file, "\t.long\t0\n");	// DbgStart
+  fprintf (asm_out_file, "\t.long\t0\n");	// DbgEnd
+  fprintf (asm_out_file, "\t.short\t0x%x\n", func->type);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n",
+	   func->num);	// off
+
+  // section (will get set by the linker)
+  fprintf (asm_out_file, "\t.short\t0\n");
+
+  fprintf (asm_out_file, "\t.byte\t0\n");	// flags
+  ASM_OUTPUT_ASCII (asm_out_file, func->name, name_len + 1);
+
+  for (unsigned int i = 0; i < align; i++)
+    {
+      fprintf (asm_out_file, "\t.byte\t0\n");
+    }
+
+  // end procedure
+
+  fprintf (asm_out_file, ".cvprocend%u:\n", func->num);
+
+  fprintf (asm_out_file, "\t.short\t0x2\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", S_END);
+}
 
 /* Output DATASYM32 structure, describing a global variable: either
  * one with file-level scope (S_LDATA32) or global scope (S_GDATA32). */
@@ -123,6 +208,8 @@ pdbout_ldata32 (struct pdb_global_var *v)
 static void
 write_pdb_section (void)
 {
+  struct pdb_func *func;
+
   fprintf (asm_out_file, "\t.section\t.debug$S, \"ndr\"\n");
   fprintf (asm_out_file, "\t.long\t0x%x\n", CV_SIGNATURE_C13);
   fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_SYMBOLS);
@@ -149,7 +236,27 @@ write_pdb_section (void)
       global_vars = n;
     }
 
+  func = funcs;
+  while (func)
+    {
+      pdbout_proc32 (func);
+
+      func = func->next;
+    }
+
   fprintf (asm_out_file, ".symend:\n");
+
+  while (funcs)
+    {
+      struct pdb_func *n = funcs->next;
+
+      if (funcs->name)
+	free (funcs->name);
+
+      free (funcs);
+
+      funcs = n;
+    }
 }
 
 /* We've finished compilation - output the .debug$S section
@@ -158,6 +265,24 @@ static void
 pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 {
   write_pdb_section ();
+}
+
+/* We've been passed a function definition - allocate and initialize a pdb_func
+ * struct to represent it. */
+static void
+pdbout_begin_function (tree func)
+{
+  struct pdb_func *f = (struct pdb_func *) xmalloc (sizeof (struct pdb_func));
+
+  f->next = funcs;
+  f->name = xstrdup (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (func)));
+  f->num = current_function_funcdef_no;
+  f->public_flag = TREE_PUBLIC (func);
+  f->type = find_type (TREE_TYPE (func));
+
+  funcs = f;
+
+  cur_func = f;
 }
 
 /* We've been passed a late global declaration, i.e. a global function -

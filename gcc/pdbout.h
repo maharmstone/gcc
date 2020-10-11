@@ -20,13 +20,25 @@
 #ifndef GCC_PDBOUT_H
 #define GCC_PDBOUT_H 1
 
+#define S_END				0x0006
 #define S_LDATA32			0x110c
 #define S_GDATA32			0x110d
+#define S_LPROC32			0x110f
+#define S_GPROC32			0x1110
 
 /* Format version as of MSVC 7 */
 #define CV_SIGNATURE_C13	4
 
 #define DEBUG_S_SYMBOLS			0xf1
+
+struct pdb_func
+{
+  struct pdb_func *next;
+  char *name;
+  int num;
+  unsigned int public_flag;
+  uint16_t type;
+};
 
 struct pdb_global_var
 {
