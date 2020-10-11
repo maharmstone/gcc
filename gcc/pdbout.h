@@ -37,6 +37,7 @@
 #define S_DEFRANGE_REGISTER_REL		0x1145
 #define LF_ARGLIST			0x1201
 #define LF_FIELDLIST			0x1203
+#define LF_BITFIELD			0x1205
 #define LF_ENUMERATE			0x1502
 #define LF_ARRAY			0x1503
 #define LF_CLASS			0x1504
@@ -357,6 +358,13 @@ struct pdb_modifier
 {
   uint16_t type;
   uint16_t modifier;
+};
+
+struct pdb_bitfield
+{
+  uint16_t underlying_type;
+  unsigned int size;
+  unsigned int offset;
 };
 
 enum pdb_x86_register
