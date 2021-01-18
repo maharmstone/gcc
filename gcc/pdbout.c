@@ -82,6 +82,7 @@ static struct pdb_type *types = NULL, *last_type = NULL;
 static struct pdb_type *string_types = NULL;
 static struct pdb_type *arglist_types = NULL;
 static struct pdb_type *udt_src_line_types = NULL;
+static struct pdb_type *pointer_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -2086,25 +2087,6 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 		break;
 	      }
 
-	    case LF_POINTER:
-	      {
-		struct pdb_pointer *ptr1 = (struct pdb_pointer *) t->data;
-		struct pdb_pointer *ptr2 = (struct pdb_pointer *) t2->data;
-
-		if (ptr1->type == ptr2->type &&
-		    ptr1->attr.num == ptr2->attr.num)
-		  {
-		    free (t);
-
-		    if (typeptr)
-		      *typeptr = t2;
-
-		    return t2->id;
-		  }
-
-		break;
-	      }
-
 	    case LF_ARRAY:
 	      {
 		struct pdb_array *arr1 = (struct pdb_array *) t->data;
@@ -3001,8 +2983,8 @@ find_type_enum (tree t, struct pdb_type **typeptr)
 static uint16_t
 find_type_pointer (tree t, struct pdb_type **typeptr)
 {
-  struct pdb_type *ptrtype;
-  struct pdb_pointer *ptr;
+  struct pdb_type *ptrtype, *t2, *last_entry = NULL;
+  struct pdb_pointer *ptr, v;
   unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8;
   uint16_t type = find_type (TREE_TYPE (t), NULL);
 
@@ -3017,28 +2999,66 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
 	return (CV_TM_NPTR64 << 8) | type;
     }
 
+  v.attr.num = 0;
+
+  v.attr.s.size = size;
+
+  if (size == 8)
+    v.attr.s.ptrtype = CV_PTR_64;
+  else if (size == 4)
+    v.attr.s.ptrtype = CV_PTR_NEAR32;
+
+  if (TREE_CODE (t) == REFERENCE_TYPE)
+    v.attr.s.ptrmode =
+      TYPE_REF_IS_RVALUE (t) ? CV_PTR_MODE_RVREF : CV_PTR_MODE_LVREF;
+
+  t2 = pointer_types;
+  while (t2) {
+    ptr = (struct pdb_pointer *) t2->data;
+
+    if (ptr->type == type &&
+      ptr->attr.num == v.attr.num)
+      {
+	if (typeptr)
+	  *typeptr = t2;
+
+	return t2->id;
+      }
+
+    last_entry = t2;
+    t2 = t2->next2;
+  }
+
   ptrtype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
 				 sizeof (struct pdb_pointer));
   ptrtype->cv_type = LF_POINTER;
   ptrtype->tree = t;
+  ptrtype->next = ptrtype->next2 = NULL;
+  ptrtype->id = type_num;
 
   ptr = (struct pdb_pointer *) ptrtype->data;
   ptr->type = type;
-  ptr->attr.num = 0;
+  ptr->attr.num = v.attr.num;
+  type_num++;
 
-  ptr->attr.s.size = size;
+  if (last_entry)
+    last_entry->next2 = ptrtype;
+  else
+    pointer_types = ptrtype;
 
-  if (size == 8)
-    ptr->attr.s.ptrtype = CV_PTR_64;
-  else if (size == 4)
-    ptr->attr.s.ptrtype = CV_PTR_NEAR32;
+  if (last_type)
+    last_type->next = ptrtype;
 
-  if (TREE_CODE (t) == REFERENCE_TYPE)
-    ptr->attr.s.ptrmode =
-      TYPE_REF_IS_RVALUE (t) ? CV_PTR_MODE_RVREF : CV_PTR_MODE_LVREF;
+  if (!types)
+    types = ptrtype;
 
-  return add_type (ptrtype, typeptr);
+  last_type = ptrtype;
+
+  if (typeptr)
+    *typeptr = ptrtype;
+
+  return ptrtype->id;
 }
 
 /* Given an array type t, allocate a new pdb_type and add it to the
