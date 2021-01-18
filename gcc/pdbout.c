@@ -80,6 +80,7 @@ static struct pdb_block *cur_block = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
 static struct pdb_type *string_types = NULL;
+static struct pdb_type *arglist_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -2126,39 +2127,6 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 		break;
 	      }
 
-	    case LF_ARGLIST:
-	      {
-		struct pdb_arglist *arglist1 = (struct pdb_arglist *) t->data;
-		struct pdb_arglist *arglist2 =
-		  (struct pdb_arglist *) t2->data;
-
-		if (arglist1->count == arglist2->count)
-		  {
-		    bool same = true;
-
-		    for (unsigned int i = 0; i < arglist1->count; i++)
-		      {
-			if (arglist1->args[i] != arglist2->args[i])
-			  {
-			    same = false;
-			    break;
-			  }
-		      }
-
-		    if (same)
-		      {
-			free (t);
-
-			if (typeptr)
-			  *typeptr = t2;
-
-			return t2->id;
-		      }
-		  }
-
-		break;
-	      }
-
 	    case LF_PROCEDURE:
 	      {
 		struct pdb_proc *proc1 = (struct pdb_proc *) t->data;
@@ -3114,6 +3082,70 @@ find_type_array (tree t, struct pdb_type **typeptr)
   return add_type (arrtype, typeptr);
 }
 
+static uint16_t
+add_arglist_type (struct pdb_type *t)
+{
+  struct pdb_type *t2 = arglist_types;
+  struct pdb_type *last_entry = NULL;
+
+  // check for dupes
+
+  while (t2)
+    {
+      struct pdb_arglist *arglist1 = (struct pdb_arglist *) t->data;
+      struct pdb_arglist *arglist2 =
+	(struct pdb_arglist *) t2->data;
+
+      if (arglist1->count == arglist2->count)
+	{
+	  bool same = true;
+
+	  for (unsigned int i = 0; i < arglist1->count; i++)
+	    {
+	      if (arglist1->args[i] != arglist2->args[i])
+		{
+		  same = false;
+		  break;
+		}
+	    }
+
+	  if (same)
+	    {
+	      free (t);
+
+	      return t2->id;
+	    }
+	}
+
+      last_entry = t2;
+      t2 = t2->next2;
+    }
+
+  // add new
+
+  t->next = NULL;
+  t->next2 = NULL;
+  t->used = false;
+
+  t->id = type_num;
+  type_num++;
+
+  if (last_type)
+    last_type->next = t;
+
+  if (!types)
+    types = t;
+
+  last_type = t;
+
+  if (last_entry)
+    last_entry->next2 = t;
+  else
+    arglist_types = t;
+
+  return t->id;
+}
+
 /* Given a function type t, allocate a new pdb_type and add it to the
  * type list. */
 static uint16_t
@@ -3161,7 +3193,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
       arg = TREE_CHAIN (arg);
     }
 
-  arglisttypenum = add_type (arglisttype, NULL);
+  arglisttypenum = add_arglist_type (arglisttype);
 
   // create procedure
 
