@@ -81,6 +81,7 @@ static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
 static struct pdb_type *string_types = NULL;
 static struct pdb_type *arglist_types = NULL;
+static struct pdb_type *udt_src_line_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -1603,24 +1604,21 @@ mark_referenced_types_used (void)
   /* LF_UDT_SRC_LINE entries reference a string in the string table;
    * mark that as used too. */
 
-  t = types;
+  t = udt_src_line_types;
   while (t)
     {
-      if (t->cv_type == LF_UDT_SRC_LINE)
-	{
-	  struct pdb_udt_src_line *pusl = (struct pdb_udt_src_line *) t->data;
+	struct pdb_udt_src_line *pusl = (struct pdb_udt_src_line *) t->data;
 
-	  t->used = is_type_used (pusl->type);
+	t->used = is_type_used (pusl->type);
 
-	  if (t->used)
-	    {
-	      if (pusl->source_file >= FIRST_TYPE_NUM
-		  && pusl->source_file < type_num)
-		mark_type_used (pusl->source_file, NULL);
-	    }
-	}
+	if (t->used)
+	  {
+	    if (pusl->source_file >= FIRST_TYPE_NUM
+		&& pusl->source_file < type_num)
+	      mark_type_used (pusl->source_file, NULL);
+	  }
 
-      t = t->next;
+      t = t->next2;
     }
 }
 
@@ -2148,19 +2146,6 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 
 		break;
 	      }
-
-	    case LF_UDT_SRC_LINE:
-	      if (!memcmp
-		  (t->data, t2->data, sizeof (struct pdb_udt_src_line)))
-		{
-		  free (t);
-
-		  if (typeptr)
-		    *typeptr = t2;
-
-		  return t2->id;
-		}
-	      break;
 
 	    case LF_MODIFIER:
 	      if (!memcmp (t->data, t2->data, sizeof (struct pdb_modifier)))
@@ -3577,14 +3562,26 @@ add_string_type (const char *s)
 static uint16_t
 add_udt_src_line_type (uint16_t type_id, uint16_t source_file, uint32_t line)
 {
-  struct pdb_type *type;
+  struct pdb_type *type, *t, *last_entry = NULL;
   struct pdb_udt_src_line *pusl;
+
+  t = udt_src_line_types;
+  while (t) {
+    pusl = (struct pdb_udt_src_line *) t->data;
+
+    if (pusl->type == type_id && pusl->source_file == source_file && pusl->line == line)
+      return t->id;
+
+    last_entry = t;
+    t = t->next2;
+  }
 
   type =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
 				 sizeof (struct pdb_udt_src_line));
   type->cv_type = LF_UDT_SRC_LINE;
   type->tree = NULL;
+  type->next = type->next2 = NULL;
   type->used = false;
 
   pusl = (struct pdb_udt_src_line *) type->data;
@@ -3592,7 +3589,23 @@ add_udt_src_line_type (uint16_t type_id, uint16_t source_file, uint32_t line)
   pusl->source_file = source_file;
   pusl->line = line;
 
-  return add_type (type, NULL);
+  type->id = type_num;
+  type_num++;
+
+  if (last_entry)
+    last_entry->next2 = type;
+  else
+    udt_src_line_types = type;
+
+  if (last_type)
+    last_type->next = type;
+
+  if (!types)
+    types = type;
+
+  last_type = type;
+
+  return type->id;
 }
 
 /* We've encountered a type definition - add it to the type list. */
