@@ -2307,13 +2307,7 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
   str->size = 0;
   str->property.value = 0;
   str->property.s.fwdref = 1;
-
-  if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == IDENTIFIER_NODE)
-    str->name = xstrdup (IDENTIFIER_POINTER (TYPE_NAME (t)));
-  else if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == TYPE_DECL)
-    str->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (t))));
-  else
-    str->name = NULL;
+  str->name = get_struct_name (t);
 
   add_type (strtype, ret);
 }
