@@ -79,6 +79,7 @@ static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_block *cur_block = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
+static struct pdb_type *string_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -2180,18 +2181,6 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 		break;
 	      }
 
-	    case LF_STRING_ID:
-	      if (!strcmp ((const char *) t->data, (const char *) t2->data))
-		{
-		  free (t);
-
-		  if (typeptr)
-		    *typeptr = t2;
-
-		  return t2->id;
-		}
-	      break;
-
 	    case LF_UDT_SRC_LINE:
 	      if (!memcmp
 		  (t->data, t2->data, sizeof (struct pdb_udt_src_line)))
@@ -3509,17 +3498,44 @@ find_type (tree t, struct pdb_type **typeptr)
 static uint16_t
 add_string_type (const char *s)
 {
-  struct pdb_type *type;
+  struct pdb_type *type, *t, *last_string = NULL;
   size_t len = strlen (s);
+
+  t = string_types;
+  while (t) {
+    if (!strcmp(s, (char*)t->data))
+      return t->id;
+
+    last_string = t;
+    t = t->next2;
+  }
 
   type =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) + len + 1);
   type->cv_type = LF_STRING_ID;
   type->tree = NULL;
+  type->next = type->next2 = NULL;
+  type->used = false;
+
+  type->id = type_num;
+  type_num++;
 
   memcpy (type->data, s, len + 1);
 
-  return add_type (type, NULL);
+  if (last_string)
+    last_string->next2 = type;
+  else
+    string_types = type;
+
+  if (last_type)
+    last_type->next = type;
+
+  if (!types)
+    types = type;
+
+  last_type = type;
+
+  return type->id;
 }
 
 /* Add a pdb_udt_src_line fake type to the type list, which records the file

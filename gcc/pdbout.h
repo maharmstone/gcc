@@ -283,6 +283,7 @@ struct pdb_udt_src_line
 struct pdb_type
 {
   struct pdb_type *next;
+  struct pdb_type *next2;
   uint16_t id;
   tree_node *tree;
   uint16_t cv_type;
