@@ -84,6 +84,7 @@ static struct pdb_type *arglist_types = NULL;
 static struct pdb_type *udt_src_line_types = NULL;
 static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
+static struct pdb_type *modifier_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -2108,18 +2109,6 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 		break;
 	      }
 
-	    case LF_MODIFIER:
-	      if (!memcmp (t->data, t2->data, sizeof (struct pdb_modifier)))
-		{
-		  free (t);
-
-		  if (typeptr)
-		    *typeptr = t2;
-
-		  return t2->id;
-		}
-	      break;
-
 	    case LF_BITFIELD:
 	      if (!memcmp (t->data, t2->data, sizeof (struct pdb_bitfield)))
 		{
@@ -3270,27 +3259,65 @@ find_type_function (tree t, struct pdb_type **typeptr)
 static uint16_t
 find_type_modifier (tree t, struct pdb_type **typeptr)
 {
-  struct pdb_type *type;
+  struct pdb_type *type, *last_entry = NULL;
   struct pdb_modifier *mod;
+  uint16_t base_type = find_type (TYPE_MAIN_VARIANT (t), NULL);
+  uint16_t modifier = 0;
+
+  if (TYPE_READONLY (t))
+    modifier |= CV_MODIFIER_CONST;
+
+  if (TYPE_VOLATILE (t))
+    modifier |= CV_MODIFIER_VOLATILE;
+
+  type = modifier_types;
+  while (type)
+    {
+      mod = (struct pdb_modifier *) type->data;
+
+      if (mod->type == base_type && mod->modifier == modifier)
+	{
+	  if (typeptr)
+	    *typeptr = type;
+
+	  return type->id;
+	}
+
+      last_entry = type;
+      type = type->next2;
+    }
 
   type =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
 				 sizeof (struct pdb_modifier));
   type->cv_type = LF_MODIFIER;
   type->tree = t;
+  type->next = type->next2 = NULL;
+  type->id = type_num;
+  type->used = false;
+
+  type_num++;
 
   mod = (struct pdb_modifier *) type->data;
 
-  mod->type = find_type (TYPE_MAIN_VARIANT (t), NULL);
-  mod->modifier = 0;
+  mod->type = base_type;
+  mod->modifier = modifier;
 
-  if (TYPE_READONLY (t))
-    mod->modifier |= CV_MODIFIER_CONST;
+  if (last_entry)
+    last_entry->next2 = type;
+  else
+    modifier_types = type;
 
-  if (TYPE_VOLATILE (t))
-    mod->modifier |= CV_MODIFIER_VOLATILE;
+  if (last_type)
+    last_type->next = modifier_types;
 
-  return add_type (type, typeptr);
+  if (!types)
+    types = type;
+
+  if (typeptr)
+    *typeptr = type;
+
+  return type->id;
 }
 
 /* Resolve a type t to a type number. If it's a builtin type, such as bool or
