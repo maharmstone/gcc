@@ -83,6 +83,7 @@ static struct pdb_type *string_types = NULL;
 static struct pdb_type *arglist_types = NULL;
 static struct pdb_type *udt_src_line_types = NULL;
 static struct pdb_type *pointer_types = NULL;
+static struct pdb_type *proc_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -2107,28 +2108,6 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 		break;
 	      }
 
-	    case LF_PROCEDURE:
-	      {
-		struct pdb_proc *proc1 = (struct pdb_proc *) t->data;
-		struct pdb_proc *proc2 = (struct pdb_proc *) t2->data;
-
-		if (proc1->return_type == proc2->return_type &&
-		    proc1->calling_convention == proc2->calling_convention &&
-		    proc1->attributes == proc2->attributes &&
-		    proc1->num_args == proc2->num_args &&
-		    proc1->arg_list == proc2->arg_list)
-		  {
-		    free (t);
-
-		    if (typeptr)
-		      *typeptr = t2;
-
-		    return t2->id;
-		  }
-
-		break;
-	      }
-
 	    case LF_MODIFIER:
 	      if (!memcmp (t->data, t2->data, sizeof (struct pdb_modifier)))
 		{
@@ -3156,13 +3135,14 @@ add_arglist_type (struct pdb_type *t)
 static uint16_t
 find_type_function (tree t, struct pdb_type **typeptr)
 {
-  struct pdb_type *arglisttype, *proctype;
+  struct pdb_type *arglisttype, *proctype, *last_entry = NULL;
   struct pdb_arglist *arglist;
   struct pdb_proc *proc;
   tree arg;
   unsigned int num_args = 0;
   uint16_t *argptr;
-  uint16_t arglisttypenum;
+  uint16_t arglisttypenum, return_type;
+  uint8_t calling_convention;
 
   // create arglist
 
@@ -3202,47 +3182,87 @@ find_type_function (tree t, struct pdb_type **typeptr)
 
   // create procedure
 
+  return_type = find_type (TREE_TYPE (t), NULL);
+
+  if (TARGET_64BIT)
+    calling_convention = CV_CALL_NEAR_C;
+  else
+  {
+    switch (ix86_get_callcvt (t))
+    {
+      case IX86_CALLCVT_CDECL:
+	calling_convention = CV_CALL_NEAR_C;
+	break;
+
+      case IX86_CALLCVT_STDCALL:
+	calling_convention = CV_CALL_NEAR_STD;
+	break;
+
+      case IX86_CALLCVT_FASTCALL:
+	calling_convention = CV_CALL_NEAR_FAST;
+	break;
+
+      case IX86_CALLCVT_THISCALL:
+	calling_convention = CV_CALL_THISCALL;
+	break;
+
+      default:
+	calling_convention = CV_CALL_NEAR_C;
+    }
+  }
+
+  proctype = proc_types;
+  while (proctype)
+    {
+      proc = (struct pdb_proc *) proctype->data;
+
+      if (proc->return_type == return_type && proc->calling_convention == calling_convention &&
+	  proc->num_args == num_args && proc->arg_list == arglisttypenum)
+	{
+	  if (typeptr)
+	    *typeptr = proctype;
+
+	  return proctype->id;
+	}
+
+      last_entry = proctype;
+      proctype = proctype->next2;
+    }
+
   proctype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
 				 sizeof (struct pdb_proc));
   proctype->cv_type = LF_PROCEDURE;
   proctype->tree = t;
+  proctype->next = proctype->next2 = NULL;
+  proctype->id = type_num;
+  proctype->used = false;
+
+  type_num++;
 
   proc = (struct pdb_proc *) proctype->data;
 
-  proc->return_type = find_type (TREE_TYPE (t), NULL);
+  proc->return_type = return_type;
   proc->attributes = 0;
   proc->num_args = num_args;
   proc->arg_list = arglisttypenum;
+  proc->calling_convention = calling_convention;
 
-  if (TARGET_64BIT)
-    proc->calling_convention = CV_CALL_NEAR_C;
+  if (last_entry)
+    last_entry->next2 = proctype;
   else
-    {
-      switch (ix86_get_callcvt (t))
-	{
-	case IX86_CALLCVT_CDECL:
-	  proc->calling_convention = CV_CALL_NEAR_C;
-	  break;
+    proc_types = proctype;
 
-	case IX86_CALLCVT_STDCALL:
-	  proc->calling_convention = CV_CALL_NEAR_STD;
-	  break;
+  if (last_type)
+    last_type->next = proctype;
 
-	case IX86_CALLCVT_FASTCALL:
-	  proc->calling_convention = CV_CALL_NEAR_FAST;
-	  break;
+  if (!types)
+    types = proctype;
 
-	case IX86_CALLCVT_THISCALL:
-	  proc->calling_convention = CV_CALL_THISCALL;
-	  break;
+  if (typeptr)
+    *typeptr = proctype;
 
-	default:
-	  proc->calling_convention = CV_CALL_NEAR_C;
-	}
-    }
-
-  return add_type (proctype, typeptr);
+  return proctype->id;
 }
 
 /* Given a CV-modified type t, allocate a new pdb_type modifying
