@@ -3402,7 +3402,7 @@ find_type_modifier (tree t, struct pdb_type **typeptr)
     modifier_types = type;
 
   if (last_type)
-    last_type->next = modifier_types;
+    last_type->next = type;
 
   if (!types)
     types = type;
