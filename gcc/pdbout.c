@@ -88,6 +88,7 @@ static struct pdb_type *modifier_types = NULL;
 static struct pdb_type *fieldlist_types = NULL;
 static struct pdb_type *struct_types = NULL;
 static struct pdb_type *array_types = NULL;
+static struct pdb_type *enum_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -1966,32 +1967,6 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 	{
 	  switch (t2->cv_type)
 	    {
-	    case LF_ENUM:
-	      {
-		struct pdb_enum *en1 = (struct pdb_enum *) t->data;
-		struct pdb_enum *en2 = (struct pdb_enum *) t2->data;
-
-		if (en1->count == en2->count &&
-		    en1->type == en2->type &&
-		    en1->field == en2->field &&
-		    ((!en1->name && !en2->name)
-		     || (en1->name && en2->name
-			 && !strcmp (en1->name, en2->name))))
-		  {
-		    if (en1->name)
-		      free (en1->name);
-
-		    free (t);
-
-		    if (typeptr)
-		      *typeptr = t2;
-
-		    return t2->id;
-		  }
-
-		break;
-	      }
-
 	    case LF_BITFIELD:
 	      if (!memcmp (t->data, t2->data, sizeof (struct pdb_bitfield)))
 		{
@@ -2926,12 +2901,13 @@ static uint16_t
 find_type_enum (tree t, struct pdb_type **typeptr)
 {
   tree v;
-  struct pdb_type *fltype, *enumtype;
+  struct pdb_type *fltype, *enumtype, *last_entry = NULL;
   struct pdb_fieldlist *fieldlist;
   struct pdb_fieldlist_entry *ent;
   struct pdb_enum *en;
   unsigned int num_entries, size;
-  uint16_t fltypenum;
+  uint16_t fltypenum, en_type;
+  char *name;
 
   v = TYPE_VALUES (t);
   num_entries = 0;
@@ -2978,46 +2954,92 @@ find_type_enum (tree t, struct pdb_type **typeptr)
       ent++;
     }
 
-  fltypenum = add_type (fltype, NULL);
+  fltypenum = add_type_fieldlist (fltype, NULL);
 
   // add type for enum
+
+  size = TYPE_SIZE (t) ? TREE_INT_CST_ELT (TYPE_SIZE (t), 0) : 0;
+
+  if (size == 8)
+    en_type =
+      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
+  else if (size == 16)
+    en_type =
+      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
+  else if (size == 32)
+    en_type =
+      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
+  else if (size == 64)
+    en_type =
+      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
+  else
+    en_type = 0;
+
+  if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == IDENTIFIER_NODE)
+    name = xstrdup (IDENTIFIER_POINTER (TYPE_NAME (t)));
+  else if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == TYPE_DECL
+	   && IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (t)))[0] != '.')
+    name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (t))));
+  else
+    name = NULL;
+
+  enumtype = enum_types;
+  while (enumtype)
+    {
+      en = (struct pdb_enum *) enumtype->data;
+
+      if (en->count == num_entries &&
+	  en->type == en_type &&
+	  en->field == fltypenum &&
+	  ((!en->name && !name)
+	  || (en->name && name
+	  && !strcmp (en->name, name))))
+	{
+	  if (name)
+	    free (name);
+
+	  if (typeptr)
+	    *typeptr = enumtype;
+
+	  return enumtype->id;
+	}
+
+      last_entry = enumtype;
+      enumtype = enumtype->next2;
+    }
 
   enumtype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
 				 sizeof (struct pdb_enum));
   enumtype->cv_type = LF_ENUM;
   enumtype->tree = t;
+  enumtype->next = enumtype->next2 = NULL;
+  enumtype->id = type_num;
+  enumtype->used = false;
+
+  type_num++;
 
   en = (struct pdb_enum *) enumtype->data;
   en->count = num_entries;
   en->field = fltypenum;
+  en->type = en_type;
+  en->name = name;
 
-  size = TYPE_SIZE (t) ? TREE_INT_CST_ELT (TYPE_SIZE (t), 0) : 0;
-
-  if (size == 8)
-    en->type =
-      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
-  else if (size == 16)
-    en->type =
-      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
-  else if (size == 32)
-    en->type =
-      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
-  else if (size == 64)
-    en->type =
-      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
+  if (last_entry)
+    last_entry->next2 = enumtype;
   else
-    en->type = 0;
+    enum_types = enumtype;
 
-  if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == IDENTIFIER_NODE)
-    en->name = xstrdup (IDENTIFIER_POINTER (TYPE_NAME (t)));
-  else if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == TYPE_DECL
-	   && IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (t)))[0] != '.')
-    en->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (t))));
-  else
-    en->name = NULL;
+  if (last_type)
+    last_type->next = enumtype;
 
-  return add_type (enumtype, typeptr);
+  if (!types)
+    types = enumtype;
+
+  if (typeptr)
+    *typeptr = enumtype;
+
+  return enumtype->id;
 }
 
 /* Given a pointer type t, allocate a new pdb_type and add it to the
