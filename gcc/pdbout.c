@@ -86,6 +86,7 @@ static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
 static struct pdb_type *modifier_types = NULL;
 static struct pdb_type *fieldlist_types = NULL;
+static struct pdb_type *struct_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -1964,35 +1965,6 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 	{
 	  switch (t2->cv_type)
 	    {
-	    case LF_STRUCTURE:
-	    case LF_CLASS:
-	    case LF_UNION:
-	      {
-		struct pdb_struct *str1 = (struct pdb_struct *) t->data;
-		struct pdb_struct *str2 = (struct pdb_struct *) t2->data;
-
-		if (str1->count == str2->count &&
-		    str1->field == str2->field &&
-		    str1->size == str2->size &&
-		    str1->property.value == str2->property.value &&
-		    ((!str1->name && !str2->name)
-		     || (str1->name && str2->name
-			 && !strcmp (str1->name, str2->name))))
-		  {
-		    if (str1->name)
-		      free (str1->name);
-
-		    free (t);
-
-		    if (typeptr)
-		      *typeptr = t2;
-
-		    return t2->id;
-		  }
-
-		break;
-	      }
-
 	    case LF_ENUM:
 	      {
 		struct pdb_enum *en1 = (struct pdb_enum *) t->data;
@@ -2108,8 +2080,32 @@ find_type_bitfield (uint16_t underlying_type, unsigned int size,
 static void
 add_struct_forward_declaration (tree t, struct pdb_type **ret)
 {
-  struct pdb_type *strtype;
+  struct pdb_type *strtype, *last_entry = NULL;
   struct pdb_struct *str;
+  char *name = get_struct_name (t);
+
+  strtype = struct_types;
+  while (strtype)
+    {
+      str = (struct pdb_struct *)strtype->data;
+
+      if (str->property.s.fwdref == 1 &&
+	  ((!str->name && !name)
+	  || (str->name && name
+	  && !strcmp (str->name, name))))
+      {
+	if (name)
+	  free (name);
+
+	if (ret)
+	  *ret = strtype;
+
+	return;
+      }
+
+      last_entry = strtype;
+      strtype = strtype->next2;
+    }
 
   strtype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
@@ -2121,6 +2117,11 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
     strtype->cv_type = LF_STRUCTURE;
 
   strtype->tree = NULL;
+  strtype->next = strtype->next2 = NULL;
+  strtype->id = type_num;
+  strtype->used = false;
+
+  type_num++;
 
   str = (struct pdb_struct *) strtype->data;
   str->count = 0;
@@ -2129,9 +2130,21 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
   str->size = 0;
   str->property.value = 0;
   str->property.s.fwdref = 1;
-  str->name = get_struct_name (t);
+  str->name = name;
 
-  add_type (strtype, ret);
+  if (last_entry)
+    last_entry->next2 = strtype;
+  else
+    struct_types = strtype;
+
+  if (last_type)
+    last_type->next = strtype;
+
+  if (!types)
+    types = strtype;
+
+  if (ret)
+    *ret = strtype;
 }
 
 /* Reallocate the string n, adding the type name of arg and the character
@@ -2683,13 +2696,16 @@ static uint16_t
 find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 {
   tree f;
-  struct pdb_type *fltype = NULL, *strtype, *fwddef = NULL;
+  struct pdb_type *fltype = NULL, *strtype, *fwddef = NULL, *last_entry = NULL;
   struct pdb_fieldlist *fieldlist;
   struct pdb_fieldlist_entry *ent;
   struct pdb_struct *str;
   unsigned int num_entries = 0;
-  uint16_t fltypenum = 0, new_type;
+  uint16_t fltypenum = 0;
   bool fwddef_tree_set = false;
+  char *name = get_struct_name (t);
+  uint16_t size = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
+  union pdb_property prop;
 
   f = TYPE_FIELDS (t);
 
@@ -2843,6 +2859,37 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 
   // add type for struct
 
+  prop.value = 0;
+
+  if (!TYPE_SIZE (t))		// forward declaration
+    prop.s.fwdref = 1;
+
+  strtype = struct_types;
+  while (strtype)
+    {
+      str = (struct pdb_struct *)strtype->data;
+
+      if (str->count == num_entries &&
+	  str->field == fltypenum &&
+	  str->size == size &&
+	  str->property.value == prop.value &&
+	  ((!str->name && !name)
+	  || (str->name && name
+	  && !strcmp (str->name, name))))
+      {
+	if (name)
+	  free (name);
+
+	if (typeptr)
+	  *typeptr = strtype;
+
+	return strtype->id;
+      }
+
+      last_entry = strtype;
+      strtype = strtype->next2;
+    }
+
   strtype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
 				 sizeof (struct pdb_struct));
@@ -2859,23 +2906,38 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
   else
     strtype->tree = NULL;
 
+  strtype->next = strtype->next2 = NULL;
+  strtype->id = type_num;
+  strtype->used = false;
+
+  type_num++;
+
   str = (struct pdb_struct *) strtype->data;
   str->count = num_entries;
   str->field_type = fltype;
   str->field = fltypenum;
-  str->size = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
-  str->property.value = 0;
-  str->name = get_struct_name (t);
+  str->size = size;
+  str->property.value = prop.value;
+  str->name = name;
 
-  if (!TYPE_SIZE (t))		// forward declaration
-    str->property.s.fwdref = 1;
+  if (last_entry)
+    last_entry->next2 = strtype;
+  else
+    struct_types = strtype;
 
-  new_type = add_type (strtype, typeptr);
+  if (last_type)
+    last_type->next = strtype;
+
+  if (!types)
+    types = strtype;
+
+  if (typeptr)
+    *typeptr = strtype;
 
   if (fwddef_tree_set)
     fwddef->tree = NULL;
 
-  return new_type;
+  return strtype->id;
 }
 
 /* For a given enum, allocate a new pdb_type and add it to the type list. */
