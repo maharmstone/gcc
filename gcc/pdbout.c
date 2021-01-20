@@ -3079,6 +3079,7 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
   ptrtype->tree = t;
   ptrtype->next = ptrtype->next2 = NULL;
   ptrtype->id = type_num;
+  ptrtype->used = false;
 
   ptr = (struct pdb_pointer *) ptrtype->data;
   ptr->type = type;
