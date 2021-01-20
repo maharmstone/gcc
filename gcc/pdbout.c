@@ -87,6 +87,7 @@ static struct pdb_type *proc_types = NULL;
 static struct pdb_type *modifier_types = NULL;
 static struct pdb_type *fieldlist_types = NULL;
 static struct pdb_type *struct_types = NULL;
+static struct pdb_type *array_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -1991,26 +1992,6 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 		break;
 	      }
 
-	    case LF_ARRAY:
-	      {
-		struct pdb_array *arr1 = (struct pdb_array *) t->data;
-		struct pdb_array *arr2 = (struct pdb_array *) t2->data;
-
-		if (arr1->type == arr2->type &&
-		    arr1->index_type == arr2->index_type &&
-		    arr1->length == arr2->length)
-		  {
-		    free (t);
-
-		    if (typeptr)
-		      *typeptr = t2;
-
-		    return t2->id;
-		  }
-
-		break;
-	      }
-
 	    case LF_BITFIELD:
 	      if (!memcmp (t->data, t2->data, sizeof (struct pdb_bitfield)))
 		{
@@ -3127,25 +3108,62 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
 static uint16_t
 find_type_array (tree t, struct pdb_type **typeptr)
 {
-  struct pdb_type *arrtype;
+  struct pdb_type *arrtype, *last_entry = NULL;
   struct pdb_array *arr;
   uint16_t type = find_type (TREE_TYPE (t), NULL);
+  uint64_t length = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
 
   if (type == 0)
     return 0;
+
+  arrtype = array_types;
+  while (arrtype)
+    {
+      arr = (struct pdb_array *) arrtype->data;
+
+      if (arr->type == type && arr->length == length)
+	{
+	  if (typeptr)
+	    *typeptr = arrtype;
+
+	  return arrtype->id;
+	}
+
+      last_entry = arrtype;
+      arrtype = arrtype->next2;
+    }
 
   arrtype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
 				 sizeof (struct pdb_array));
   arrtype->cv_type = LF_ARRAY;
   arrtype->tree = t;
+  arrtype->next = arrtype->next2 = NULL;
+  arrtype->id = type_num;
+  arrtype->used = false;
+
+  type_num++;
 
   arr = (struct pdb_array *) arrtype->data;
   arr->type = type;
   arr->index_type = CV_BUILTIN_TYPE_UINT32LONG;
-  arr->length = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
+  arr->length = length;
 
-  return add_type (arrtype, typeptr);
+  if (last_entry)
+    last_entry->next2 = arrtype;
+  else
+    array_types = arrtype;
+
+  if (last_type)
+    last_type->next = arrtype;
+
+  if (!types)
+    types = arrtype;
+
+  if (typeptr)
+    *typeptr = arrtype;
+
+  return arrtype->id;
 }
 
 static uint16_t
