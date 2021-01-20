@@ -89,6 +89,7 @@ static struct pdb_type *fieldlist_types = NULL;
 static struct pdb_type *struct_types = NULL;
 static struct pdb_type *array_types = NULL;
 static struct pdb_type *enum_types = NULL;
+static struct pdb_type *bitfield_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -1951,68 +1952,25 @@ pdbout_late_global_decl (tree var)
   global_vars = v;
 }
 
-/* Given a new type t, search through the list of existing types. If it's a
- * duplicate of an existing type, free t and return the old type in typeptr.
- * Otherwise, add t to the end of the list. */
-static uint16_t
-add_type (struct pdb_type *t, struct pdb_type **typeptr)
-{
-  struct pdb_type *t2 = types;
-
-  // check for dupes
-
-  while (t2)
-    {
-      if (t2->cv_type == t->cv_type)
-	{
-	  switch (t2->cv_type)
-	    {
-	    case LF_BITFIELD:
-	      if (!memcmp (t->data, t2->data, sizeof (struct pdb_bitfield)))
-		{
-		  free (t);
-
-		  if (typeptr)
-		    *typeptr = t2;
-
-		  return t2->id;
-		}
-	      break;
-	    }
-	}
-
-      t2 = t2->next;
-    }
-
-  // add new
-
-  t->next = NULL;
-  t->used = false;
-
-  t->id = type_num;
-  type_num++;
-
-  if (last_type)
-    last_type->next = t;
-
-  if (!types)
-    types = t;
-
-  last_type = t;
-
-  if (typeptr)
-    *typeptr = t;
-
-  return t->id;
-}
-
 /* Allocate a new pdb_type for a bitfield. */
 static uint16_t
 find_type_bitfield (uint16_t underlying_type, unsigned int size,
 		    unsigned int offset)
 {
-  struct pdb_type *type;
+  struct pdb_type *type, *last_entry = NULL;
   struct pdb_bitfield *bf;
+
+  type = bitfield_types;
+  while (type)
+    {
+      bf = (struct pdb_bitfield *) type->data;
+
+      if (bf->underlying_type == underlying_type && bf->size == size && bf->offset == offset)
+	return type->id;
+
+      last_entry = type;
+      type = type->next2;
+    }
 
   type =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
@@ -2020,6 +1978,11 @@ find_type_bitfield (uint16_t underlying_type, unsigned int size,
 
   type->cv_type = LF_BITFIELD;
   type->tree = NULL;
+  type->next = type->next2 = NULL;
+  type->id = type_num;
+  type->used = false;
+
+  type_num++;
 
   bf = (struct pdb_bitfield *) type->data;
 
@@ -2027,7 +1990,18 @@ find_type_bitfield (uint16_t underlying_type, unsigned int size,
   bf->size = size;
   bf->offset = offset;
 
-  return add_type (type, NULL);
+  if (last_entry)
+    last_entry->next2 = type;
+  else
+    bitfield_types = type;
+
+  if (last_type)
+    last_type->next = type;
+
+  if (!types)
+    types = type;
+
+  return type->id;
 }
 
 /* Allocate a pdb_type for a forward declaration for a struct. The debugger
