@@ -1997,9 +1997,10 @@ find_type_bitfield (uint16_t underlying_type, unsigned int size,
 
   if (last_type)
     last_type->next = type;
-
-  if (!types)
+  else
     types = type;
+
+  last_type = type;
 
   return type->id;
 }
@@ -2069,9 +2070,10 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
 
   if (last_type)
     last_type->next = strtype;
-
-  if (!types)
+  else
     types = strtype;
+
+  last_type = strtype;
 
   if (ret)
     *ret = strtype;
@@ -2610,9 +2612,10 @@ add_type_fieldlist (struct pdb_type *t, struct pdb_type **typeptr)
 
   if (last_type)
     last_type->next = t;
-
-  if (!types)
+  else
     types = t;
+
+  last_type = t;
 
   if (typeptr)
     *typeptr = t;
@@ -2857,9 +2860,10 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 
   if (last_type)
     last_type->next = strtype;
-
-  if (!types)
+  else
     types = strtype;
+
+  last_type = strtype;
 
   if (typeptr)
     *typeptr = strtype;
@@ -3006,9 +3010,10 @@ find_type_enum (tree t, struct pdb_type **typeptr)
 
   if (last_type)
     last_type->next = enumtype;
-
-  if (!types)
+  else
     types = enumtype;
+
+  last_type = enumtype;
 
   if (typeptr)
     *typeptr = enumtype;
@@ -3087,8 +3092,7 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
 
   if (last_type)
     last_type->next = ptrtype;
-
-  if (!types)
+  else
     types = ptrtype;
 
   last_type = ptrtype;
@@ -3152,9 +3156,10 @@ find_type_array (tree t, struct pdb_type **typeptr)
 
   if (last_type)
     last_type->next = arrtype;
-
-  if (!types)
+  else
     types = arrtype;
+
+  last_type = arrtype;
 
   if (typeptr)
     *typeptr = arrtype;
@@ -3212,8 +3217,7 @@ add_arglist_type (struct pdb_type *t)
 
   if (last_type)
     last_type->next = t;
-
-  if (!types)
+  else
     types = t;
 
   last_type = t;
@@ -3351,9 +3355,10 @@ find_type_function (tree t, struct pdb_type **typeptr)
 
   if (last_type)
     last_type->next = proctype;
-
-  if (!types)
+  else
     types = proctype;
+
+  last_type = proctype;
 
   if (typeptr)
     *typeptr = proctype;
@@ -3417,9 +3422,10 @@ find_type_modifier (tree t, struct pdb_type **typeptr)
 
   if (last_type)
     last_type->next = type;
-
-  if (!types)
+  else
     types = type;
+
+  last_type = type;
 
   if (typeptr)
     *typeptr = type;
@@ -3720,8 +3726,7 @@ add_string_type (const char *s)
 
   if (last_type)
     last_type->next = type;
-
-  if (!types)
+  else
     types = type;
 
   last_type = type;
@@ -3773,8 +3778,7 @@ add_udt_src_line_type (uint16_t type_id, uint16_t source_file, uint32_t line)
 
   if (last_type)
     last_type->next = type;
-
-  if (!types)
+  else
     types = type;
 
   last_type = type;
