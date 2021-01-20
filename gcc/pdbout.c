@@ -85,6 +85,7 @@ static struct pdb_type *udt_src_line_types = NULL;
 static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
 static struct pdb_type *modifier_types = NULL;
+static struct pdb_type *fieldlist_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -1963,77 +1964,6 @@ add_type (struct pdb_type *t, struct pdb_type **typeptr)
 	{
 	  switch (t2->cv_type)
 	    {
-	    case LF_FIELDLIST:
-	      {
-		struct pdb_fieldlist *fl1 = (struct pdb_fieldlist *) t->data;
-		struct pdb_fieldlist *fl2 = (struct pdb_fieldlist *) t2->data;
-
-		if (fl1->count == fl2->count)
-		  {
-		    bool same = true;
-
-		    for (unsigned int i = 0; i < fl1->count; i++)
-		      {
-			struct pdb_fieldlist_entry *pfe1 =
-			  (struct pdb_fieldlist_entry *)&fl1->entries[i];
-			struct pdb_fieldlist_entry *pfe2 =
-			  (struct pdb_fieldlist_entry *)&fl2->entries[i];
-
-			if (pfe1->cv_type != pfe2->cv_type)
-			  {
-			    same = false;
-			    break;
-			  }
-
-			  if (pfe1->cv_type == LF_MEMBER)
-			  {
-			    if (pfe1->type != pfe2->type ||
-				pfe1->offset != pfe2->offset ||
-				pfe1->fld_attr != pfe2->fld_attr ||
-				((pfe1->name || pfe2->name) &&
-				(!pfe1->name || !pfe2->name ||
-				strcmp (pfe1->name, pfe2->name))))
-			      {
-				same = false;
-				break;
-			      }
-			  }
-			  else if (pfe1->cv_type == LF_ENUMERATE)
-			  {
-			    if (pfe1->value != pfe2->value ||
-				((pfe1->name || pfe2->name) &&
-				(!pfe1->name || !pfe2->name ||
-				strcmp (pfe1->name, pfe2->name))))
-			      {
-				same = false;
-				break;
-			      }
-			  }
-		      }
-
-		    if (same)
-		      {
-			for (unsigned int i = 0; i < fl1->count; i++)
-			  {
-			    struct pdb_fieldlist_entry *pfe1 =
-			      (struct pdb_fieldlist_entry *)&fl1->entries[i];
-
-			    if (pfe1->name)
-			      free (pfe1->name);
-			  }
-
-			free (t);
-
-			if (typeptr)
-			  *typeptr = t2;
-
-			return t2->id;
-		      }
-		  }
-
-		break;
-	      }
-
 	    case LF_STRUCTURE:
 	    case LF_CLASS:
 	    case LF_UNION:
@@ -2646,6 +2576,107 @@ get_struct_name (tree t)
   return name;
 }
 
+static uint16_t
+add_type_fieldlist (struct pdb_type *t, struct pdb_type **typeptr)
+{
+  struct pdb_type *type, *last_entry = NULL;
+
+  type = fieldlist_types;
+  while (type)
+  {
+    struct pdb_fieldlist *fl1 = (struct pdb_fieldlist *) t->data;
+    struct pdb_fieldlist *fl2 = (struct pdb_fieldlist *) type->data;
+
+    if (fl1->count == fl2->count)
+    {
+      bool same = true;
+
+      for (unsigned int i = 0; i < fl1->count; i++)
+      {
+	struct pdb_fieldlist_entry *pfe1 =
+	(struct pdb_fieldlist_entry *)&fl1->entries[i];
+	struct pdb_fieldlist_entry *pfe2 =
+	(struct pdb_fieldlist_entry *)&fl2->entries[i];
+
+	if (pfe1->cv_type != pfe2->cv_type)
+	{
+	  same = false;
+	  break;
+	}
+
+	if (pfe1->cv_type == LF_MEMBER)
+	{
+	  if (pfe1->type != pfe2->type ||
+	    pfe1->offset != pfe2->offset ||
+	    pfe1->fld_attr != pfe2->fld_attr ||
+	    ((pfe1->name || pfe2->name) &&
+	    (!pfe1->name || !pfe2->name ||
+	    strcmp (pfe1->name, pfe2->name))))
+	  {
+	    same = false;
+	    break;
+	  }
+	}
+	else if (pfe1->cv_type == LF_ENUMERATE)
+	{
+	  if (pfe1->value != pfe2->value ||
+	    ((pfe1->name || pfe2->name) &&
+	    (!pfe1->name || !pfe2->name ||
+	    strcmp (pfe1->name, pfe2->name))))
+	  {
+	    same = false;
+	    break;
+	  }
+	}
+      }
+
+      if (same)
+      {
+	for (unsigned int i = 0; i < fl1->count; i++)
+	{
+	  struct pdb_fieldlist_entry *pfe1 =
+	  (struct pdb_fieldlist_entry *)&fl1->entries[i];
+
+	  if (pfe1->name)
+	    free (pfe1->name);
+	}
+
+	free (t);
+
+	if (typeptr)
+	  *typeptr = type;
+
+	return type->id;
+      }
+    }
+
+    last_entry = type;
+    type = type->next2;
+  }
+
+  t->next = t->next2 = NULL;
+  t->id = type_num;
+  t->used = false;
+
+  type_num++;
+
+  if (last_entry)
+    last_entry->next2 = t;
+  else
+    fieldlist_types = t;
+
+  if (last_type)
+    last_type->next = t;
+
+  if (!types)
+    types = t;
+
+  if (typeptr)
+    *typeptr = t;
+
+  return t->id;
+}
+
 /* For a given struct, class, or union, allocate a new pdb_type and
  * add it to the type list. */
 static uint16_t
@@ -2807,7 +2838,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 	  f = TREE_CHAIN (f);
 	}
 
-      fltypenum = add_type (fltype, &fltype);
+      fltypenum = add_type_fieldlist (fltype, &fltype);
     }
 
   // add type for struct
