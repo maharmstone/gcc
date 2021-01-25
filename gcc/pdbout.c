@@ -574,7 +574,7 @@ pdbout_ldata32 (struct pdb_global_var *v)
 	   (uint16_t) (len - sizeof (uint16_t)));	// reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n",
 	   v->public_flag ? S_GDATA32 : S_LDATA32);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", v->type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", v->type ? v->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");
 
   fprintf (asm_out_file, "\t.long\t[");	// off
@@ -1638,7 +1638,6 @@ renumber_types (void)
 {
   uint16_t *type_list, *tlptr;
   struct pdb_type *t;
-  struct pdb_global_var *pgv;
   struct pdb_func *func;
   uint16_t new_id = FIRST_TYPE_NUM;
 
@@ -1664,18 +1663,6 @@ renumber_types (void)
 
       t = t->next;
       tlptr++;
-    }
-
-  // change global variables
-
-  pgv = global_vars;
-
-  while (pgv)
-    {
-      if (pgv->type >= FIRST_TYPE_NUM && pgv->type < type_num)
-	pgv->type = type_list[pgv->type - FIRST_TYPE_NUM];
-
-      pgv = pgv->next;
     }
 
   // change procedures
@@ -1775,7 +1762,6 @@ static void
 pdbout_late_global_decl (tree var)
 {
   struct pdb_global_var *v;
-  struct pdb_type *type;
 
   if (TREE_CODE (var) != VAR_DECL)
     return;
@@ -1796,10 +1782,12 @@ pdbout_late_global_decl (tree var)
   v->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (var)));
   v->asm_name = xstrdup (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME_RAW (var)));
   v->public_flag = TREE_PUBLIC (var);
-  v->type = find_type (TREE_TYPE (var), &type);
 
-  if (type)
-    type->used = true;
+  v->type = NULL;
+  find_type (TREE_TYPE (var), &v->type);
+
+  if (v->type)
+    v->type->used = true;
 
   global_vars = v;
 }
