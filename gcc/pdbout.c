@@ -97,6 +97,7 @@ static uint32_t source_file_string_offset = 1;
 static unsigned int num_line_number_entries = 0;
 static unsigned int num_source_files = 0;
 static unsigned int var_loc_number = 1;
+static hash_table<pdb_type_tree_hasher> tree_hash_table(31);
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -2639,6 +2640,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
   char *name = get_struct_name (t);
   uint16_t size = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
   union pdb_property prop;
+  struct pdb_type **slot;
 
   f = TYPE_FIELDS (t);
 
@@ -2685,6 +2687,9 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 	{
 	  fwddef_tree_set = true;
 	  fwddef->tree = t;
+
+	  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+	  *slot = fwddef;
 	}
     }
 
@@ -2871,6 +2876,12 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
   if (fwddef_tree_set)
     fwddef->tree = NULL;
 
+  if (strtype->tree)
+    {
+      slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+      *slot = strtype;
+    }
+
   return strtype->id;
 }
 
@@ -2886,6 +2897,7 @@ find_type_enum (tree t, struct pdb_type **typeptr)
   unsigned int num_entries, size;
   uint16_t fltypenum, en_type;
   char *name;
+  struct pdb_type **slot;
 
   v = TYPE_VALUES (t);
   num_entries = 0;
@@ -3018,6 +3030,9 @@ find_type_enum (tree t, struct pdb_type **typeptr)
   if (typeptr)
     *typeptr = enumtype;
 
+  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+  *slot = enumtype;
+
   return enumtype->id;
 }
 
@@ -3030,6 +3045,7 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
   struct pdb_pointer *ptr, v;
   unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8;
   uint16_t type = find_type (TREE_TYPE (t), NULL);
+  struct pdb_type **slot;
 
   if (type == 0)
     return 0;
@@ -3101,6 +3117,9 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
   if (typeptr)
     *typeptr = ptrtype;
 
+  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+  *slot = ptrtype;
+
   return ptrtype->id;
 }
 
@@ -3113,6 +3132,7 @@ find_type_array (tree t, struct pdb_type **typeptr)
   struct pdb_array *arr;
   uint16_t type = find_type (TREE_TYPE (t), NULL);
   uint64_t length = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
+  struct pdb_type **slot;
 
   if (type == 0)
     return 0;
@@ -3164,6 +3184,9 @@ find_type_array (tree t, struct pdb_type **typeptr)
 
   if (typeptr)
     *typeptr = arrtype;
+
+  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+  *slot = arrtype;
 
   return arrtype->id;
 }
@@ -3244,6 +3267,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
   uint16_t *argptr;
   uint16_t arglisttypenum, return_type;
   uint8_t calling_convention;
+  struct pdb_type **slot;
 
   // create arglist
 
@@ -3364,6 +3388,9 @@ find_type_function (tree t, struct pdb_type **typeptr)
   if (typeptr)
     *typeptr = proctype;
 
+  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+  *slot = proctype;
+
   return proctype->id;
 }
 
@@ -3376,6 +3403,7 @@ find_type_modifier (tree t, struct pdb_type **typeptr)
   struct pdb_modifier *mod;
   uint16_t base_type = find_type (TYPE_MAIN_VARIANT (t), NULL);
   uint16_t modifier = 0;
+  struct pdb_type **slot;
 
   if (TYPE_READONLY (t))
     modifier |= CV_MODIFIER_CONST;
@@ -3431,7 +3459,22 @@ find_type_modifier (tree t, struct pdb_type **typeptr)
   if (typeptr)
     *typeptr = type;
 
+  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+  *slot = type;
+
   return type->id;
+}
+
+inline hashval_t
+pdb_type_tree_hasher::hash (pdb_type_tree_hasher::compare_type tree)
+{
+  return htab_hash_pointer (tree);
+}
+
+inline bool
+pdb_type_tree_hasher::equal (const value_type type, compare_type tree)
+{
+  return type->tree == tree;
 }
 
 /* Resolve a type t to a type number. If it's a builtin type, such as bool or
@@ -3467,19 +3510,14 @@ find_type (tree t, struct pdb_type **typeptr)
 
   // search through existing types
 
-  type = types;
-  while (type)
-    {
-      if (type->tree == t)
-	{
-	  if (typeptr)
-	    *typeptr = type;
+  type = tree_hash_table.find_with_hash(t, pdb_type_tree_hasher::hash(t));
 
-	  return type->id;
-	}
+  if (type) {
+    if (typeptr)
+      *typeptr = type;
 
-      type = type->next;
-    }
+    return type->id;
+  }
 
   // add modifier type if const or volatile
 
