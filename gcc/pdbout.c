@@ -1156,7 +1156,7 @@ write_array (struct pdb_array *arr)
   fprintf (asm_out_file, "\t.short\t0x%lx\n", len - sizeof (uint16_t));
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ARRAY);
 
-  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->type ? arr->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.short\t0x%x\n", arr->index_type ? arr->index_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
@@ -1553,8 +1553,11 @@ mark_referenced_types_used (void)
 	      {
 		struct pdb_array *arr = (struct pdb_array *) t->data;
 
-		if (arr->type >= FIRST_TYPE_NUM && arr->type < type_num)
-		  mark_type_used (arr->type, &changed);
+		if (arr->type && !arr->type->used)
+		  {
+		    arr->type->used = true;
+		    changed = true;
+		  }
 
 		if (arr->index_type && !arr->index_type->used)
 		  {
@@ -1750,16 +1753,6 @@ renumber_types (void)
 		  fl->entries[i].type =
 		    type_list[fl->entries[i].type - FIRST_TYPE_NUM];
 	      }
-
-	    break;
-	  }
-
-	case LF_ARRAY:
-	  {
-	    struct pdb_array *arr = (struct pdb_array *) t->data;
-
-	    if (arr->type >= FIRST_TYPE_NUM && arr->type < type_num)
-	      arr->type = type_list[arr->type - FIRST_TYPE_NUM];
 
 	    break;
 	  }
@@ -3091,13 +3084,14 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
 static uint16_t
 find_type_array (tree t, struct pdb_type **typeptr)
 {
-  struct pdb_type *arrtype, *last_entry = NULL;
+  struct pdb_type *arrtype, *last_entry = NULL, *type;
   struct pdb_array *arr;
-  uint16_t type = find_type (TREE_TYPE (t), NULL);
   uint64_t length = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
   struct pdb_type **slot;
 
-  if (type == 0)
+  find_type (TREE_TYPE (t), &type);
+
+  if (!type)
     return 0;
 
   arrtype = array_types;
