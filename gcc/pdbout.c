@@ -106,6 +106,7 @@ static struct pdb_type *bool8_type, *bool16_type, *bool32_type, *bool64_type, *b
 static struct pdb_type *complex16_type, *complex32_type, *complex48_type, *complex64_type, *complex80_type,
 		       *complex128_type;
 static struct pdb_type *void_type, *nullptr_type;
+static bool builtins_initialized = false;
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -3434,6 +3435,87 @@ pdb_type_tree_hasher::equal (const value_type type, compare_type tree)
   return type->tree == tree;
 }
 
+static struct pdb_type *
+add_inbuilt_type (tree t, uint16_t id)
+{
+  struct pdb_type *type, **slot;
+
+  type = (struct pdb_type *)xmalloc (offsetof (struct pdb_type, data));
+  type->cv_type = 0;
+  type->tree = t;
+  type->next = type->next2 = NULL;
+  type->id = id;
+  type->used = false;
+
+  if (last_type)
+    last_type->next = type;
+  else
+    types = type;
+
+  last_type = type;
+
+  if (t)
+    {
+      slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+      *slot = type;
+    }
+
+  return type;
+}
+
+static void
+add_inbuilt_types (void)
+{
+  add_inbuilt_type(char_type_node, CV_BUILTIN_TYPE_NARROW_CHARACTER);
+  add_inbuilt_type(signed_char_type_node, CV_BUILTIN_TYPE_SIGNED_CHARACTER);
+  add_inbuilt_type(unsigned_char_type_node, CV_BUILTIN_TYPE_UNSIGNED_CHARACTER);
+  add_inbuilt_type(short_integer_type_node, CV_BUILTIN_TYPE_INT16SHORT);
+  add_inbuilt_type(short_unsigned_type_node, CV_BUILTIN_TYPE_UINT16SHORT);
+  add_inbuilt_type(long_integer_type_node, CV_BUILTIN_TYPE_INT32LONG);
+  long_type = add_inbuilt_type(long_unsigned_type_node, CV_BUILTIN_TYPE_UINT32LONG);
+  add_inbuilt_type(long_long_integer_type_node, CV_BUILTIN_TYPE_INT64QUAD);
+  add_inbuilt_type(long_long_unsigned_type_node, CV_BUILTIN_TYPE_UINT64QUAD);
+
+  byte_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BYTE);
+  signed_byte_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_SBYTE);
+  wchar_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_WIDE_CHARACTER);
+  char16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_CHARACTER16);
+  uint16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT16);
+  int16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT16);
+  char32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_CHARACTER32);
+  uint32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT32);
+  int32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT32);
+  uint64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT64);
+  int64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT64);
+  uint128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT128);
+  int128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT128);
+
+  float16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT16);
+  float32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT32);
+  float48_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT48);
+  float64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT64);
+  float80_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT80);
+  float128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT128);
+
+  bool8_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN8);
+  bool16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN16);
+  bool32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN32);
+  bool64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN64);
+  bool128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN128);
+
+  complex16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX16);
+  complex32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX32);
+  complex48_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX48);
+  complex64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX64);
+  complex80_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX80);
+  complex128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX128);
+
+  void_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_VOID);
+  nullptr_type = add_inbuilt_type(NULL, (CV_TM_NPTR << 8) | CV_BUILTIN_TYPE_VOID);
+
+  builtins_initialized = true;
+}
+
 /* Resolve a type t to a type number. If it's a builtin type, such as bool or
  * the various ints, return its constant. Otherwise, allocate a new pdb_type,
  * add it to the type list, and return it in typeptr. */
@@ -3442,6 +3524,9 @@ find_type (tree t, struct pdb_type **typeptr)
 {
   struct pdb_type *type;
   struct pdb_alias *al;
+
+  if (!builtins_initialized)
+    add_inbuilt_types ();
 
   if (typeptr)
     *typeptr = NULL;
@@ -4107,92 +4192,11 @@ pdbout_start_source_file (unsigned int line ATTRIBUTE_UNUSED,
   add_source_file (file);
 }
 
-static struct pdb_type *
-add_inbuilt_type (tree t, uint16_t id)
-{
-  struct pdb_type *type, **slot;
-
-  type = (struct pdb_type *)xmalloc (offsetof (struct pdb_type, data));
-  type->cv_type = 0;
-  type->tree = t;
-  type->next = type->next2 = NULL;
-  type->id = id;
-  type->used = false;
-
-  if (last_type)
-    last_type->next = type;
-  else
-    types = type;
-
-  last_type = type;
-
-  if (t)
-    {
-      slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
-      *slot = type;
-    }
-
-  return type;
-}
-
-static void
-add_inbuilt_types (void)
-{
-  add_inbuilt_type(char_type_node, CV_BUILTIN_TYPE_NARROW_CHARACTER);
-  add_inbuilt_type(signed_char_type_node, CV_BUILTIN_TYPE_SIGNED_CHARACTER);
-  add_inbuilt_type(unsigned_char_type_node, CV_BUILTIN_TYPE_UNSIGNED_CHARACTER);
-  add_inbuilt_type(short_integer_type_node, CV_BUILTIN_TYPE_INT16SHORT);
-  add_inbuilt_type(short_unsigned_type_node, CV_BUILTIN_TYPE_UINT16SHORT);
-  add_inbuilt_type(long_integer_type_node, CV_BUILTIN_TYPE_INT32LONG);
-  long_type = add_inbuilt_type(long_unsigned_type_node, CV_BUILTIN_TYPE_UINT32LONG);
-  add_inbuilt_type(long_long_integer_type_node, CV_BUILTIN_TYPE_INT64QUAD);
-  add_inbuilt_type(long_long_unsigned_type_node, CV_BUILTIN_TYPE_UINT64QUAD);
-
-  byte_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BYTE);
-  signed_byte_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_SBYTE);
-  wchar_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_WIDE_CHARACTER);
-  char16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_CHARACTER16);
-  uint16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT16);
-  int16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT16);
-  char32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_CHARACTER32);
-  uint32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT32);
-  int32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT32);
-  uint64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT64);
-  int64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT64);
-  uint128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT128);
-  int128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT128);
-
-  float16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT16);
-  float32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT32);
-  float48_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT48);
-  float64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT64);
-  float80_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT80);
-  float128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT128);
-
-  bool8_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN8);
-  bool16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN16);
-  bool32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN32);
-  bool64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN64);
-  bool128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN128);
-
-  complex16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX16);
-  complex32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX32);
-  complex48_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX48);
-  complex64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX64);
-  complex80_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX80);
-  complex128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX128);
-
-  void_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_VOID);
-  nullptr_type = add_inbuilt_type(NULL, (CV_TM_NPTR << 8) | CV_BUILTIN_TYPE_VOID);
-}
-
 /* Start of compilation - add the main source file to the list. */
 static void
 pdbout_init (const char *file)
 {
   add_source_file (file);
-
-  add_inbuilt_types ();
 }
 
 /* We've encountered a new line of source code. Add an ASM label for this,
