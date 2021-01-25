@@ -253,7 +253,7 @@ pdbout_optimized_local_variable (struct pdb_local_var *v,
   fprintf (asm_out_file, "\t.short\t0x%x\n",
 	   (uint16_t) (len - sizeof (uint16_t)));
   fprintf (asm_out_file, "\t.short\t0x%x\n", S_LOCAL);
-  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type ? v->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// flags
 
   ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
@@ -321,7 +321,7 @@ pdbout_local_variable (struct pdb_local_var *v,
 		   (uint16_t) (len - sizeof (uint16_t)));	// reclen
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", S_BPREL32);
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
-	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type ? v->type->id : 0);
 
 	  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
 	}
@@ -343,7 +343,7 @@ pdbout_local_variable (struct pdb_local_var *v,
 		   (uint16_t) (len - sizeof (uint16_t)));	// reclen
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGREL32);
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
-	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type ? v->type->id : 0);
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
 
 	  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
@@ -371,7 +371,7 @@ pdbout_local_variable (struct pdb_local_var *v,
       fprintf (asm_out_file, "\t.short\t0x%x\n",
 	       (uint16_t) (len - sizeof (uint16_t)));	// reclen
       fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGISTER);
-      fprintf (asm_out_file, "\t.long\t0x%x\n", v->type);
+      fprintf (asm_out_file, "\t.long\t0x%x\n", v->type ? v->type->id : 0);
       fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
 
       ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
@@ -398,7 +398,7 @@ pdbout_local_variable (struct pdb_local_var *v,
       fprintf (asm_out_file, "\t.short\t0x%x\n",
 	       (uint16_t) (len - sizeof (uint16_t)));	// reclen
       fprintf (asm_out_file, "\t.short\t0x%x\n", S_LDATA32);
-      fprintf (asm_out_file, "\t.short\t0x%x\n", v->type);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", v->type ? v->type->id : 0);
       fprintf (asm_out_file, "\t.short\t0\n");
 
       fprintf (asm_out_file, "\t.long\t[");	// off
@@ -1629,73 +1629,12 @@ mark_referenced_types_used (void)
     }
 }
 
-/* Each type gets given a sequential number, starting from 0x1000. Once we've
- * removed the unused types, we need to renumber the remaining types. The
- * linker will do a similar thing when it removes duplicate types defined in
- * multiple object files. */
-static void
-renumber_types (void)
-{
-  uint16_t *type_list, *tlptr;
-  struct pdb_type *t;
-  struct pdb_func *func;
-  uint16_t new_id = FIRST_TYPE_NUM;
-
-  if (type_num == FIRST_TYPE_NUM)
-    return;
-
-  // prepare transformation list
-
-  type_list =
-    (uint16_t *) xmalloc (sizeof (uint16_t) * (type_num - FIRST_TYPE_NUM));
-  tlptr = type_list;
-
-  t = types;
-  while (t)
-    {
-      if (!t->used)
-	*tlptr = 0;
-      else
-	{
-	  *tlptr = new_id;
-	  new_id++;
-	}
-
-      t = t->next;
-      tlptr++;
-    }
-
-  // change procedures
-
-  func = funcs;
-
-  while (func)
-    {
-      struct pdb_local_var *plv;
-
-      plv = func->local_vars;
-      while (plv)
-	{
-	  if (plv->type >= FIRST_TYPE_NUM && plv->type < type_num)
-	    plv->type = type_list[plv->type - FIRST_TYPE_NUM];
-
-	  plv = plv->next;
-	}
-
-      func = func->next;
-    }
-
-  free (type_list);
-}
-
 /* We've finished compilation - output the .debug$S and .debug$T sections
  * to the ASM file. */
 static void
 pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 {
   mark_referenced_types_used ();
-
-  renumber_types ();
 
   write_pdb_section ();
   write_pdb_type_section ();
@@ -4525,7 +4464,7 @@ map_register_no (unsigned int regno, machine_mode mode)
 /* We've been given a declaration for a local variable. Allocate a
  * pdb_local_var and add it to the list for this scope block. */
 static void
-add_local (const char *name, tree t, uint16_t type, rtx rtl,
+add_local (const char *name, tree t, struct pdb_type *type, rtx rtl,
 	   unsigned int block_num)
 {
   struct pdb_local_var *plv;
@@ -4611,10 +4550,12 @@ pdbout_function_decl_block (tree block)
     {
       if (TREE_CODE (f) == VAR_DECL && DECL_RTL_SET_P (f) && DECL_NAME (f))
 	{
-	  struct pdb_type *type;
+	  struct pdb_type *type = NULL;
+
+	  find_type (TREE_TYPE (f), &type);
 
 	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
-		     find_type (TREE_TYPE (f), &type), DECL_RTL (f),
+		     type, DECL_RTL (f),
 		     BLOCK_NUMBER (block));
 
 	  if (type)
@@ -4648,11 +4589,12 @@ pdbout_function_decl (tree decl)
     {
       if (TREE_CODE (f) == PARM_DECL && DECL_NAME (f))
 	{
-	  struct pdb_type *type;
+	  struct pdb_type *type = NULL;
+
+	  find_type (TREE_TYPE (f), &type);
 
 	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
-		     find_type (TREE_TYPE (f), &type),
-		     f->parm_decl.common.rtl, 0);
+		     type, f->parm_decl.common.rtl, 0);
 
 	  if (type)
 	    type->used = true;

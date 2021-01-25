@@ -91,7 +91,7 @@ struct pdb_local_var
   int32_t offset;
   unsigned int reg;
   unsigned int block_num;
-  uint16_t type;
+  struct pdb_type *type;
   char *symbol;
   char name[1];
 };
