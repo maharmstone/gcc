@@ -1091,7 +1091,7 @@ write_enum (struct pdb_enum *en)
   fprintf (asm_out_file, "\t.short\t0\n");	// property
   fprintf (asm_out_file, "\t.short\t0x%x\n", en->type);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
-  fprintf (asm_out_file, "\t.short\t0x%x\n", en->field);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", en->field_type ? en->field_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 
   if (en->name)
@@ -1601,8 +1601,11 @@ mark_referenced_types_used (void)
 		if (en->type >= FIRST_TYPE_NUM && en->type < type_num)
 		  mark_type_used (en->type, &changed);
 
-		if (en->field >= FIRST_TYPE_NUM && en->field < type_num)
-		  mark_type_used (en->field, &changed);
+		if (en->field_type && !en->field_type->used)
+		  {
+		    en->field_type->used = true;
+		    changed = true;
+		  }
 
 		break;
 	      }
@@ -1779,9 +1782,6 @@ renumber_types (void)
 
 	    if (en->type >= FIRST_TYPE_NUM && en->type < type_num)
 	      en->type = type_list[en->type - FIRST_TYPE_NUM];
-
-	    if (en->field >= FIRST_TYPE_NUM && en->field < type_num)
-	      en->field = type_list[en->field - FIRST_TYPE_NUM];
 
 	    break;
 	  }
@@ -2883,7 +2883,7 @@ find_type_enum (tree t, struct pdb_type **typeptr)
   struct pdb_fieldlist_entry *ent;
   struct pdb_enum *en;
   unsigned int num_entries, size;
-  uint16_t fltypenum, en_type;
+  uint16_t en_type;
   char *name;
   struct pdb_type **slot;
 
@@ -2932,7 +2932,7 @@ find_type_enum (tree t, struct pdb_type **typeptr)
       ent++;
     }
 
-  fltypenum = add_type_fieldlist (fltype, NULL);
+  add_type_fieldlist (fltype, &fltype);
 
   // add type for enum
 
@@ -2968,7 +2968,7 @@ find_type_enum (tree t, struct pdb_type **typeptr)
 
       if (en->count == num_entries &&
 	  en->type == en_type &&
-	  en->field == fltypenum &&
+	  en->field_type == fltype &&
 	  ((!en->name && !name)
 	  || (en->name && name
 	  && !strcmp (en->name, name))))
@@ -2999,7 +2999,7 @@ find_type_enum (tree t, struct pdb_type **typeptr)
 
   en = (struct pdb_enum *) enumtype->data;
   en->count = num_entries;
-  en->field = fltypenum;
+  en->field_type = fltype;
   en->type = en_type;
   en->name = name;
 
