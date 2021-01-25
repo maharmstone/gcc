@@ -1232,7 +1232,7 @@ write_procedure (struct pdb_proc *proc)
 {
   fprintf (asm_out_file, "\t.short\t0xe\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_PROCEDURE);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->return_type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->return_type ? proc->return_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->calling_convention);
   fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->attributes);
@@ -1497,9 +1497,11 @@ mark_referenced_types_used (void)
 		    && proc->arg_list < type_num)
 		  mark_type_used (proc->arg_list, &changed);
 
-		if (proc->return_type >= FIRST_TYPE_NUM
-		    && proc->return_type < type_num)
-		  mark_type_used (proc->return_type, &changed);
+		if (proc->return_type && !proc->return_type->used)
+		  {
+		    proc->return_type->used = true;
+		    changed = true;
+		  }
 
 		break;
 	      }
@@ -1728,11 +1730,6 @@ renumber_types (void)
 
 	    if (proc->arg_list >= FIRST_TYPE_NUM && proc->arg_list < type_num)
 	      proc->arg_list = type_list[proc->arg_list - FIRST_TYPE_NUM];
-
-	    if (proc->return_type >= FIRST_TYPE_NUM
-		&& proc->return_type < type_num)
-	      proc->return_type =
-		type_list[proc->return_type - FIRST_TYPE_NUM];
 
 	    break;
 	  }
@@ -3239,7 +3236,8 @@ find_type_function (tree t, struct pdb_type **typeptr)
   tree arg;
   unsigned int num_args = 0;
   uint16_t *argptr;
-  uint16_t arglisttypenum, return_type;
+  uint16_t arglisttypenum;
+  struct pdb_type *return_type = NULL;
   uint8_t calling_convention;
   struct pdb_type **slot;
 
@@ -3281,7 +3279,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
 
   // create procedure
 
-  return_type = find_type (TREE_TYPE (t), NULL);
+  find_type (TREE_TYPE (t), &return_type);
 
   if (TARGET_64BIT)
     calling_convention = CV_CALL_NEAR_C;

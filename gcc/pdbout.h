@@ -265,7 +265,7 @@ struct pdb_arglist
 
 struct pdb_proc
 {
-  uint16_t return_type;
+  struct pdb_type *return_type;
   uint8_t calling_convention;
   uint8_t attributes;
   uint16_t num_args;
