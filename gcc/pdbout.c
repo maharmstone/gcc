@@ -1128,7 +1128,7 @@ write_pointer (struct pdb_pointer *ptr)
 {
   fprintf (asm_out_file, "\t.short\t0xa\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_POINTER);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", ptr->type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", ptr->type ? ptr->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.long\t0x%x\n", ptr->attr.num);
 }
@@ -1487,8 +1487,11 @@ mark_referenced_types_used (void)
 	      {
 		struct pdb_pointer *ptr = (struct pdb_pointer *) t->data;
 
-		if (ptr->type >= FIRST_TYPE_NUM && ptr->type < type_num)
-		  mark_type_used (ptr->type, &changed);
+		if (ptr->type && !ptr->type->used)
+		  {
+		    ptr->type->used = true;
+		    changed = true;
+		  }
 
 		break;
 	      }
@@ -1717,16 +1720,6 @@ renumber_types (void)
 
       switch (t->cv_type)
 	{
-	case LF_POINTER:
-	  {
-	    struct pdb_pointer *ptr = (struct pdb_pointer *) t->data;
-
-	    if (ptr->type >= FIRST_TYPE_NUM && ptr->type < type_num)
-	      ptr->type = type_list[ptr->type - FIRST_TYPE_NUM];
-
-	    break;
-	  }
-
 	case LF_UDT_SRC_LINE:
 	  {
 	    struct pdb_udt_src_line *pusl =
@@ -2967,22 +2960,15 @@ find_type_enum (tree t, struct pdb_type **typeptr)
 static uint16_t
 find_type_pointer (tree t, struct pdb_type **typeptr)
 {
-  struct pdb_type *ptrtype, *t2, *last_entry = NULL;
+  struct pdb_type *ptrtype, *t2, *last_entry = NULL, *type = NULL;
   struct pdb_pointer *ptr, v;
   unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8;
-  uint16_t type = find_type (TREE_TYPE (t), NULL);
   struct pdb_type **slot;
 
-  if (type == 0)
-    return 0;
+  find_type (TREE_TYPE (t), &type);
 
-  if (type < FIRST_TYPE_NUM && TREE_CODE (t) == POINTER_TYPE)
-    {			// pointers to builtins have their own constants
-      if (size == 4)
-	return (CV_TM_NPTR32 << 8) | type;
-      else if (size == 8)
-	return (CV_TM_NPTR64 << 8) | type;
-    }
+  if (!type)
+    return 0;
 
   v.attr.num = 0;
 

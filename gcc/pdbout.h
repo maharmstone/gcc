@@ -228,7 +228,7 @@ struct pdb_enum
 
 struct pdb_pointer
 {
-  uint16_t type;
+  struct pdb_type *type;
   union
   {
     struct
