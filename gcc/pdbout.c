@@ -100,7 +100,7 @@ static unsigned int var_loc_number = 1;
 static hash_table<pdb_type_tree_hasher> tree_hash_table(31);
 static struct pdb_type *byte_type, *signed_byte_type, *wchar_type, *char16_type, *uint16_type, *int16_type,
 		       *char32_type, *uint32_type, *int32_type, *uint64_type, *int64_type, *uint128_type,
-		       *int128_type, *long_type;
+		       *int128_type, *long_type, *ulong_type, *hresult_type;
 static struct pdb_type *float16_type, *float32_type, *float48_type, *float64_type, *float80_type, *float128_type;
 static struct pdb_type *bool8_type, *bool16_type, *bool32_type, *bool64_type, *bool128_type;
 static struct pdb_type *complex16_type, *complex32_type, *complex48_type, *complex64_type, *complex80_type,
@@ -2897,7 +2897,7 @@ find_type_array (tree t)
 
   arr = (struct pdb_array *) arrtype->data;
   arr->type = type;
-  arr->index_type = long_type;
+  arr->index_type = ulong_type;
   arr->length = length;
 
   if (last_entry)
@@ -3225,8 +3225,8 @@ add_inbuilt_types (void)
   add_inbuilt_type(unsigned_char_type_node, CV_BUILTIN_TYPE_UNSIGNED_CHARACTER);
   add_inbuilt_type(short_integer_type_node, CV_BUILTIN_TYPE_INT16SHORT);
   add_inbuilt_type(short_unsigned_type_node, CV_BUILTIN_TYPE_UINT16SHORT);
-  add_inbuilt_type(long_integer_type_node, CV_BUILTIN_TYPE_INT32LONG);
-  long_type = add_inbuilt_type(long_unsigned_type_node, CV_BUILTIN_TYPE_UINT32LONG);
+  long_type = add_inbuilt_type(long_integer_type_node, CV_BUILTIN_TYPE_INT32LONG);
+  ulong_type = add_inbuilt_type(long_unsigned_type_node, CV_BUILTIN_TYPE_UINT32LONG);
   add_inbuilt_type(long_long_integer_type_node, CV_BUILTIN_TYPE_INT64QUAD);
   add_inbuilt_type(long_long_unsigned_type_node, CV_BUILTIN_TYPE_UINT64QUAD);
 
@@ -3243,6 +3243,7 @@ add_inbuilt_types (void)
   int64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT64);
   uint128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT128);
   int128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT128);
+  hresult_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_HRESULT);
 
   float16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT16);
   float32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT32);
@@ -3606,15 +3607,12 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
       a->next = aliases;
       a->tree = TREE_TYPE (t);
       a->type = find_type (DECL_ORIGINAL_TYPE (t));
-      a->type_id = a->type ? a->type->id : 0;
 
       // HRESULTs have their own value
-      if (a->type_id == CV_BUILTIN_TYPE_INT32LONG && DECL_NAME (t)
+      if (a->type == long_type && DECL_NAME (t)
 	  && IDENTIFIER_POINTER (DECL_NAME (t))
 	  && !strcmp (IDENTIFIER_POINTER (DECL_NAME (t)), "HRESULT"))
-	{
-	  a->type_id = CV_BUILTIN_TYPE_HRESULT;
-	}
+	a->type = hresult_type;
 
       // give name if previously anonymous
 
