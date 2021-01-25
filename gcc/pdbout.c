@@ -72,7 +72,7 @@ static void pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED,
 static void pdbout_end_block (unsigned int line ATTRIBUTE_UNUSED,
 			      unsigned int blocknum);
 
-static uint16_t find_type (tree t, struct pdb_type **typeptr);
+static struct pdb_type *find_type (tree t);
 static char *get_struct_name (tree t);
 
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
@@ -1653,10 +1653,7 @@ pdbout_begin_function (tree func)
   f->name = xstrdup (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (func)));
   f->num = current_function_funcdef_no;
   f->public_flag = TREE_PUBLIC (func);
-
-  f->type = NULL;
-  find_type (TREE_TYPE (func), &f->type);
-
+  f->type = find_type (TREE_TYPE (func));
   f->lines = f->last_line = NULL;
   f->local_vars = f->last_local_var = NULL;
   f->var_locs = f->last_var_loc = NULL;
@@ -1720,9 +1717,7 @@ pdbout_late_global_decl (tree var)
   v->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (var)));
   v->asm_name = xstrdup (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME_RAW (var)));
   v->public_flag = TREE_PUBLIC (var);
-
-  v->type = NULL;
-  find_type (TREE_TYPE (var), &v->type);
+  v->type = find_type (TREE_TYPE (var));
 
   if (v->type)
     v->type->used = true;
@@ -2402,8 +2397,8 @@ add_type_fieldlist (struct pdb_type *t, struct pdb_type **typeptr)
 
 /* For a given struct, class, or union, allocate a new pdb_type and
  * add it to the type list. */
-static uint16_t
-find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
+static struct pdb_type *
+find_type_struct (tree t, bool is_union)
 {
   tree f;
   struct pdb_type *fltype = NULL, *strtype, *fwddef = NULL, *last_entry = NULL;
@@ -2427,9 +2422,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 	    num_entries++;
 	  else
 	    {			// anonymous field
-	      struct pdb_type *type;
-
-	      find_type (TREE_TYPE (f), &type);
+	      struct pdb_type *type = find_type (TREE_TYPE (f));
 
 	      if (type
 		  && (type->cv_type == LF_CLASS
@@ -2504,9 +2497,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 
 		  if (DECL_BIT_FIELD_TYPE (f))
 		    {
-		      struct pdb_type *underlying_type;
-
-		      find_type (DECL_BIT_FIELD_TYPE (f), &underlying_type);
+		      struct pdb_type *underlying_type = find_type (DECL_BIT_FIELD_TYPE (f));
 
 		      ent->type =
 			find_type_bitfield (underlying_type,
@@ -2519,7 +2510,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 		    }
 		  else
 		    {
-		      find_type (TREE_TYPE (f), &ent->type);
+		      ent->type = find_type (TREE_TYPE (f));
 		      ent->offset = bit_offset / 8;
 		    }
 
@@ -2527,9 +2518,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 		}
 	      else		// anonymous field
 		{
-		  struct pdb_type *type;
-
-		  find_type (TREE_TYPE (f), &type);
+		  struct pdb_type *type = find_type (TREE_TYPE (f));
 
 		  if (type
 		      && (type->cv_type == LF_CLASS
@@ -2594,10 +2583,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 	if (name)
 	  free (name);
 
-	if (typeptr)
-	  *typeptr = strtype;
-
-	return strtype->id;
+	return strtype;
       }
 
       last_entry = strtype;
@@ -2645,9 +2631,6 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 
   last_type = strtype;
 
-  if (typeptr)
-    *typeptr = strtype;
-
   if (fwddef_tree_set)
     fwddef->tree = NULL;
 
@@ -2657,12 +2640,12 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
       *slot = strtype;
     }
 
-  return strtype->id;
+  return strtype;
 }
 
 /* For a given enum, allocate a new pdb_type and add it to the type list. */
-static uint16_t
-find_type_enum (tree t, struct pdb_type **typeptr)
+static struct pdb_type *
+find_type_enum (tree t)
 {
   tree v;
   struct pdb_type *fltype, *enumtype, *last_entry = NULL;
@@ -2760,10 +2743,7 @@ find_type_enum (tree t, struct pdb_type **typeptr)
 	  if (name)
 	    free (name);
 
-	  if (typeptr)
-	    *typeptr = enumtype;
-
-	  return enumtype->id;
+	  return enumtype;
 	}
 
       last_entry = enumtype;
@@ -2799,29 +2779,26 @@ find_type_enum (tree t, struct pdb_type **typeptr)
 
   last_type = enumtype;
 
-  if (typeptr)
-    *typeptr = enumtype;
-
   slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
   *slot = enumtype;
 
-  return enumtype->id;
+  return enumtype;
 }
 
 /* Given a pointer type t, allocate a new pdb_type and add it to the
  * type list. */
-static uint16_t
-find_type_pointer (tree t, struct pdb_type **typeptr)
+static struct pdb_type *
+find_type_pointer (tree t)
 {
-  struct pdb_type *ptrtype, *t2, *last_entry = NULL, *type = NULL;
+  struct pdb_type *ptrtype, *t2, *last_entry = NULL, *type;
   struct pdb_pointer *ptr, v;
   unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8;
   struct pdb_type **slot;
 
-  find_type (TREE_TYPE (t), &type);
+  type = find_type (TREE_TYPE (t));
 
   if (!type)
-    return 0;
+    return NULL;
 
   v.attr.num = 0;
 
@@ -2842,12 +2819,7 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
 
     if (ptr->type == type &&
       ptr->attr.num == v.attr.num)
-      {
-	if (typeptr)
-	  *typeptr = t2;
-
-	return t2->id;
-      }
+	return t2;
 
     last_entry = t2;
     t2 = t2->next2;
@@ -2879,29 +2851,26 @@ find_type_pointer (tree t, struct pdb_type **typeptr)
 
   last_type = ptrtype;
 
-  if (typeptr)
-    *typeptr = ptrtype;
-
   slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
   *slot = ptrtype;
 
-  return ptrtype->id;
+  return ptrtype;
 }
 
 /* Given an array type t, allocate a new pdb_type and add it to the
  * type list. */
-static uint16_t
-find_type_array (tree t, struct pdb_type **typeptr)
+static struct pdb_type *
+find_type_array (tree t)
 {
   struct pdb_type *arrtype, *last_entry = NULL, *type;
   struct pdb_array *arr;
   uint64_t length = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
   struct pdb_type **slot;
 
-  find_type (TREE_TYPE (t), &type);
+  type = find_type (TREE_TYPE (t));
 
   if (!type)
-    return 0;
+    return NULL;
 
   arrtype = array_types;
   while (arrtype)
@@ -2909,12 +2878,7 @@ find_type_array (tree t, struct pdb_type **typeptr)
       arr = (struct pdb_array *) arrtype->data;
 
       if (arr->type == type && arr->length == length)
-	{
-	  if (typeptr)
-	    *typeptr = arrtype;
-
-	  return arrtype->id;
-	}
+	return arrtype;
 
       last_entry = arrtype;
       arrtype = arrtype->next2;
@@ -2948,13 +2912,10 @@ find_type_array (tree t, struct pdb_type **typeptr)
 
   last_type = arrtype;
 
-  if (typeptr)
-    *typeptr = arrtype;
-
   slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
   *slot = arrtype;
 
-  return arrtype->id;
+  return arrtype;
 }
 
 static pdb_type *
@@ -3022,8 +2983,8 @@ add_arglist_type (struct pdb_type *t)
 
 /* Given a function type t, allocate a new pdb_type and add it to the
  * type list. */
-static uint16_t
-find_type_function (tree t, struct pdb_type **typeptr)
+static struct pdb_type *
+find_type_function (tree t)
 {
   struct pdb_type *arglisttype, *proctype, *last_entry = NULL;
   struct pdb_arglist *arglist;
@@ -3031,7 +2992,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
   tree arg;
   unsigned int num_args = 0;
   struct pdb_type **argptr;
-  struct pdb_type *return_type = NULL;
+  struct pdb_type *return_type;
   uint8_t calling_convention;
   struct pdb_type **slot;
 
@@ -3062,9 +3023,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
     {
       if (TREE_CODE (TREE_VALUE (arg)) != VOID_TYPE)
 	{
-	  *argptr = NULL;
-
-	  find_type (TREE_VALUE (arg), argptr);
+	  *argptr = find_type (TREE_VALUE (arg));
 	  argptr++;
 	}
 
@@ -3075,7 +3034,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
 
   // create procedure
 
-  find_type (TREE_TYPE (t), &return_type);
+  return_type = find_type (TREE_TYPE (t));
 
   if (TARGET_64BIT)
     calling_convention = CV_CALL_NEAR_C;
@@ -3111,12 +3070,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
 
       if (proc->return_type == return_type && proc->calling_convention == calling_convention &&
 	  proc->num_args == num_args && proc->arg_list == arglisttype)
-	{
-	  if (typeptr)
-	    *typeptr = proctype;
-
-	  return proctype->id;
-	}
+	return proctype;
 
       last_entry = proctype;
       proctype = proctype->next2;
@@ -3153,26 +3107,23 @@ find_type_function (tree t, struct pdb_type **typeptr)
 
   last_type = proctype;
 
-  if (typeptr)
-    *typeptr = proctype;
-
   slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
   *slot = proctype;
 
-  return proctype->id;
+  return proctype;
 }
 
 /* Given a CV-modified type t, allocate a new pdb_type modifying
  * the base type, and add it to the type list. */
-static uint16_t
-find_type_modifier (tree t, struct pdb_type **typeptr)
+static struct pdb_type *
+find_type_modifier (tree t)
 {
-  struct pdb_type *type, *last_entry = NULL, *base_type = NULL;
+  struct pdb_type *type, *last_entry = NULL, *base_type;
   struct pdb_modifier *mod;
   uint16_t modifier = 0;
   struct pdb_type **slot;
 
-  find_type (TYPE_MAIN_VARIANT (t), &base_type);
+  base_type = find_type (TYPE_MAIN_VARIANT (t));
 
   if (TYPE_READONLY (t))
     modifier |= CV_MODIFIER_CONST;
@@ -3186,12 +3137,7 @@ find_type_modifier (tree t, struct pdb_type **typeptr)
       mod = (struct pdb_modifier *) type->data;
 
       if (mod->type == base_type && mod->modifier == modifier)
-	{
-	  if (typeptr)
-	    *typeptr = type;
-
-	  return type->id;
-	}
+	return type;
 
       last_entry = type;
       type = type->next2;
@@ -3225,13 +3171,10 @@ find_type_modifier (tree t, struct pdb_type **typeptr)
 
   last_type = type;
 
-  if (typeptr)
-    *typeptr = type;
-
   slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
   *slot = type;
 
-  return type->id;
+  return type;
 }
 
 inline hashval_t
@@ -3330,8 +3273,8 @@ add_inbuilt_types (void)
 /* Resolve a type t to a type number. If it's a builtin type, such as bool or
  * the various ints, return its constant. Otherwise, allocate a new pdb_type,
  * add it to the type list, and return it in typeptr. */
-static uint16_t
-find_type (tree t, struct pdb_type **typeptr)
+static struct pdb_type *
+find_type (tree t)
 {
   struct pdb_type *type;
   struct pdb_alias *al;
@@ -3339,11 +3282,8 @@ find_type (tree t, struct pdb_type **typeptr)
   if (!builtins_initialized)
     add_inbuilt_types ();
 
-  if (typeptr)
-    *typeptr = NULL;
-
   if (!t)
-    return 0;
+    return NULL;
 
   // search through typedefs
 
@@ -3351,12 +3291,7 @@ find_type (tree t, struct pdb_type **typeptr)
   while (al)
     {
       if (al->tree == t)
-	{
-	  if (typeptr)
-	    *typeptr = al->type;
-
-	  return al->type_id;
-	}
+	return al->type;
 
       al = al->next;
     }
@@ -3365,214 +3300,150 @@ find_type (tree t, struct pdb_type **typeptr)
 
   type = tree_hash_table.find_with_hash(t, pdb_type_tree_hasher::hash(t));
 
-  if (type) {
-    if (typeptr)
-      *typeptr = type;
-
-    return type->id;
-  }
+  if (type)
+    return type;
 
   // add modifier type if const or volatile
 
   if (TYPE_READONLY (t) || TYPE_VOLATILE (t))
-    return find_type_modifier (t, typeptr);
+    return find_type_modifier (t);
 
   switch (TREE_CODE (t))
     {
     case INTEGER_TYPE:
       {
 	unsigned int size;
-	struct pdb_type *int_type = NULL;
 
 	size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0);
 
 	switch (size)
 	  {
 	  case 8:
-	    int_type = TYPE_UNSIGNED (t) ? byte_type : signed_byte_type;
-	    break;
+	    return TYPE_UNSIGNED (t) ? byte_type : signed_byte_type;
 
 	  case 16:
 	    if (TYPE_IDENTIFIER (t)
 		&& IDENTIFIER_POINTER (TYPE_IDENTIFIER (t))
 		&& !strcmp (IDENTIFIER_POINTER (TYPE_IDENTIFIER (t)),
 			    "wchar_t"))
-	      int_type = wchar_type;
+	      return wchar_type;
 	    else if (TYPE_IDENTIFIER (t)
 		     && IDENTIFIER_POINTER (TYPE_IDENTIFIER (t))
 		     && !strcmp (IDENTIFIER_POINTER (TYPE_IDENTIFIER (t)),
 				 "char16_t"))
-	      int_type = char16_type;
+	      return char16_type;
 	    else
-	      int_type = TYPE_UNSIGNED (t) ? uint16_type : int16_type;
-	    break;
+	      return TYPE_UNSIGNED (t) ? uint16_type : int16_type;
 
 	  case 32:
 	    if (TYPE_IDENTIFIER (t)
 		&& IDENTIFIER_POINTER (TYPE_IDENTIFIER (t))
 		&& !strcmp (IDENTIFIER_POINTER (TYPE_IDENTIFIER (t)),
 			    "char32_t"))
-	      int_type = char32_type;
+	      return char32_type;
 	    else
-	      int_type = TYPE_UNSIGNED (t) ? uint32_type : int32_type;
-	    break;
+	      return TYPE_UNSIGNED (t) ? uint32_type : int32_type;
 
 	  case 64:
-	    int_type = TYPE_UNSIGNED (t) ? uint64_type : int64_type;
-	    break;
+	    return TYPE_UNSIGNED (t) ? uint64_type : int64_type;
 
 	  case 128:
-	    int_type = TYPE_UNSIGNED (t) ? uint128_type : int128_type;
-	    break;
+	    return TYPE_UNSIGNED (t) ? uint128_type : int128_type;
+
+	  default:
+	    return NULL;
 	  }
-
-	if (int_type)
-	  {
-	    if (typeptr)
-	      *typeptr = int_type;
-
-	    return int_type->id;
-	  }
-
-	return 0;
       }
 
     case REAL_TYPE:
       {
 	unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0);
-	struct pdb_type *float_type = NULL;
 
 	switch (size)
 	  {
 	  case 16:
-	    float_type = float16_type;
-	    break;
+	    return float16_type;
 
 	  case 32:
-	    float_type = float32_type;
-	    break;
+	    return float32_type;
 
 	  case 48:
-	    float_type = float48_type;
-	    break;
+	    return float48_type;
 
 	  case 64:
-	    float_type = float64_type;
-	    break;
+	    return float64_type;
 
 	  case 80:
-	    float_type = float80_type;
-	    break;
+	    return float80_type;
 
 	  case 128:
-	    float_type = float128_type;
-	    break;
+	    return float128_type;
+
+	  default:
+	    return NULL;
 	  }
-
-	if (float_type)
-	  {
-	    if (typeptr)
-	      *typeptr = float_type;
-
-	    return float_type->id;
-	  }
-
-	return 0;
       }
 
     case BOOLEAN_TYPE:
       {
 	unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0);
-	struct pdb_type *bool_type = NULL;
 
 	switch (size)
 	  {
 	  case 8:
-	    bool_type = bool8_type;
-	    break;
+	    return bool8_type;
 
 	  case 16:
-	    bool_type = bool16_type;
-	    break;
+	    return bool16_type;
 
 	  case 32:
-	    bool_type = bool32_type;
-	    break;
+	    return bool32_type;
 
 	  case 64:
-	    bool_type = bool64_type;
-	    break;
+	    return bool64_type;
 
 	  case 128:
-	    bool_type = bool128_type;
-	    break;
+	    return bool128_type;
+
+	  default:
+	    return NULL;
 	  }
-
-	if (bool_type)
-	  {
-	    if (typeptr)
-	      *typeptr = bool_type;
-
-	    return bool_type->id;
-	  }
-
-	return 0;
       }
 
     case COMPLEX_TYPE:
       {
 	unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0);
-	struct pdb_type *complex_type = NULL;
 
 	switch (size)
 	  {
 	  case 16:
-	    complex_type = complex16_type;
-	    break;
+	    return complex16_type;
 
 	  case 32:
-	    complex_type = complex32_type;
-	    break;
+	    return complex32_type;
 
 	  case 48:
-	    complex_type = complex48_type;
-	    break;
+	    return complex48_type;
 
 	  case 64:
-	    complex_type = complex64_type;
-	    break;
+	    return complex64_type;
 
 	  case 80:
-	    complex_type = complex80_type;
-	    break;
+	    return complex80_type;
 
 	  case 128:
-	    complex_type = complex128_type;
-	    break;
+	    return complex128_type;
+
+	  default:
+	    return NULL;
 	  }
-
-	if (complex_type)
-	  {
-	    if (typeptr)
-	      *typeptr = complex_type;
-
-	    return complex_type->id;
-	  }
-
-	return 0;
       }
 
     case VOID_TYPE:
-      if (typeptr)
-	*typeptr = void_type;
-
-      return void_type->id;
+      return void_type;
 
     case NULLPTR_TYPE:
-      if (typeptr)
-	*typeptr = nullptr_type;
-
-      return nullptr_type->id;
+      return nullptr_type;
 
     default:
       break;
@@ -3584,12 +3455,7 @@ find_type (tree t, struct pdb_type **typeptr)
       while (type)
 	{
 	  if (type->tree == TYPE_MAIN_VARIANT (t))
-	    {
-	      if (typeptr)
-		*typeptr = type;
-
-	      return type->id;
-	    }
+	    return type;
 
 	  type = type->next;
 	}
@@ -3599,26 +3465,26 @@ find_type (tree t, struct pdb_type **typeptr)
     {
     case POINTER_TYPE:
     case REFERENCE_TYPE:
-      return find_type_pointer (t, typeptr);
+      return find_type_pointer (t);
 
     case ARRAY_TYPE:
-      return find_type_array (t, typeptr);
+      return find_type_array (t);
 
     case RECORD_TYPE:
-      return find_type_struct (t, typeptr, false);
+      return find_type_struct (t, false);
 
     case UNION_TYPE:
-      return find_type_struct (t, typeptr, true);
+      return find_type_struct (t, true);
 
     case ENUMERAL_TYPE:
-      return find_type_enum (t, typeptr);
+      return find_type_enum (t);
 
     case FUNCTION_TYPE:
     case METHOD_TYPE:
-      return find_type_function (t, typeptr);
+      return find_type_function (t);
 
     default:
-      return 0;
+      return NULL;
     }
 }
 
@@ -3722,7 +3588,6 @@ add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, 
 static void
 pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 {
-  uint16_t type_id;
   struct pdb_type *string_type, *type;
   struct pdb_source_file *psf;
   expanded_location xloc;
@@ -3740,7 +3605,8 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 
       a->next = aliases;
       a->tree = TREE_TYPE (t);
-      a->type_id = find_type (DECL_ORIGINAL_TYPE (t), &a->type);
+      a->type = find_type (DECL_ORIGINAL_TYPE (t));
+      a->type_id = a->type ? a->type->id : 0;
 
       // HRESULTs have their own value
       if (a->type_id == CV_BUILTIN_TYPE_INT32LONG && DECL_NAME (t)
@@ -3785,9 +3651,9 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
       return;
     }
 
-  type_id = find_type (TREE_TYPE (t), &type);
+  type = find_type (TREE_TYPE (t));
 
-  if (type_id == 0 || type_id < FIRST_TYPE_NUM)
+  if (!type || type->id != 0)
     return;
 
   if (DECL_NAME (t) && IDENTIFIER_POINTER (DECL_NAME (t))
@@ -4550,9 +4416,7 @@ pdbout_function_decl_block (tree block)
     {
       if (TREE_CODE (f) == VAR_DECL && DECL_RTL_SET_P (f) && DECL_NAME (f))
 	{
-	  struct pdb_type *type = NULL;
-
-	  find_type (TREE_TYPE (f), &type);
+	  struct pdb_type *type = find_type (TREE_TYPE (f));
 
 	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
 		     type, DECL_RTL (f),
@@ -4589,9 +4453,7 @@ pdbout_function_decl (tree decl)
     {
       if (TREE_CODE (f) == PARM_DECL && DECL_NAME (f))
 	{
-	  struct pdb_type *type = NULL;
-
-	  find_type (TREE_TYPE (f), &type);
+	  struct pdb_type *type = find_type (TREE_TYPE (f));
 
 	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
 		     type, f->parm_decl.common.rtl, 0);
