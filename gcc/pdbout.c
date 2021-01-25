@@ -103,6 +103,8 @@ static struct pdb_type *byte_type, *signed_byte_type, *wchar_type, *char16_type,
 		       *int128_type, *long_type;
 static struct pdb_type *float16_type, *float32_type, *float48_type, *float64_type, *float80_type, *float128_type;
 static struct pdb_type *bool8_type, *bool16_type, *bool32_type, *bool64_type, *bool128_type;
+static struct pdb_type *complex16_type, *complex32_type, *complex48_type, *complex64_type, *complex80_type,
+		       *complex128_type;
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -3649,26 +3651,41 @@ find_type (tree t, struct pdb_type **typeptr)
     case COMPLEX_TYPE:
       {
 	unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0);
+	struct pdb_type *complex_type = NULL;
 
 	switch (size)
 	  {
 	  case 16:
-	    return CV_BUILTIN_TYPE_COMPLEX16;
+	    complex_type = complex16_type;
+	    break;
 
 	  case 32:
-	    return CV_BUILTIN_TYPE_COMPLEX32;
+	    complex_type = complex32_type;
+	    break;
 
 	  case 48:
-	    return CV_BUILTIN_TYPE_COMPLEX48;
+	    complex_type = complex48_type;
+	    break;
 
 	  case 64:
-	    return CV_BUILTIN_TYPE_COMPLEX64;
+	    complex_type = complex64_type;
+	    break;
 
 	  case 80:
-	    return CV_BUILTIN_TYPE_COMPLEX80;
+	    complex_type = complex80_type;
+	    break;
 
 	  case 128:
-	    return CV_BUILTIN_TYPE_COMPLEX128;
+	    complex_type = complex128_type;
+	    break;
+	  }
+
+	if (complex_type)
+	  {
+	    if (typeptr)
+	      *typeptr = complex_type;
+
+	    return complex_type->id;
 	  }
 
 	return 0;
@@ -4176,6 +4193,13 @@ add_inbuilt_types (void)
   bool32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN32);
   bool64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN64);
   bool128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN128);
+
+  complex16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX16);
+  complex32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX32);
+  complex48_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX48);
+  complex64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX64);
+  complex80_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX80);
+  complex128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX128);
 }
 
 /* Start of compilation - add the main source file to the list. */
