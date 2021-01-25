@@ -795,8 +795,6 @@ free_type (struct pdb_type *t)
 	      free (fl->entries[i].name);
 	  }
 
-	free (fl->entries);
-
 	break;
       }
 
@@ -2522,15 +2520,13 @@ find_type_struct (tree t, bool is_union)
 
       fltype =
 	(struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
-				     sizeof (struct pdb_fieldlist));
+				     offsetof (struct pdb_fieldlist, entries) +
+				     (num_entries * sizeof (struct pdb_fieldlist_entry)));
       fltype->cv_type = LF_FIELDLIST;
       fltype->tree = NULL;
 
       fieldlist = (struct pdb_fieldlist *) fltype->data;
       fieldlist->count = num_entries;
-      fieldlist->entries =
-	(struct pdb_fieldlist_entry *)
-	xmalloc (sizeof (struct pdb_fieldlist_entry) * num_entries);
 
       ent = fieldlist->entries;
       f = TYPE_FIELDS (t);
@@ -2724,15 +2720,13 @@ find_type_enum (tree t)
 
   fltype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
-				 sizeof (struct pdb_fieldlist));
+				 offsetof (struct pdb_fieldlist, entries) +
+				(num_entries * sizeof (struct pdb_fieldlist_entry)));
   fltype->cv_type = LF_FIELDLIST;
   fltype->tree = NULL;
 
   fieldlist = (struct pdb_fieldlist *) fltype->data;
   fieldlist->count = num_entries;
-  fieldlist->entries =
-    (struct pdb_fieldlist_entry *)
-    xmalloc (sizeof (struct pdb_fieldlist_entry) * num_entries);
 
   ent = fieldlist->entries;
   v = TYPE_VALUES (t);

@@ -173,7 +173,7 @@ struct pdb_fieldlist_entry
 struct pdb_fieldlist
 {
   unsigned int count;
-  struct pdb_fieldlist_entry *entries;
+  struct pdb_fieldlist_entry entries[1];
 };
 
 union pdb_property
