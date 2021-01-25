@@ -98,6 +98,9 @@ static unsigned int num_line_number_entries = 0;
 static unsigned int num_source_files = 0;
 static unsigned int var_loc_number = 1;
 static hash_table<pdb_type_tree_hasher> tree_hash_table(31);
+static struct pdb_type *byte_type, *signed_byte_type, *wchar_type, *char16_type, *uint16_type, *int16_type,
+		       *char32_type, *uint32_type, *int32_type, *uint64_type, *int64_type, *uint128_type,
+		       *int128_type;
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -3517,47 +3520,56 @@ find_type (tree t, struct pdb_type **typeptr)
     case INTEGER_TYPE:
       {
 	unsigned int size;
+	struct pdb_type *int_type = NULL;
 
 	size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0);
 
 	switch (size)
 	  {
 	  case 8:
-	    return TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_BYTE :
-	      CV_BUILTIN_TYPE_SBYTE;
+	    int_type = TYPE_UNSIGNED (t) ? byte_type : signed_byte_type;
+	    break;
 
 	  case 16:
 	    if (TYPE_IDENTIFIER (t)
 		&& IDENTIFIER_POINTER (TYPE_IDENTIFIER (t))
 		&& !strcmp (IDENTIFIER_POINTER (TYPE_IDENTIFIER (t)),
 			    "wchar_t"))
-	      return CV_BUILTIN_TYPE_WIDE_CHARACTER;
+	      int_type = wchar_type;
 	    else if (TYPE_IDENTIFIER (t)
 		     && IDENTIFIER_POINTER (TYPE_IDENTIFIER (t))
 		     && !strcmp (IDENTIFIER_POINTER (TYPE_IDENTIFIER (t)),
 				 "char16_t"))
-	      return CV_BUILTIN_TYPE_CHARACTER16;
+	      int_type = char16_type;
 	    else
-	      return TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT16 :
-		CV_BUILTIN_TYPE_INT16;
+	      int_type = TYPE_UNSIGNED (t) ? uint16_type : int16_type;
+	    break;
 
 	  case 32:
 	    if (TYPE_IDENTIFIER (t)
 		&& IDENTIFIER_POINTER (TYPE_IDENTIFIER (t))
 		&& !strcmp (IDENTIFIER_POINTER (TYPE_IDENTIFIER (t)),
 			    "char32_t"))
-	      return CV_BUILTIN_TYPE_CHARACTER32;
+	      int_type = char32_type;
 	    else
-	      return TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT32 :
-		CV_BUILTIN_TYPE_INT32;
+	      int_type = TYPE_UNSIGNED (t) ? uint32_type : int32_type;
+	    break;
 
 	  case 64:
-	    return TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT64 :
-	      CV_BUILTIN_TYPE_INT64;
+	    int_type = TYPE_UNSIGNED (t) ? uint64_type : int64_type;
+	    break;
 
 	  case 128:
-	    return TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT128 :
-	      CV_BUILTIN_TYPE_INT128;
+	    int_type = TYPE_UNSIGNED (t) ? uint128_type : int128_type;
+	    break;
+	  }
+
+	if (int_type)
+	  {
+	    if (typeptr)
+	      *typeptr = int_type;
+
+	    return int_type->id;
 	  }
 
 	return 0;
@@ -4119,6 +4131,20 @@ add_inbuilt_types (void)
   add_inbuilt_type(long_unsigned_type_node, CV_BUILTIN_TYPE_UINT32LONG);
   add_inbuilt_type(long_long_integer_type_node, CV_BUILTIN_TYPE_INT64QUAD);
   add_inbuilt_type(long_long_unsigned_type_node, CV_BUILTIN_TYPE_UINT64QUAD);
+
+  byte_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BYTE);
+  signed_byte_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_SBYTE);
+  wchar_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_WIDE_CHARACTER);
+  char16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_CHARACTER16);
+  uint16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT16);
+  int16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT16);
+  char32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_CHARACTER32);
+  uint32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT32);
+  int32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT32);
+  uint64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT64);
+  int64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT64);
+  uint128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT128);
+  int128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT128);
 }
 
 /* Start of compilation - add the main source file to the list. */
