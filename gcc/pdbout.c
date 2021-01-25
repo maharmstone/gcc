@@ -1283,7 +1283,7 @@ write_udt_src_line (struct pdb_udt_src_line *t)
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UDT_SRC_LINE);
   fprintf (asm_out_file, "\t.short\t0x%x\n", t->type);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
-  fprintf (asm_out_file, "\t.short\t0x%x\n", t->source_file);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->source_file ? t->source_file->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.long\t0x%x\n", t->line);
 }
@@ -1404,30 +1404,6 @@ write_pdb_type_section (void)
       free (aliases);
 
       aliases = n;
-    }
-}
-
-static void
-mark_type_used (uint16_t id, bool * changed)
-{
-  struct pdb_type *t = types;
-
-  while (t)
-    {
-      if (t->id == id)
-	{
-	  if (!t->used)
-	    {
-	      t->used = true;
-
-	      if (changed)
-		*changed = true;
-	    }
-
-	  return;
-	}
-
-      t = t->next;
     }
 }
 
@@ -1661,9 +1637,8 @@ mark_referenced_types_used (void)
 
 	if (t->used)
 	  {
-	    if (pusl->source_file >= FIRST_TYPE_NUM
-		&& pusl->source_file < type_num)
-	      mark_type_used (pusl->source_file, NULL);
+	    if (pusl->source_file)
+	      pusl->source_file->used = true;
 	  }
 
       t = t->next2;
@@ -1727,11 +1702,6 @@ renumber_types (void)
 
 	    if (pusl->type >= FIRST_TYPE_NUM && pusl->type < type_num)
 	      pusl->type = type_list[pusl->type - FIRST_TYPE_NUM];
-
-	    if (pusl->source_file >= FIRST_TYPE_NUM
-		&& pusl->source_file < type_num)
-	      pusl->source_file =
-		type_list[pusl->source_file - FIRST_TYPE_NUM];
 
 	    break;
 	  }
@@ -3771,7 +3741,7 @@ find_type (tree t, struct pdb_type **typeptr)
 
 /* Add a string as a type. This is only used by add_udt_src_line_type,
  * which uses it to deduplicate source filenames. */
-static uint16_t
+static struct pdb_type *
 add_string_type (const char *s)
 {
   struct pdb_type *type, *t, *last_string = NULL;
@@ -3780,7 +3750,7 @@ add_string_type (const char *s)
   t = string_types;
   while (t) {
     if (!strcmp(s, (char*)t->data))
-      return t->id;
+      return t;
 
     last_string = t;
     t = t->next2;
@@ -3810,7 +3780,7 @@ add_string_type (const char *s)
 
   last_type = type;
 
-  return type->id;
+  return type;
 }
 
 /* Add a pdb_udt_src_line fake type to the type list, which records the file
@@ -3818,7 +3788,7 @@ add_string_type (const char *s)
  * The linker will transform this into a LF_UDT_MOD_SRC_LINE, which also
  * records the object file. */
 static uint16_t
-add_udt_src_line_type (uint16_t type_id, uint16_t source_file, uint32_t line)
+add_udt_src_line_type (uint16_t type_id, struct pdb_type *source_file, uint32_t line)
 {
   struct pdb_type *type, *t, *last_entry = NULL;
   struct pdb_udt_src_line *pusl;
@@ -3869,8 +3839,8 @@ add_udt_src_line_type (uint16_t type_id, uint16_t source_file, uint32_t line)
 static void
 pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 {
-  uint16_t type_id, string_type;
-  struct pdb_type *type;
+  uint16_t type_id;
+  struct pdb_type *string_type, *type;
   struct pdb_source_file *psf;
   expanded_location xloc;
 
@@ -4006,7 +3976,7 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
       return;
     }
 
-  string_type = 0;
+  string_type = NULL;
 
   // add filename as LF_STRING_ID, so linker puts it into string table
 
