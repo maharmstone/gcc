@@ -508,7 +508,7 @@ pdbout_proc32 (struct pdb_func *func)
 	   func->num, func->num);	// len
   fprintf (asm_out_file, "\t.long\t0\n");	// DbgStart
   fprintf (asm_out_file, "\t.long\t0\n");	// DbgEnd
-  fprintf (asm_out_file, "\t.short\t0x%x\n", func->type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", func->type ? func->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n",
 	   func->num);	// off
@@ -1673,9 +1673,6 @@ renumber_types (void)
     {
       struct pdb_local_var *plv;
 
-      if (func->type >= FIRST_TYPE_NUM && func->type < type_num)
-	func->type = type_list[func->type - FIRST_TYPE_NUM];
-
       plv = func->local_vars;
       while (plv)
 	{
@@ -1711,20 +1708,22 @@ pdbout_begin_function (tree func)
 {
   expanded_location xloc;
   struct pdb_source_file *psf;
-  struct pdb_type *func_type;
   struct pdb_func *f = (struct pdb_func *) xmalloc (sizeof (struct pdb_func));
 
   f->next = funcs;
   f->name = xstrdup (IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (func)));
   f->num = current_function_funcdef_no;
   f->public_flag = TREE_PUBLIC (func);
-  f->type = find_type (TREE_TYPE (func), &func_type);
+
+  f->type = NULL;
+  find_type (TREE_TYPE (func), &f->type);
+
   f->lines = f->last_line = NULL;
   f->local_vars = f->last_local_var = NULL;
   f->var_locs = f->last_var_loc = NULL;
 
-  if (func_type)
-    func_type->used = true;
+  if (f->type)
+    f->type->used = true;
 
   f->block.next = NULL;
   f->block.parent = NULL;

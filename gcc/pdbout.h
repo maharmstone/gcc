@@ -127,7 +127,7 @@ struct pdb_func
   char *name;
   int num;
   unsigned int public_flag;
-  uint16_t type;
+  struct pdb_type *type;
   unsigned int source_file;
   struct pdb_line *lines, *last_line;
   struct pdb_local_var *local_vars, *last_local_var;
