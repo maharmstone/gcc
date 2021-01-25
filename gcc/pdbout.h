@@ -274,7 +274,7 @@ struct pdb_proc
 
 struct pdb_udt_src_line
 {
-  uint16_t type;
+  struct pdb_type *type;
   struct pdb_type *source_file;
   uint32_t line;
 };

@@ -1281,7 +1281,7 @@ write_udt_src_line (struct pdb_udt_src_line *t)
 {
   fprintf (asm_out_file, "\t.short\t0xe\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UDT_SRC_LINE);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", t->type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->type ? t->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.short\t0x%x\n", t->source_file ? t->source_file->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
@@ -1405,22 +1405,6 @@ write_pdb_type_section (void)
 
       aliases = n;
     }
-}
-
-static bool
-is_type_used (uint16_t id)
-{
-  struct pdb_type *t = types;
-
-  while (t)
-    {
-      if (t->id == id)
-	return t->used;
-
-      t = t->next;
-    }
-
-  return false;
 }
 
 /* Loop through our list of types. If a type is marked as used but a type
@@ -1633,7 +1617,7 @@ mark_referenced_types_used (void)
     {
 	struct pdb_udt_src_line *pusl = (struct pdb_udt_src_line *) t->data;
 
-	t->used = is_type_used (pusl->type);
+	t->used = pusl->type ? pusl->type->used : false;
 
 	if (t->used)
 	  {
@@ -1680,34 +1664,6 @@ renumber_types (void)
 
       t = t->next;
       tlptr++;
-    }
-
-  // change referenced types
-
-  t = types;
-  while (t)
-    {
-      if (!t->used)
-	{
-	  t = t->next;
-	  continue;
-	}
-
-      switch (t->cv_type)
-	{
-	case LF_UDT_SRC_LINE:
-	  {
-	    struct pdb_udt_src_line *pusl =
-	      (struct pdb_udt_src_line *) t->data;
-
-	    if (pusl->type >= FIRST_TYPE_NUM && pusl->type < type_num)
-	      pusl->type = type_list[pusl->type - FIRST_TYPE_NUM];
-
-	    break;
-	  }
-	}
-
-      t = t->next;
     }
 
   // change global variables
@@ -3788,7 +3744,7 @@ add_string_type (const char *s)
  * The linker will transform this into a LF_UDT_MOD_SRC_LINE, which also
  * records the object file. */
 static uint16_t
-add_udt_src_line_type (uint16_t type_id, struct pdb_type *source_file, uint32_t line)
+add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, uint32_t line)
 {
   struct pdb_type *type, *t, *last_entry = NULL;
   struct pdb_udt_src_line *pusl;
@@ -3797,7 +3753,7 @@ add_udt_src_line_type (uint16_t type_id, struct pdb_type *source_file, uint32_t 
   while (t) {
     pusl = (struct pdb_udt_src_line *) t->data;
 
-    if (pusl->type == type_id && pusl->source_file == source_file && pusl->line == line)
+    if (pusl->type == ref_type && pusl->source_file == source_file && pusl->line == line)
       return t->id;
 
     last_entry = t;
@@ -3813,7 +3769,7 @@ add_udt_src_line_type (uint16_t type_id, struct pdb_type *source_file, uint32_t 
   type->used = false;
 
   pusl = (struct pdb_udt_src_line *) type->data;
-  pusl->type = type_id;
+  pusl->type = ref_type;
   pusl->source_file = source_file;
   pusl->line = line;
 
@@ -3907,7 +3863,7 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
   if (type_id == 0 || type_id < FIRST_TYPE_NUM)
     return;
 
-  if (type && DECL_NAME (t) && IDENTIFIER_POINTER (DECL_NAME (t))
+  if (DECL_NAME (t) && IDENTIFIER_POINTER (DECL_NAME (t))
       && IDENTIFIER_POINTER (DECL_NAME (t))[0] != '.')
     {
       // give name if previously anonymous
@@ -3995,7 +3951,7 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
   // add LF_UDT_SRC_LINE entry, which linker transforms
   // into LF_UDT_MOD_SRC_LINE
 
-  add_udt_src_line_type (type_id, string_type, xloc.line);
+  add_udt_src_line_type (type, string_type, xloc.line);
 }
 
 #ifndef _WIN32
