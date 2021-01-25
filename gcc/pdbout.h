@@ -366,7 +366,7 @@ struct pdb_source_file
 
 struct pdb_modifier
 {
-  uint16_t type;
+  struct pdb_type *type;
   uint16_t modifier;
 };
 

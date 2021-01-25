@@ -1295,7 +1295,7 @@ write_modifier (struct pdb_modifier *t)
 {
   fprintf (asm_out_file, "\t.short\t0xa\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_MODIFIER);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", t->type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->type ? t->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.short\t0x%x\n", t->modifier);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
@@ -1474,8 +1474,11 @@ mark_referenced_types_used (void)
 	      {
 		struct pdb_modifier *mod = (struct pdb_modifier *) t->data;
 
-		if (mod->type >= FIRST_TYPE_NUM && mod->type < type_num)
-		  mark_type_used (mod->type, &changed);
+		if (mod->type && !mod->type->used)
+		  {
+		    mod->type->used = true;
+		    changed = true;
+		  }
 
 		break;
 	      }
@@ -1714,16 +1717,6 @@ renumber_types (void)
 
       switch (t->cv_type)
 	{
-	case LF_MODIFIER:
-	  {
-	    struct pdb_modifier *mod = (struct pdb_modifier *) t->data;
-
-	    if (mod->type >= FIRST_TYPE_NUM && mod->type < type_num)
-	      mod->type = type_list[mod->type - FIRST_TYPE_NUM];
-
-	    break;
-	  }
-
 	case LF_POINTER:
 	  {
 	    struct pdb_pointer *ptr = (struct pdb_pointer *) t->data;
@@ -3335,11 +3328,12 @@ find_type_function (tree t, struct pdb_type **typeptr)
 static uint16_t
 find_type_modifier (tree t, struct pdb_type **typeptr)
 {
-  struct pdb_type *type, *last_entry = NULL;
+  struct pdb_type *type, *last_entry = NULL, *base_type = NULL;
   struct pdb_modifier *mod;
-  uint16_t base_type = find_type (TYPE_MAIN_VARIANT (t), NULL);
   uint16_t modifier = 0;
   struct pdb_type **slot;
+
+  find_type (TYPE_MAIN_VARIANT (t), &base_type);
 
   if (TYPE_READONLY (t))
     modifier |= CV_MODIFIER_CONST;
