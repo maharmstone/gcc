@@ -102,6 +102,7 @@ static struct pdb_type *byte_type, *signed_byte_type, *wchar_type, *char16_type,
 		       *char32_type, *uint32_type, *int32_type, *uint64_type, *int64_type, *uint128_type,
 		       *int128_type, *long_type;
 static struct pdb_type *float16_type, *float32_type, *float48_type, *float64_type, *float80_type, *float128_type;
+static struct pdb_type *bool8_type, *bool16_type, *bool32_type, *bool64_type, *bool128_type;
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -3609,23 +3610,37 @@ find_type (tree t, struct pdb_type **typeptr)
     case BOOLEAN_TYPE:
       {
 	unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0);
+	struct pdb_type *bool_type = NULL;
 
 	switch (size)
 	  {
 	  case 8:
-	    return CV_BUILTIN_TYPE_BOOLEAN8;
+	    bool_type = bool8_type;
+	    break;
 
 	  case 16:
-	    return CV_BUILTIN_TYPE_BOOLEAN16;
+	    bool_type = bool16_type;
+	    break;
 
 	  case 32:
-	    return CV_BUILTIN_TYPE_BOOLEAN32;
+	    bool_type = bool32_type;
+	    break;
 
 	  case 64:
-	    return CV_BUILTIN_TYPE_BOOLEAN64;
+	    bool_type = bool64_type;
+	    break;
 
 	  case 128:
-	    return CV_BUILTIN_TYPE_BOOLEAN128;
+	    bool_type = bool128_type;
+	    break;
+	  }
+
+	if (bool_type)
+	  {
+	    if (typeptr)
+	      *typeptr = bool_type;
+
+	    return bool_type->id;
 	  }
 
 	return 0;
@@ -4155,6 +4170,12 @@ add_inbuilt_types (void)
   float64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT64);
   float80_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT80);
   float128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT128);
+
+  bool8_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN8);
+  bool16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN16);
+  bool32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN32);
+  bool64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN64);
+  bool128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN128);
 }
 
 /* Start of compilation - add the main source file to the list. */
