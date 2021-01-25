@@ -260,7 +260,7 @@ struct pdb_array
 struct pdb_arglist
 {
   unsigned int count;
-  uint16_t args[1];
+  struct pdb_type *args[1];
 };
 
 struct pdb_proc

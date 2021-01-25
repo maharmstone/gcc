@@ -1214,7 +1214,7 @@ write_arglist (struct pdb_arglist *arglist)
 
   for (unsigned int i = 0; i < arglist->count; i++)
     {
-      fprintf (asm_out_file, "\t.short\t0x%x\n", arglist->args[i]);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", arglist->args[i] ? arglist->args[i]->id : 0);
       fprintf (asm_out_file, "\t.short\t0\n");	// padding
     }
 
@@ -1515,9 +1515,11 @@ mark_referenced_types_used (void)
 
 		for (unsigned int i = 0; i < al->count; i++)
 		  {
-		    if (al->args[i] >= FIRST_TYPE_NUM
-			&& al->args[i] < type_num)
-		      mark_type_used (al->args[i], &changed);
+		    if (al->args[i] && !al->args[i]->used)
+		      {
+			al->args[i]->used = true;
+			changed = true;
+		      }
 		  }
 
 		break;
@@ -1728,19 +1730,6 @@ renumber_types (void)
 
 	    if (ptr->type >= FIRST_TYPE_NUM && ptr->type < type_num)
 	      ptr->type = type_list[ptr->type - FIRST_TYPE_NUM];
-
-	    break;
-	  }
-
-	case LF_ARGLIST:
-	  {
-	    struct pdb_arglist *al = (struct pdb_arglist *) t->data;
-
-	    for (unsigned int i = 0; i < al->count; i++)
-	      {
-		if (al->args[i] >= FIRST_TYPE_NUM && al->args[i] < type_num)
-		  al->args[i] = type_list[al->args[i] - FIRST_TYPE_NUM];
-	      }
 
 	    break;
 	  }
@@ -3209,7 +3198,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
   struct pdb_proc *proc;
   tree arg;
   unsigned int num_args = 0;
-  uint16_t *argptr;
+  struct pdb_type **argptr;
   struct pdb_type *return_type = NULL;
   uint8_t calling_convention;
   struct pdb_type **slot;
@@ -3228,7 +3217,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
   arglisttype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
 				 offsetof (struct pdb_arglist, args) +
-				 (num_args * sizeof (uint16_t)));
+				 (num_args * sizeof (struct pdb_type *)));
   arglisttype->cv_type = LF_ARGLIST;
   arglisttype->tree = NULL;
 
@@ -3241,7 +3230,9 @@ find_type_function (tree t, struct pdb_type **typeptr)
     {
       if (TREE_CODE (TREE_VALUE (arg)) != VOID_TYPE)
 	{
-	  *argptr = find_type (TREE_VALUE (arg), NULL);
+	  *argptr = NULL;
+
+	  find_type (TREE_VALUE (arg), argptr);
 	  argptr++;
 	}
 
