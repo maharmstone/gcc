@@ -3494,14 +3494,10 @@ find_type (tree t)
 
   if (TYPE_MAIN_VARIANT (t) != t)
     {
-      type = types;
-      while (type)
-	{
-	  if (type->tree == TYPE_MAIN_VARIANT (t))
-	    return type;
+      type = tree_hash_table.find_with_hash(TYPE_MAIN_VARIANT (t), pdb_type_tree_hasher::hash(TYPE_MAIN_VARIANT (t)));
 
-	  type = type->next;
-	}
+      if (type)
+	return type;
     }
 
   switch (TREE_CODE (t))
