@@ -253,7 +253,7 @@ struct pdb_pointer
 struct pdb_array
 {
   uint16_t type;
-  uint16_t index_type;
+  struct pdb_type *index_type;
   uint64_t length;
 };
 

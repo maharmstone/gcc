@@ -100,7 +100,7 @@ static unsigned int var_loc_number = 1;
 static hash_table<pdb_type_tree_hasher> tree_hash_table(31);
 static struct pdb_type *byte_type, *signed_byte_type, *wchar_type, *char16_type, *uint16_type, *int16_type,
 		       *char32_type, *uint32_type, *int32_type, *uint64_type, *int64_type, *uint128_type,
-		       *int128_type;
+		       *int128_type, *long_type;
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -1153,7 +1153,7 @@ write_array (struct pdb_array *arr)
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", arr->type);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
-  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->index_type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->index_type ? arr->index_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 
   if (arr->length >= 0x8000)
@@ -1545,9 +1545,11 @@ mark_referenced_types_used (void)
 		if (arr->type >= FIRST_TYPE_NUM && arr->type < type_num)
 		  mark_type_used (arr->type, &changed);
 
-		if (arr->index_type >= FIRST_TYPE_NUM
-		    && arr->index_type < type_num)
-		  mark_type_used (arr->index_type, &changed);
+		if (arr->index_type && !arr->index_type->used)
+		  {
+		    arr->index_type->used = true;
+		    changed = true;
+		  }
 
 		break;
 	      }
@@ -1774,10 +1776,6 @@ renumber_types (void)
 
 	    if (arr->type >= FIRST_TYPE_NUM && arr->type < type_num)
 	      arr->type = type_list[arr->type - FIRST_TYPE_NUM];
-
-	    if (arr->index_type >= FIRST_TYPE_NUM
-		&& arr->index_type < type_num)
-	      arr->index_type = type_list[arr->index_type - FIRST_TYPE_NUM];
 
 	    break;
 	  }
@@ -3147,7 +3145,7 @@ find_type_array (tree t, struct pdb_type **typeptr)
 
   arr = (struct pdb_array *) arrtype->data;
   arr->type = type;
-  arr->index_type = CV_BUILTIN_TYPE_UINT32LONG;
+  arr->index_type = long_type;
   arr->length = length;
 
   if (last_entry)
@@ -4117,7 +4115,7 @@ add_inbuilt_types (void)
   add_inbuilt_type(short_integer_type_node, CV_BUILTIN_TYPE_INT16SHORT);
   add_inbuilt_type(short_unsigned_type_node, CV_BUILTIN_TYPE_UINT16SHORT);
   add_inbuilt_type(long_integer_type_node, CV_BUILTIN_TYPE_INT32LONG);
-  add_inbuilt_type(long_unsigned_type_node, CV_BUILTIN_TYPE_UINT32LONG);
+  long_type = add_inbuilt_type(long_unsigned_type_node, CV_BUILTIN_TYPE_UINT32LONG);
   add_inbuilt_type(long_long_integer_type_node, CV_BUILTIN_TYPE_INT64QUAD);
   add_inbuilt_type(long_long_unsigned_type_node, CV_BUILTIN_TYPE_UINT64QUAD);
 
