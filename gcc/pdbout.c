@@ -1339,6 +1339,9 @@ write_type (struct pdb_type *t)
       break;
 
     case LF_POINTER:
+      if (t->id < FIRST_TYPE_NUM) // pointer to builtin
+	return;
+
       write_pointer ((struct pdb_pointer *) t->data);
       break;
 
@@ -1628,12 +1631,77 @@ mark_referenced_types_used (void)
     }
 }
 
+static void
+number_types (void)
+{
+  struct pdb_type *t;
+  uint16_t type_num = FIRST_TYPE_NUM, id_num = FIRST_TYPE_NUM;
+
+  t = types;
+  while (t)
+  {
+    if (!t->used || t->id != 0)
+    {
+      t = t->next;
+      continue;
+    }
+
+    switch (t->cv_type)
+    {
+      case LF_STRING_ID:
+      case LF_UDT_SRC_LINE:
+	t->id = id_num;
+	id_num++;
+
+	if (id_num == 0) // overflow
+	{
+	  fprintf(stderr, "too many CodeView IDs\n");
+	  xexit(1);
+	}
+      break;
+
+      case LF_POINTER: {
+	struct pdb_pointer *ptr = (struct pdb_pointer *)t->data;
+
+	if (ptr->type && ptr->type->id != 0 && ptr->type->id < 0x100)
+	  {	// pointers to builtins have their own constants
+	    if (ptr->attr.s.ptrtype == CV_PTR_NEAR32)
+	      {
+		t->id = (CV_TM_NPTR32 << 8) | ptr->type->id;
+		break;
+	      }
+	    else if (ptr->attr.s.ptrtype == CV_PTR_64)
+	      {
+		t->id = (CV_TM_NPTR64 << 8) | ptr->type->id;
+		break;
+	      }
+	  }
+	[[fallthrough]];
+      }
+
+      default:
+	t->id = type_num;
+	type_num++;
+
+	if (type_num == 0) // overflow
+	  {
+	    fprintf(stderr, "too many CodeView types\n");
+	    xexit(1);
+	  }
+    }
+
+    t = t->next;
+  }
+}
+
 /* We've finished compilation - output the .debug$S and .debug$T sections
  * to the ASM file. */
 static void
 pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 {
   mark_referenced_types_used ();
+
+  number_types ();
 
   write_pdb_section ();
   write_pdb_type_section ();
