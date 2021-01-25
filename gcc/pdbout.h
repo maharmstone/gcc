@@ -210,7 +210,7 @@ struct pdb_struct
 struct pdb_enum
 {
   unsigned int count;
-  uint16_t type;
+  struct pdb_type *type;
   struct pdb_type *field_type;
   char *name;
 };

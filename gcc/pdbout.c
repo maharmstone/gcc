@@ -1092,7 +1092,7 @@ write_enum (struct pdb_enum *en)
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ENUM);
   fprintf (asm_out_file, "\t.short\t0x%x\n", en->count);
   fprintf (asm_out_file, "\t.short\t0\n");	// property
-  fprintf (asm_out_file, "\t.short\t0x%x\n", en->type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", en->type ? en->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.short\t0x%x\n", en->field_type ? en->field_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
@@ -1601,8 +1601,11 @@ mark_referenced_types_used (void)
 	      {
 		struct pdb_enum *en = (struct pdb_enum *) t->data;
 
-		if (en->type >= FIRST_TYPE_NUM && en->type < type_num)
-		  mark_type_used (en->type, &changed);
+		if (en->type && !en->type->used)
+		  {
+		    en->type->used = true;
+		    changed = true;
+		  }
 
 		if (en->field_type && !en->field_type->used)
 		  {
@@ -1775,16 +1778,6 @@ renumber_types (void)
 	    if (arr->index_type >= FIRST_TYPE_NUM
 		&& arr->index_type < type_num)
 	      arr->index_type = type_list[arr->index_type - FIRST_TYPE_NUM];
-
-	    break;
-	  }
-
-	case LF_ENUM:
-	  {
-	    struct pdb_enum *en = (struct pdb_enum *) t->data;
-
-	    if (en->type >= FIRST_TYPE_NUM && en->type < type_num)
-	      en->type = type_list[en->type - FIRST_TYPE_NUM];
 
 	    break;
 	  }
@@ -2886,7 +2879,7 @@ find_type_enum (tree t, struct pdb_type **typeptr)
   struct pdb_fieldlist_entry *ent;
   struct pdb_enum *en;
   unsigned int num_entries, size;
-  uint16_t en_type;
+  struct pdb_type *en_type;
   char *name;
   struct pdb_type **slot;
 
@@ -2942,19 +2935,15 @@ find_type_enum (tree t, struct pdb_type **typeptr)
   size = TYPE_SIZE (t) ? TREE_INT_CST_ELT (TYPE_SIZE (t), 0) : 0;
 
   if (size == 8)
-    en_type =
-      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_BYTE : CV_BUILTIN_TYPE_SBYTE;
+    en_type = TYPE_UNSIGNED (t) ? byte_type : signed_byte_type;
   else if (size == 16)
-    en_type =
-      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT16 : CV_BUILTIN_TYPE_INT16;
+    en_type = TYPE_UNSIGNED (t) ? uint16_type : int16_type;
   else if (size == 32)
-    en_type =
-      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT32 : CV_BUILTIN_TYPE_INT32;
+    en_type = TYPE_UNSIGNED (t) ? uint32_type : int32_type;
   else if (size == 64)
-    en_type =
-      TYPE_UNSIGNED (t) ? CV_BUILTIN_TYPE_UINT64 : CV_BUILTIN_TYPE_INT64;
+    en_type = TYPE_UNSIGNED (t) ? uint64_type : int64_type;
   else
-    en_type = 0;
+    en_type = NULL;
 
   if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == IDENTIFIER_NODE)
     name = xstrdup (IDENTIFIER_POINTER (TYPE_NAME (t)));
