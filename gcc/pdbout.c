@@ -2767,6 +2767,7 @@ find_type_enum (tree t, struct pdb_type **typeptr)
     {
       ent->cv_type = LF_ENUMERATE;
       ent->fld_attr = 0;
+      ent->type = NULL;
 
       if (TREE_CODE (TREE_VALUE (v)) == CONST_DECL)
 	ent->value = TREE_INT_CST_ELT (DECL_INITIAL (TREE_VALUE (v)), 0);
