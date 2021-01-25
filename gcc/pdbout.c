@@ -105,6 +105,7 @@ static struct pdb_type *float16_type, *float32_type, *float48_type, *float64_typ
 static struct pdb_type *bool8_type, *bool16_type, *bool32_type, *bool64_type, *bool128_type;
 static struct pdb_type *complex16_type, *complex32_type, *complex48_type, *complex64_type, *complex80_type,
 		       *complex128_type;
+static struct pdb_type *void_type, *nullptr_type;
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -3683,10 +3684,16 @@ find_type (tree t, struct pdb_type **typeptr)
       }
 
     case VOID_TYPE:
-      return CV_BUILTIN_TYPE_VOID;
+      if (typeptr)
+	*typeptr = void_type;
+
+      return void_type->id;
 
     case NULLPTR_TYPE:
-      return (CV_TM_NPTR << 8) | CV_BUILTIN_TYPE_VOID;
+      if (typeptr)
+	*typeptr = nullptr_type;
+
+      return nullptr_type->id;
 
     default:
       break;
@@ -4191,6 +4198,9 @@ add_inbuilt_types (void)
   complex64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX64);
   complex80_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX80);
   complex128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX128);
+
+  void_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_VOID);
+  nullptr_type = add_inbuilt_type(NULL, (CV_TM_NPTR << 8) | CV_BUILTIN_TYPE_VOID);
 }
 
 /* Start of compilation - add the main source file to the list. */
