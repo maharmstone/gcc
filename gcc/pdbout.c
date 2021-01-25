@@ -3518,25 +3518,6 @@ find_type (tree t, struct pdb_type **typeptr)
       {
 	unsigned int size;
 
-	if (t == char_type_node)
-	  return CV_BUILTIN_TYPE_NARROW_CHARACTER;
-	else if (t == signed_char_type_node)
-	  return CV_BUILTIN_TYPE_SIGNED_CHARACTER;
-	else if (t == unsigned_char_type_node)
-	  return CV_BUILTIN_TYPE_UNSIGNED_CHARACTER;
-	else if (t == short_integer_type_node)
-	  return CV_BUILTIN_TYPE_INT16SHORT;
-	else if (t == short_unsigned_type_node)
-	  return CV_BUILTIN_TYPE_UINT16SHORT;
-	else if (t == long_integer_type_node)
-	  return CV_BUILTIN_TYPE_INT32LONG;
-	else if (t == long_unsigned_type_node)
-	  return CV_BUILTIN_TYPE_UINT32LONG;
-	else if (t == long_long_integer_type_node)
-	  return CV_BUILTIN_TYPE_INT64QUAD;
-	else if (t == long_long_unsigned_type_node)
-	  return CV_BUILTIN_TYPE_UINT64QUAD;
-
 	size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0);
 
 	switch (size)
@@ -4098,11 +4079,55 @@ pdbout_start_source_file (unsigned int line ATTRIBUTE_UNUSED,
   add_source_file (file);
 }
 
+static struct pdb_type *
+add_inbuilt_type (tree t, uint16_t id)
+{
+  struct pdb_type *type, **slot;
+
+  type = (struct pdb_type *)xmalloc (offsetof (struct pdb_type, data));
+  type->cv_type = 0;
+  type->tree = t;
+  type->next = type->next2 = NULL;
+  type->id = id;
+  type->used = false;
+
+  if (last_type)
+    last_type->next = type;
+  else
+    types = type;
+
+  last_type = type;
+
+  if (t)
+    {
+      slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+      *slot = type;
+    }
+
+  return type;
+}
+
+static void
+add_inbuilt_types (void)
+{
+  add_inbuilt_type(char_type_node, CV_BUILTIN_TYPE_NARROW_CHARACTER);
+  add_inbuilt_type(signed_char_type_node, CV_BUILTIN_TYPE_SIGNED_CHARACTER);
+  add_inbuilt_type(unsigned_char_type_node, CV_BUILTIN_TYPE_UNSIGNED_CHARACTER);
+  add_inbuilt_type(short_integer_type_node, CV_BUILTIN_TYPE_INT16SHORT);
+  add_inbuilt_type(short_unsigned_type_node, CV_BUILTIN_TYPE_UINT16SHORT);
+  add_inbuilt_type(long_integer_type_node, CV_BUILTIN_TYPE_INT32LONG);
+  add_inbuilt_type(long_unsigned_type_node, CV_BUILTIN_TYPE_UINT32LONG);
+  add_inbuilt_type(long_long_integer_type_node, CV_BUILTIN_TYPE_INT64QUAD);
+  add_inbuilt_type(long_long_unsigned_type_node, CV_BUILTIN_TYPE_UINT64QUAD);
+}
+
 /* Start of compilation - add the main source file to the list. */
 static void
 pdbout_init (const char *file)
 {
   add_source_file (file);
+
+  add_inbuilt_types ();
 }
 
 /* We've encountered a new line of source code. Add an ASM label for this,
