@@ -1557,7 +1557,7 @@ mark_referenced_types_used (void)
 		// to actual types
 		if (str->property.s.fwdref && str->name)
 		  {
-		    struct pdb_type *t2 = types;
+		    struct pdb_type *t2 = struct_types;
 
 		    while (t2)
 		      {
@@ -1579,7 +1579,7 @@ mark_referenced_types_used (void)
 			      }
 			  }
 
-			t2 = t2->next;
+			t2 = t2->next2;
 		      }
 		  }
 
