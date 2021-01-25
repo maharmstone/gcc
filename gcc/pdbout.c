@@ -1237,7 +1237,7 @@ write_procedure (struct pdb_proc *proc)
   fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->calling_convention);
   fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->attributes);
   fprintf (asm_out_file, "\t.short\t0x%x\n", proc->num_args);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->arg_list);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->arg_list ? proc->arg_list->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 }
 
@@ -1493,9 +1493,11 @@ mark_referenced_types_used (void)
 	      {
 		struct pdb_proc *proc = (struct pdb_proc *) t->data;
 
-		if (proc->arg_list >= FIRST_TYPE_NUM
-		    && proc->arg_list < type_num)
-		  mark_type_used (proc->arg_list, &changed);
+		if (proc->arg_list && !proc->arg_list->used)
+		  {
+		    proc->arg_list->used = true;
+		    changed = true;
+		  }
 
 		if (proc->return_type && !proc->return_type->used)
 		  {
@@ -1720,16 +1722,6 @@ renumber_types (void)
 
 	    if (ptr->type >= FIRST_TYPE_NUM && ptr->type < type_num)
 	      ptr->type = type_list[ptr->type - FIRST_TYPE_NUM];
-
-	    break;
-	  }
-
-	case LF_PROCEDURE:
-	  {
-	    struct pdb_proc *proc = (struct pdb_proc *) t->data;
-
-	    if (proc->arg_list >= FIRST_TYPE_NUM && proc->arg_list < type_num)
-	      proc->arg_list = type_list[proc->arg_list - FIRST_TYPE_NUM];
 
 	    break;
 	  }
@@ -3162,7 +3154,7 @@ find_type_array (tree t, struct pdb_type **typeptr)
   return arrtype->id;
 }
 
-static uint16_t
+static pdb_type *
 add_arglist_type (struct pdb_type *t)
 {
   struct pdb_type *t2 = arglist_types;
@@ -3193,7 +3185,7 @@ add_arglist_type (struct pdb_type *t)
 	    {
 	      free (t);
 
-	      return t2->id;
+	      return t2;
 	    }
 	}
 
@@ -3222,7 +3214,7 @@ add_arglist_type (struct pdb_type *t)
   else
     arglist_types = t;
 
-  return t->id;
+  return t;
 }
 
 /* Given a function type t, allocate a new pdb_type and add it to the
@@ -3236,7 +3228,6 @@ find_type_function (tree t, struct pdb_type **typeptr)
   tree arg;
   unsigned int num_args = 0;
   uint16_t *argptr;
-  uint16_t arglisttypenum;
   struct pdb_type *return_type = NULL;
   uint8_t calling_convention;
   struct pdb_type **slot;
@@ -3275,7 +3266,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
       arg = TREE_CHAIN (arg);
     }
 
-  arglisttypenum = add_arglist_type (arglisttype);
+  arglisttype = add_arglist_type (arglisttype);
 
   // create procedure
 
@@ -3314,7 +3305,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
       proc = (struct pdb_proc *) proctype->data;
 
       if (proc->return_type == return_type && proc->calling_convention == calling_convention &&
-	  proc->num_args == num_args && proc->arg_list == arglisttypenum)
+	  proc->num_args == num_args && proc->arg_list == arglisttype)
 	{
 	  if (typeptr)
 	    *typeptr = proctype;
@@ -3342,7 +3333,7 @@ find_type_function (tree t, struct pdb_type **typeptr)
   proc->return_type = return_type;
   proc->attributes = 0;
   proc->num_args = num_args;
-  proc->arg_list = arglisttypenum;
+  proc->arg_list = arglisttype;
   proc->calling_convention = calling_convention;
 
   if (last_entry)

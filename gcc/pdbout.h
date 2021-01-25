@@ -269,7 +269,7 @@ struct pdb_proc
   uint8_t calling_convention;
   uint8_t attributes;
   uint16_t num_args;
-  uint16_t arg_list;
+  struct pdb_type *arg_list;
 };
 
 struct pdb_udt_src_line
