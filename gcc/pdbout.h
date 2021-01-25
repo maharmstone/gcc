@@ -201,7 +201,6 @@ union pdb_property
 struct pdb_struct
 {
   unsigned int count;
-  uint16_t field;
   struct pdb_type *field_type;
   uint16_t size;
   union pdb_property property;

@@ -1011,7 +1011,7 @@ write_struct (uint16_t type, struct pdb_struct *str)
   fprintf (asm_out_file, "\t.short\t0x%x\n", type);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->property.value);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", str->field);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->field_type ? str->field_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// derived
   fprintf (asm_out_file, "\t.short\t0\n");	// vshape
   fprintf (asm_out_file, "\t.short\t0\n");
@@ -1052,7 +1052,7 @@ write_union (struct pdb_struct *str)
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UNION);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->property.value);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", str->field);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->field_type ? str->field_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->size);
 
@@ -1555,8 +1555,11 @@ mark_referenced_types_used (void)
 	      {
 		struct pdb_struct *str = (struct pdb_struct *) t->data;
 
-		if (str->field >= FIRST_TYPE_NUM && str->field < type_num)
-		  mark_type_used (str->field, &changed);
+		if (str->field_type && !str->field_type->used)
+		  {
+		    str->field_type->used = true;
+		    changed = true;
+		  }
 
 		// forward declarations should propagate usedness
 		// to actual types
@@ -1766,18 +1769,6 @@ renumber_types (void)
 	    if (arr->index_type >= FIRST_TYPE_NUM
 		&& arr->index_type < type_num)
 	      arr->index_type = type_list[arr->index_type - FIRST_TYPE_NUM];
-
-	    break;
-	  }
-
-	case LF_CLASS:
-	case LF_STRUCTURE:
-	case LF_UNION:
-	  {
-	    struct pdb_struct *str = (struct pdb_struct *) t->data;
-
-	    if (str->field >= FIRST_TYPE_NUM && str->field < type_num)
-	      str->field = type_list[str->field - FIRST_TYPE_NUM];
 
 	    break;
 	  }
@@ -2057,7 +2048,6 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
 
   str = (struct pdb_struct *) strtype->data;
   str->count = 0;
-  str->field = 0;
   str->field_type = NULL;
   str->size = 0;
   str->property.value = 0;
@@ -2635,7 +2625,6 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
   struct pdb_fieldlist_entry *ent;
   struct pdb_struct *str;
   unsigned int num_entries = 0;
-  uint16_t fltypenum = 0;
   bool fwddef_tree_set = false;
   char *name = get_struct_name (t);
   uint16_t size = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
@@ -2792,7 +2781,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 	  f = TREE_CHAIN (f);
 	}
 
-      fltypenum = add_type_fieldlist (fltype, &fltype);
+      add_type_fieldlist (fltype, &fltype);
     }
 
   // add type for struct
@@ -2808,7 +2797,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
       str = (struct pdb_struct *)strtype->data;
 
       if (str->count == num_entries &&
-	  str->field == fltypenum &&
+	  str->field_type == fltype &&
 	  str->size == size &&
 	  str->property.value == prop.value &&
 	  ((!str->name && !name)
@@ -2853,7 +2842,6 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
   str = (struct pdb_struct *) strtype->data;
   str->count = num_entries;
   str->field_type = fltype;
-  str->field = fltypenum;
   str->size = size;
   str->property.value = prop.value;
   str->name = name;
