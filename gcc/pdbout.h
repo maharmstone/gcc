@@ -372,7 +372,7 @@ struct pdb_modifier
 
 struct pdb_bitfield
 {
-  uint16_t underlying_type;
+  struct pdb_type *underlying_type;
   unsigned int size;
   unsigned int offset;
 };

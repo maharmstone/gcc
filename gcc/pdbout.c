@@ -1305,7 +1305,7 @@ write_bitfield (struct pdb_bitfield *t)
 {
   fprintf (asm_out_file, "\t.short\t0xa\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_BITFIELD);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", t->underlying_type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->underlying_type ? t->underlying_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.byte\t0x%x\n", t->size);
   fprintf (asm_out_file, "\t.byte\t0x%x\n", t->offset);
@@ -1535,9 +1535,11 @@ mark_referenced_types_used (void)
 	      {
 		struct pdb_bitfield *bf = (struct pdb_bitfield *) t->data;
 
-		if (bf->underlying_type >= FIRST_TYPE_NUM
-		    && bf->underlying_type < type_num)
-		  mark_type_used (bf->underlying_type, &changed);
+		if (bf->underlying_type && !bf->underlying_type->used)
+		  {
+		    bf->underlying_type->used = true;
+		    changed = true;
+		  }
 
 		break;
 	      }
@@ -1762,18 +1764,6 @@ renumber_types (void)
 	    break;
 	  }
 
-	case LF_BITFIELD:
-	  {
-	    struct pdb_bitfield *bf = (struct pdb_bitfield *) t->data;
-
-	    if (bf->underlying_type >= FIRST_TYPE_NUM
-		&& bf->underlying_type < type_num)
-	      bf->underlying_type =
-		type_list[bf->underlying_type - FIRST_TYPE_NUM];
-
-	    break;
-	  }
-
 	case LF_ARRAY:
 	  {
 	    struct pdb_array *arr = (struct pdb_array *) t->data;
@@ -1944,7 +1934,7 @@ pdbout_late_global_decl (tree var)
 
 /* Allocate a new pdb_type for a bitfield. */
 static uint16_t
-find_type_bitfield (uint16_t underlying_type, unsigned int size,
+find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
 		    unsigned int offset)
 {
   struct pdb_type *type, *last_entry = NULL;
@@ -2716,8 +2706,9 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 
 		  if (DECL_BIT_FIELD_TYPE (f))
 		    {
-		      uint16_t underlying_type =
-			find_type (DECL_BIT_FIELD_TYPE (f), NULL);
+		      struct pdb_type *underlying_type;
+
+		      find_type (DECL_BIT_FIELD_TYPE (f), &underlying_type);
 
 		      ent->type =
 			find_type_bitfield (underlying_type,
