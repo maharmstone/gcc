@@ -91,7 +91,6 @@ static struct pdb_type *array_types = NULL;
 static struct pdb_type *enum_types = NULL;
 static struct pdb_type *bitfield_types = NULL;
 static struct pdb_alias *aliases = NULL;
-static uint16_t type_num = FIRST_TYPE_NUM;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
 static unsigned int num_line_number_entries = 0;
@@ -1752,10 +1751,8 @@ find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
   type->cv_type = LF_BITFIELD;
   type->tree = NULL;
   type->next = type->next2 = NULL;
-  type->id = type_num;
+  type->id = 0;
   type->used = false;
-
-  type_num++;
 
   bf = (struct pdb_bitfield *) type->data;
 
@@ -1822,10 +1819,8 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
 
   strtype->tree = NULL;
   strtype->next = strtype->next2 = NULL;
-  strtype->id = type_num;
+  strtype->id = 0;
   strtype->used = false;
-
-  type_num++;
 
   str = (struct pdb_struct *) strtype->data;
   str->count = 0;
@@ -2293,8 +2288,8 @@ get_struct_name (tree t)
   return name;
 }
 
-static uint16_t
-add_type_fieldlist (struct pdb_type *t, struct pdb_type **typeptr)
+static struct pdb_type *
+add_type_fieldlist (struct pdb_type *t)
 {
   struct pdb_type *type, *last_entry = NULL;
 
@@ -2360,10 +2355,7 @@ add_type_fieldlist (struct pdb_type *t, struct pdb_type **typeptr)
 
 	free (t);
 
-	if (typeptr)
-	  *typeptr = type;
-
-	return type->id;
+	return type;
       }
     }
 
@@ -2372,10 +2364,8 @@ add_type_fieldlist (struct pdb_type *t, struct pdb_type **typeptr)
   }
 
   t->next = t->next2 = NULL;
-  t->id = type_num;
+  t->id = 0;
   t->used = false;
-
-  type_num++;
 
   if (last_entry)
     last_entry->next2 = t;
@@ -2389,10 +2379,7 @@ add_type_fieldlist (struct pdb_type *t, struct pdb_type **typeptr)
 
   last_type = t;
 
-  if (typeptr)
-    *typeptr = t;
-
-  return t->id;
+  return t;
 }
 
 /* For a given struct, class, or union, allocate a new pdb_type and
@@ -2557,7 +2544,7 @@ find_type_struct (tree t, bool is_union)
 	  f = TREE_CHAIN (f);
 	}
 
-      add_type_fieldlist (fltype, &fltype);
+      fltype = add_type_fieldlist (fltype);
     }
 
   // add type for struct
@@ -2607,10 +2594,8 @@ find_type_struct (tree t, bool is_union)
     strtype->tree = NULL;
 
   strtype->next = strtype->next2 = NULL;
-  strtype->id = type_num;
+  strtype->id = 0;
   strtype->used = false;
-
-  type_num++;
 
   str = (struct pdb_struct *) strtype->data;
   str->count = num_entries;
@@ -2703,7 +2688,7 @@ find_type_enum (tree t)
       ent++;
     }
 
-  add_type_fieldlist (fltype, &fltype);
+  fltype = add_type_fieldlist (fltype);
 
   // add type for enum
 
@@ -2756,10 +2741,8 @@ find_type_enum (tree t)
   enumtype->cv_type = LF_ENUM;
   enumtype->tree = t;
   enumtype->next = enumtype->next2 = NULL;
-  enumtype->id = type_num;
+  enumtype->id = 0;
   enumtype->used = false;
-
-  type_num++;
 
   en = (struct pdb_enum *) enumtype->data;
   en->count = num_entries;
@@ -2831,13 +2814,12 @@ find_type_pointer (tree t)
   ptrtype->cv_type = LF_POINTER;
   ptrtype->tree = t;
   ptrtype->next = ptrtype->next2 = NULL;
-  ptrtype->id = type_num;
+  ptrtype->id = 0;
   ptrtype->used = false;
 
   ptr = (struct pdb_pointer *) ptrtype->data;
   ptr->type = type;
   ptr->attr.num = v.attr.num;
-  type_num++;
 
   if (last_entry)
     last_entry->next2 = ptrtype;
@@ -2890,10 +2872,8 @@ find_type_array (tree t)
   arrtype->cv_type = LF_ARRAY;
   arrtype->tree = t;
   arrtype->next = arrtype->next2 = NULL;
-  arrtype->id = type_num;
+  arrtype->id = 0;
   arrtype->used = false;
-
-  type_num++;
 
   arr = (struct pdb_array *) arrtype->data;
   arr->type = type;
@@ -2962,9 +2942,7 @@ add_arglist_type (struct pdb_type *t)
   t->next = NULL;
   t->next2 = NULL;
   t->used = false;
-
-  t->id = type_num;
-  type_num++;
+  t->id = 0;
 
   if (last_type)
     last_type->next = t;
@@ -3082,10 +3060,8 @@ find_type_function (tree t)
   proctype->cv_type = LF_PROCEDURE;
   proctype->tree = t;
   proctype->next = proctype->next2 = NULL;
-  proctype->id = type_num;
+  proctype->id = 0;
   proctype->used = false;
-
-  type_num++;
 
   proc = (struct pdb_proc *) proctype->data;
 
@@ -3149,10 +3125,8 @@ find_type_modifier (tree t)
   type->cv_type = LF_MODIFIER;
   type->tree = t;
   type->next = type->next2 = NULL;
-  type->id = type_num;
+  type->id = 0;
   type->used = false;
-
-  type_num++;
 
   mod = (struct pdb_modifier *) type->data;
 
@@ -3512,9 +3486,7 @@ add_string_type (const char *s)
   type->tree = NULL;
   type->next = type->next2 = NULL;
   type->used = false;
-
-  type->id = type_num;
-  type_num++;
+  type->id = 0;
 
   memcpy (type->data, s, len + 1);
 
@@ -3561,14 +3533,12 @@ add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, 
   type->tree = NULL;
   type->next = type->next2 = NULL;
   type->used = false;
+  type->id = 0;
 
   pusl = (struct pdb_udt_src_line *) type->data;
   pusl->type = ref_type;
   pusl->source_file = source_file;
   pusl->line = line;
-
-  type->id = type_num;
-  type_num++;
 
   if (last_entry)
     last_entry->next2 = type;
