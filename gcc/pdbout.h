@@ -163,7 +163,7 @@ struct pdb_global_var
 struct pdb_fieldlist_entry
 {
   uint16_t cv_type;
-  uint16_t type;
+  struct pdb_type *type;
   uint16_t offset;
   uint16_t fld_attr;
   int64_t value;

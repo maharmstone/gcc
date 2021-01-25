@@ -889,7 +889,7 @@ write_fieldlist (struct pdb_fieldlist *fl)
 	  unsigned int align;
 
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].fld_attr);
-	  fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].type);
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].type ? fl->entries[i].type->id : 0);
 	  fprintf (asm_out_file, "\t.short\t0\n");	// padding
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].offset);
 
@@ -1529,9 +1529,11 @@ mark_referenced_types_used (void)
 
 		for (unsigned int i = 0; i < fl->count; i++)
 		  {
-		    if (fl->entries[i].type >= FIRST_TYPE_NUM
-			&& fl->entries[i].type < type_num)
-		      mark_type_used (fl->entries[i].type, &changed);
+		    if (fl->entries[i].type && !fl->entries[i].type->used)
+		      {
+			fl->entries[i].type->used = true;
+			changed = true;
+		      }
 		  }
 
 		break;
@@ -1743,21 +1745,6 @@ renumber_types (void)
 	    break;
 	  }
 
-	case LF_FIELDLIST:
-	  {
-	    struct pdb_fieldlist *fl = (struct pdb_fieldlist *) t->data;
-
-	    for (unsigned int i = 0; i < fl->count; i++)
-	      {
-		if (fl->entries[i].type >= FIRST_TYPE_NUM
-		    && fl->entries[i].type < type_num)
-		  fl->entries[i].type =
-		    type_list[fl->entries[i].type - FIRST_TYPE_NUM];
-	      }
-
-	    break;
-	  }
-
 	case LF_UDT_SRC_LINE:
 	  {
 	    struct pdb_udt_src_line *pusl =
@@ -1917,7 +1904,7 @@ pdbout_late_global_decl (tree var)
 }
 
 /* Allocate a new pdb_type for a bitfield. */
-static uint16_t
+static struct pdb_type *
 find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
 		    unsigned int offset)
 {
@@ -1930,7 +1917,7 @@ find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
       bf = (struct pdb_bitfield *) type->data;
 
       if (bf->underlying_type == underlying_type && bf->size == size && bf->offset == offset)
-	return type->id;
+	return type;
 
       last_entry = type;
       type = type->next2;
@@ -1966,7 +1953,7 @@ find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
 
   last_type = type;
 
-  return type->id;
+  return type;
 }
 
 /* Allocate a pdb_type for a forward declaration for a struct. The debugger
@@ -2705,7 +2692,7 @@ find_type_struct (tree t, struct pdb_type **typeptr, bool is_union)
 		    }
 		  else
 		    {
-		      ent->type = find_type (TREE_TYPE (f), NULL);
+		      find_type (TREE_TYPE (f), &ent->type);
 		      ent->offset = bit_offset / 8;
 		    }
 
