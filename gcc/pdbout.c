@@ -101,6 +101,7 @@ static hash_table<pdb_type_tree_hasher> tree_hash_table(31);
 static struct pdb_type *byte_type, *signed_byte_type, *wchar_type, *char16_type, *uint16_type, *int16_type,
 		       *char32_type, *uint32_type, *int32_type, *uint64_type, *int64_type, *uint128_type,
 		       *int128_type, *long_type;
+static struct pdb_type *float16_type, *float32_type, *float48_type, *float64_type, *float80_type, *float128_type;
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -3565,26 +3566,41 @@ find_type (tree t, struct pdb_type **typeptr)
     case REAL_TYPE:
       {
 	unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0);
+	struct pdb_type *float_type = NULL;
 
 	switch (size)
 	  {
 	  case 16:
-	    return CV_BUILTIN_TYPE_FLOAT16;
+	    float_type = float16_type;
+	    break;
 
 	  case 32:
-	    return CV_BUILTIN_TYPE_FLOAT32;
+	    float_type = float32_type;
+	    break;
 
 	  case 48:
-	    return CV_BUILTIN_TYPE_FLOAT48;
+	    float_type = float48_type;
+	    break;
 
 	  case 64:
-	    return CV_BUILTIN_TYPE_FLOAT64;
+	    float_type = float64_type;
+	    break;
 
 	  case 80:
-	    return CV_BUILTIN_TYPE_FLOAT80;
+	    float_type = float80_type;
+	    break;
 
 	  case 128:
-	    return CV_BUILTIN_TYPE_FLOAT128;
+	    float_type = float128_type;
+	    break;
+	  }
+
+	if (float_type)
+	  {
+	    if (typeptr)
+	      *typeptr = float_type;
+
+	    return float_type->id;
 	  }
 
 	return 0;
@@ -4132,6 +4148,13 @@ add_inbuilt_types (void)
   int64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT64);
   uint128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT128);
   int128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT128);
+
+  float16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT16);
+  float32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT32);
+  float48_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT48);
+  float64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT64);
+  float80_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT80);
+  float128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT128);
 }
 
 /* Start of compilation - add the main source file to the list. */
