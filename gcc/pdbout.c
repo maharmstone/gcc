@@ -106,6 +106,7 @@ static struct pdb_type *complex16_type, *complex32_type, *complex48_type, *compl
 		       *complex128_type;
 static struct pdb_type *void_type, *nullptr_type;
 static bool builtins_initialized = false;
+static hash_table<alias_hasher> alias_hash_table(31);
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -3340,14 +3341,10 @@ find_type (tree t)
 
   // search through typedefs
 
-  al = aliases;
-  while (al)
-    {
-      if (al->tree == t)
-	return al->type;
+  al = alias_hash_table.find_with_hash(t, alias_hasher::hash(t));
 
-      al = al->next;
-    }
+  if (al)
+    return al->type;
 
   // search through existing types
 
@@ -3629,6 +3626,18 @@ add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, 
   return type->id;
 }
 
+inline hashval_t
+alias_hasher::hash (alias_hasher::compare_type tree)
+{
+  return htab_hash_pointer (tree);
+}
+
+inline bool
+alias_hasher::equal (const value_type type, compare_type tree)
+{
+  return type->tree == tree;
+}
+
 /* We've encountered a type definition - add it to the type list. */
 static void
 pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
@@ -3644,7 +3653,7 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 
   if (DECL_ORIGINAL_TYPE (t))	// typedef
     {
-      struct pdb_alias *a;
+      struct pdb_alias *a, **slot;
 
       a = (struct pdb_alias *) xmalloc (sizeof (struct pdb_alias));
 
@@ -3687,6 +3696,9 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 	      }
 	    }
 	}
+
+      slot = alias_hash_table.find_slot_with_hash(TREE_TYPE (t), htab_hash_pointer(TREE_TYPE (t)), INSERT);
+      *slot = a;
 
       aliases = a;
 

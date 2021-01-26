@@ -1318,7 +1318,21 @@ struct pdb_type_tree_hasher : nofree_ptr_hash <struct pdb_type>
   static inline hashval_t hash (compare_type);
 
   static inline hashval_t hash (const value_type t) {
-	  return hash (t->tree);
+    return hash (t->tree);
+  }
+
+  static inline bool equal (const value_type, compare_type);
+};
+
+struct alias_hasher : nofree_ptr_hash <struct pdb_alias>
+{
+  typedef struct pdb_alias *value_type;
+  typedef tree compare_type;
+
+  static inline hashval_t hash (compare_type);
+
+  static inline hashval_t hash (const value_type t) {
+    return hash (t->tree);
   }
 
   static inline bool equal (const value_type, compare_type);
