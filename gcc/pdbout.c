@@ -86,7 +86,7 @@ static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
 static struct pdb_type *modifier_types = NULL;
 static struct pdb_type *fieldlist_types = NULL;
-static struct pdb_type *struct_types = NULL;
+static struct pdb_type *struct_types = NULL, *last_struct_type = NULL;
 static struct pdb_type *array_types = NULL;
 static struct pdb_type *enum_types = NULL;
 static struct pdb_type *bitfield_types = NULL;
@@ -1901,6 +1901,8 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
   else
     struct_types = strtype;
 
+  last_struct_type = strtype;
+
   if (last_type)
     last_type->next = strtype;
   else
@@ -2464,6 +2466,7 @@ find_type_struct (tree t, bool is_union)
   uint16_t size = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
   union pdb_property prop;
   struct pdb_type **slot;
+  bool new_fltype = false;
 
   f = TYPE_FIELDS (t);
 
@@ -2516,6 +2519,8 @@ find_type_struct (tree t, bool is_union)
 
   if (num_entries > 0)
     {
+      struct pdb_type *orig_fltype;
+
       // add fieldlist type
 
       fltype =
@@ -2608,7 +2613,11 @@ find_type_struct (tree t, bool is_union)
 	  f = TREE_CHAIN (f);
 	}
 
+      orig_fltype = fltype;
       fltype = add_type_fieldlist (fltype);
+
+      if (fltype == orig_fltype) // new fieldlist type
+	new_fltype = true;
     }
 
   // add type for struct
@@ -2618,28 +2627,33 @@ find_type_struct (tree t, bool is_union)
   if (!TYPE_SIZE (t))		// forward declaration
     prop.s.fwdref = 1;
 
-  strtype = struct_types;
-  while (strtype)
+  if (!new_fltype)
     {
-      str = (struct pdb_struct *)strtype->data;
+      strtype = struct_types;
+      while (strtype)
+	{
+	  str = (struct pdb_struct *)strtype->data;
 
-      if (str->count == num_entries &&
-	  str->field_type == fltype &&
-	  str->size == size &&
-	  str->property.value == prop.value &&
-	  ((!str->name && !name)
-	  || (str->name && name
-	  && !strcmp (str->name, name))))
-      {
-	if (name)
-	  free (name);
+	  if (str->count == num_entries &&
+	      str->field_type == fltype &&
+	      str->size == size &&
+	      str->property.value == prop.value &&
+	      ((!str->name && !name)
+	      || (str->name && name
+	      && !strcmp (str->name, name))))
+	  {
+	    if (name)
+	      free (name);
 
-	return strtype;
-      }
+	    return strtype;
+	  }
 
-      last_entry = strtype;
-      strtype = strtype->next2;
+	  last_entry = strtype;
+	  strtype = strtype->next2;
+	}
     }
+  else
+    last_entry = last_struct_type;
 
   strtype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
@@ -2672,6 +2686,8 @@ find_type_struct (tree t, bool is_union)
     last_entry->next2 = strtype;
   else
     struct_types = strtype;
+
+  last_struct_type = strtype;
 
   if (last_type)
     last_type->next = strtype;
