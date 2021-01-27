@@ -287,6 +287,7 @@ struct pdb_type
   tree_node *tree;
   uint16_t cv_type;
   bool used;
+  struct pdb_type *udt_src_line;
   uint8_t data[1];
 };
 

@@ -81,7 +81,6 @@ static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
 static struct pdb_type *string_types = NULL;
 static struct pdb_type *arglist_types = NULL;
-static struct pdb_type *udt_src_line_types = NULL;
 static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
 static struct pdb_type *modifier_types = NULL;
@@ -1430,6 +1429,12 @@ mark_referenced_types_used (void)
 	      continue;
 	    }
 
+	  if (t->udt_src_line && !t->udt_src_line->used)
+	    {
+	      t->udt_src_line->used = true;
+	      changed = true;
+	    }
+
 	  switch (t->cv_type)
 	    {
 	    case LF_MODIFIER:
@@ -1604,31 +1609,23 @@ mark_referenced_types_used (void)
 
 		break;
 	      }
+
+	    case LF_UDT_SRC_LINE:
+	      {
+		struct pdb_udt_src_line *pusl = (struct pdb_udt_src_line *) t->data;
+
+		if (pusl->source_file && !pusl->source_file->used)
+		  {
+		    pusl->source_file->used = true;
+		    changed = true;
+		  }
+	      }
 	    }
 
 	  t = t->next;
 	}
     }
   while (changed);
-
-  /* LF_UDT_SRC_LINE entries reference a string in the string table;
-   * mark that as used too. */
-
-  t = udt_src_line_types;
-  while (t)
-    {
-	struct pdb_udt_src_line *pusl = (struct pdb_udt_src_line *) t->data;
-
-	t->used = pusl->type ? pusl->type->used : false;
-
-	if (t->used)
-	  {
-	    if (pusl->source_file)
-	      pusl->source_file->used = true;
-	  }
-
-      t = t->next2;
-    }
 }
 
 static void
@@ -1821,6 +1818,7 @@ find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
   type->next = type->next2 = NULL;
   type->id = 0;
   type->used = false;
+  type->udt_src_line = NULL;
 
   bf = (struct pdb_bitfield *) type->data;
 
@@ -1873,6 +1871,7 @@ add_struct_forward_declaration (tree t, const char *name)
   strtype->next = strtype->next2 = NULL;
   strtype->id = 0;
   strtype->used = false;
+  strtype->udt_src_line = NULL;
 
   str = (struct pdb_struct *) strtype->data;
   str->count = 0;
@@ -2425,6 +2424,7 @@ add_type_fieldlist (struct pdb_type *t)
   t->next = t->next2 = NULL;
   t->id = 0;
   t->used = false;
+  t->udt_src_line = NULL;
 
   if (last_entry)
     last_entry->next2 = t;
@@ -2681,6 +2681,7 @@ find_type_struct (tree t, bool is_union)
   strtype->next = strtype->next2 = NULL;
   strtype->id = 0;
   strtype->used = false;
+  strtype->udt_src_line = NULL;
 
   str = (struct pdb_struct *) strtype->data;
   str->count = num_entries;
@@ -2834,6 +2835,7 @@ find_type_enum (tree t)
   enumtype->next = enumtype->next2 = NULL;
   enumtype->id = 0;
   enumtype->used = false;
+  enumtype->udt_src_line = NULL;
 
   en = (struct pdb_enum *) enumtype->data;
   en->count = num_entries;
@@ -2907,6 +2909,7 @@ find_type_pointer (tree t)
   ptrtype->next = ptrtype->next2 = NULL;
   ptrtype->id = 0;
   ptrtype->used = false;
+  ptrtype->udt_src_line = NULL;
 
   ptr = (struct pdb_pointer *) ptrtype->data;
   ptr->type = type;
@@ -2965,6 +2968,7 @@ find_type_array (tree t)
   arrtype->next = arrtype->next2 = NULL;
   arrtype->id = 0;
   arrtype->used = false;
+  arrtype->udt_src_line = NULL;
 
   arr = (struct pdb_array *) arrtype->data;
   arr->type = type;
@@ -3033,6 +3037,7 @@ add_arglist_type (struct pdb_type *t)
   t->next = NULL;
   t->next2 = NULL;
   t->used = false;
+  t->udt_src_line = NULL;
   t->id = 0;
 
   if (last_type)
@@ -3153,6 +3158,7 @@ find_type_function (tree t)
   proctype->next = proctype->next2 = NULL;
   proctype->id = 0;
   proctype->used = false;
+  proctype->udt_src_line = NULL;
 
   proc = (struct pdb_proc *) proctype->data;
 
@@ -3218,6 +3224,7 @@ find_type_modifier (tree t)
   type->next = type->next2 = NULL;
   type->id = 0;
   type->used = false;
+  type->udt_src_line = NULL;
 
   mod = (struct pdb_modifier *) type->data;
 
@@ -3265,6 +3272,7 @@ add_inbuilt_type (tree t, uint16_t id)
   type->next = type->next2 = NULL;
   type->id = id;
   type->used = false;
+  type->udt_src_line = NULL;
 
   if (last_type)
     last_type->next = type;
@@ -3569,6 +3577,7 @@ add_string_type (const char *s)
   type->tree = NULL;
   type->next = type->next2 = NULL;
   type->used = false;
+  type->udt_src_line = NULL;
   type->id = 0;
 
   memcpy (type->data, s, len + 1);
@@ -3595,19 +3604,8 @@ add_string_type (const char *s)
 static void
 add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, uint32_t line)
 {
-  struct pdb_type *type, *t, *last_entry = NULL;
+  struct pdb_type *type;
   struct pdb_udt_src_line *pusl;
-
-  t = udt_src_line_types;
-  while (t) {
-    pusl = (struct pdb_udt_src_line *) t->data;
-
-    if (pusl->type == ref_type && pusl->source_file == source_file && pusl->line == line)
-      return;
-
-    last_entry = t;
-    t = t->next2;
-  }
 
   type =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
@@ -3616,6 +3614,7 @@ add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, 
   type->tree = NULL;
   type->next = type->next2 = NULL;
   type->used = false;
+  type->udt_src_line = NULL;
   type->id = 0;
 
   pusl = (struct pdb_udt_src_line *) type->data;
@@ -3623,17 +3622,14 @@ add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, 
   pusl->source_file = source_file;
   pusl->line = line;
 
-  if (last_entry)
-    last_entry->next2 = type;
-  else
-    udt_src_line_types = type;
-
   if (last_type)
     last_type->next = type;
   else
     types = type;
 
   last_type = type;
+
+  ref_type->udt_src_line = type;
 }
 
 inline hashval_t
@@ -3758,7 +3754,7 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 	}
     }
 
-  if (!DECL_SOURCE_LOCATION (t))
+  if (!DECL_SOURCE_LOCATION (t) || type->udt_src_line)
     return;
 
   xloc = expand_location (DECL_SOURCE_LOCATION (t));
