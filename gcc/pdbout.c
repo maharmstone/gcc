@@ -2471,7 +2471,6 @@ find_type_struct (tree t, bool is_union)
   uint16_t size = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
   union pdb_property prop;
   struct pdb_type **slot;
-  bool new_fltype = false;
 
   if (name)
     {
@@ -2540,8 +2539,6 @@ find_type_struct (tree t, bool is_union)
 
   if (num_entries > 0)
     {
-      struct pdb_type *orig_fltype;
-
       // add fieldlist type
 
       fltype =
@@ -2634,11 +2631,7 @@ find_type_struct (tree t, bool is_union)
 	  f = TREE_CHAIN (f);
 	}
 
-      orig_fltype = fltype;
       fltype = add_type_fieldlist (fltype);
-
-      if (fltype == orig_fltype) // new fieldlist type
-	new_fltype = true;
     }
 
   // add type for struct
@@ -2648,7 +2641,7 @@ find_type_struct (tree t, bool is_union)
   if (!TYPE_SIZE (t))		// forward declaration
     prop.s.fwdref = 1;
 
-  if (!new_fltype)
+  if (!name)
     {
       strtype = struct_types;
       while (strtype)
@@ -2659,15 +2652,8 @@ find_type_struct (tree t, bool is_union)
 	      str->field_type == fltype &&
 	      str->size == size &&
 	      str->property.value == prop.value &&
-	      ((!str->name && !name)
-	      || (str->name && name
-	      && !strcmp (str->name, name))))
-	  {
-	    if (name)
-	      free (name);
-
+	      !str->name)
 	    return strtype;
-	  }
 
 	  last_entry = strtype;
 	  strtype = strtype->next2;
