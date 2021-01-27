@@ -1846,30 +1846,18 @@ find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
 /* Allocate a pdb_type for a forward declaration for a struct. The debugger
  * will resolve this automatically, by searching for a substantive
  * struct definition with the same name. */
-static void
-add_struct_forward_declaration (tree t, const char *name, struct pdb_type **ret)
+static struct pdb_type *
+add_struct_forward_declaration (tree t, const char *name)
 {
-  struct pdb_type *strtype, *last_entry = NULL;
+  struct pdb_type *strtype;
   struct pdb_struct *str;
 
-  strtype = struct_types;
-  while (strtype)
+  if (name)
     {
-      str = (struct pdb_struct *)strtype->data;
+      strtype = struct_hash_table.find_with_hash(name, struct_hasher::hash(name));
 
-      if (str->property.s.fwdref == 1 &&
-	  ((!str->name && !name)
-	  || (str->name && name
-	  && !strcmp (str->name, name))))
-      {
-	if (ret)
-	  *ret = strtype;
-
-	return;
-      }
-
-      last_entry = strtype;
-      strtype = strtype->next2;
+      if (strtype)
+	return strtype;
     }
 
   strtype =
@@ -1894,8 +1882,8 @@ add_struct_forward_declaration (tree t, const char *name, struct pdb_type **ret)
   str->property.s.fwdref = 1;
   str->name = name ? xstrdup (name) : NULL;
 
-  if (last_entry)
-    last_entry->next2 = strtype;
+  if (last_struct_type)
+    last_struct_type->next2 = strtype;
   else
     struct_types = strtype;
 
@@ -1908,14 +1896,13 @@ add_struct_forward_declaration (tree t, const char *name, struct pdb_type **ret)
 
   last_type = strtype;
 
-  if (ret)
-    *ret = strtype;
-
   if (name)
     {
       struct pdb_type **slot = struct_hash_table.find_slot_with_hash(name, struct_hasher::hash(name), INSERT);
       *slot = strtype;
     }
+
+  return strtype;
 }
 
 /* Reallocate the string n, adding the type name of arg and the character
@@ -2539,7 +2526,7 @@ find_type_struct (tree t, bool is_union)
 
   if (TYPE_SIZE (t) != 0)	// not forward declaration
     {
-      add_struct_forward_declaration (t, name, &fwddef);
+      fwddef = add_struct_forward_declaration (t, name);
 
       if (!fwddef->tree)
 	{
