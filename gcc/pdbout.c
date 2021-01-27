@@ -107,6 +107,7 @@ static struct pdb_type *complex16_type, *complex32_type, *complex48_type, *compl
 static struct pdb_type *void_type, *nullptr_type;
 static bool builtins_initialized = false;
 static hash_table<alias_hasher> alias_hash_table(31);
+static hash_table<struct_hasher> struct_hash_table(31);
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -1913,6 +1914,12 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
 
   if (ret)
     *ret = strtype;
+
+  if (name)
+    {
+      struct pdb_type **slot = struct_hash_table.find_slot_with_hash(name, struct_hasher::hash(name), INSERT);
+      *slot = strtype;
+    }
 }
 
 /* Reallocate the string n, adding the type name of arg and the character
@@ -2451,6 +2458,20 @@ add_type_fieldlist (struct pdb_type *t)
   return t;
 }
 
+inline hashval_t
+struct_hasher::hash (struct_hasher::compare_type name)
+{
+  return htab_hash_string (name);
+}
+
+inline bool
+struct_hasher::equal (const value_type type, compare_type name)
+{
+  struct pdb_struct *str = (struct pdb_struct *)type->data;
+
+  return !strcmp(str->name, name);
+}
+
 /* For a given struct, class, or union, allocate a new pdb_type and
  * add it to the type list. */
 static struct pdb_type *
@@ -2462,12 +2483,28 @@ find_type_struct (tree t, bool is_union)
   struct pdb_fieldlist_entry *ent;
   struct pdb_struct *str;
   unsigned int num_entries = 0;
-  bool fwddef_tree_set = false;
+  bool new_fwddef = false;
   char *name = get_struct_name (t);
   uint16_t size = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
   union pdb_property prop;
   struct pdb_type **slot;
   bool new_fltype = false;
+
+  if (name)
+    {
+      strtype = struct_hash_table.find_with_hash(name, struct_hasher::hash(name));
+
+      /* Use type found in hash map, unless this is a substantive definition
+       * replacing a forward declaration. */
+
+      if (strtype)
+	{
+	  str = (struct pdb_struct *)strtype->data;
+
+	  if (TYPE_SIZE (t) == 0 || str->property.s.fwdref != 1)
+	    return strtype;
+	}
+    }
 
   f = TYPE_FIELDS (t);
 
@@ -2510,10 +2547,10 @@ find_type_struct (tree t, bool is_union)
 
       if (!fwddef->tree)
 	{
-	  fwddef_tree_set = true;
+	  new_fwddef = true;
 	  fwddef->tree = t;
 
-	  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+	  slot = tree_hash_table.find_slot_with_hash(t, pdb_type_tree_hasher::hash(t), INSERT);
 	  *slot = fwddef;
 	}
     }
@@ -2697,12 +2734,18 @@ find_type_struct (tree t, bool is_union)
 
   last_type = strtype;
 
-  if (fwddef_tree_set)
+  if (new_fwddef)
     fwddef->tree = NULL;
 
   if (strtype->tree)
     {
       slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+      *slot = strtype;
+    }
+
+  if (name)
+    {
+      slot = struct_hash_table.find_slot_with_hash(name, struct_hasher::hash(name), INSERT);
       *slot = strtype;
     }
 

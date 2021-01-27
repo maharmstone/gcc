@@ -1338,4 +1338,20 @@ struct alias_hasher : nofree_ptr_hash <struct pdb_alias>
   static inline bool equal (const value_type, compare_type);
 };
 
+struct struct_hasher : nofree_ptr_hash <struct pdb_type>
+{
+  typedef struct pdb_type *value_type;
+  typedef const char *compare_type;
+
+  static inline hashval_t hash (compare_type);
+
+  static inline hashval_t hash (const value_type t) {
+    struct pdb_struct *str = (struct pdb_struct *)t->data;
+
+    return hash (str->name);
+  }
+
+  static inline bool equal (const value_type, compare_type);
+};
+
 #endif
