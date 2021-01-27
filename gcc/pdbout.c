@@ -1847,11 +1847,10 @@ find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
  * will resolve this automatically, by searching for a substantive
  * struct definition with the same name. */
 static void
-add_struct_forward_declaration (tree t, struct pdb_type **ret)
+add_struct_forward_declaration (tree t, const char *name, struct pdb_type **ret)
 {
   struct pdb_type *strtype, *last_entry = NULL;
   struct pdb_struct *str;
-  char *name = get_struct_name (t);
 
   strtype = struct_types;
   while (strtype)
@@ -1863,9 +1862,6 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
 	  || (str->name && name
 	  && !strcmp (str->name, name))))
       {
-	if (name)
-	  free (name);
-
 	if (ret)
 	  *ret = strtype;
 
@@ -1896,7 +1892,7 @@ add_struct_forward_declaration (tree t, struct pdb_type **ret)
   str->size = 0;
   str->property.value = 0;
   str->property.s.fwdref = 1;
-  str->name = name;
+  str->name = name ? xstrdup (name) : NULL;
 
   if (last_entry)
     last_entry->next2 = strtype;
@@ -2543,7 +2539,7 @@ find_type_struct (tree t, bool is_union)
 
   if (TYPE_SIZE (t) != 0)	// not forward declaration
     {
-      add_struct_forward_declaration (t, &fwddef);
+      add_struct_forward_declaration (t, name, &fwddef);
 
       if (!fwddef->tree)
 	{
