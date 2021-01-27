@@ -3592,7 +3592,7 @@ add_string_type (const char *s)
  * and line number where an actual type is defined.
  * The linker will transform this into a LF_UDT_MOD_SRC_LINE, which also
  * records the object file. */
-static uint16_t
+static void
 add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, uint32_t line)
 {
   struct pdb_type *type, *t, *last_entry = NULL;
@@ -3603,7 +3603,7 @@ add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, 
     pusl = (struct pdb_udt_src_line *) t->data;
 
     if (pusl->type == ref_type && pusl->source_file == source_file && pusl->line == line)
-      return t->id;
+      return;
 
     last_entry = t;
     t = t->next2;
@@ -3634,8 +3634,6 @@ add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, 
     types = type;
 
   last_type = type;
-
-  return type->id;
 }
 
 inline hashval_t
