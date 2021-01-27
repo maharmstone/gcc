@@ -3723,7 +3723,14 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 		struct pdb_struct *str = (struct pdb_struct *) a->type->data;
 
 		if (!str->name)
-		  str->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+		  {
+		    struct pdb_type **slot;
+
+		    str->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+
+		    slot = struct_hash_table.find_slot_with_hash(str->name, struct_hasher::hash(str->name), INSERT);
+		    *slot = a->type;
+		  }
 
 		break;
 	      }
