@@ -4292,7 +4292,7 @@ driver_handle_option (struct gcc_options *opts,
     case OPT_gcodeview:
       /* If we've generated CodeView debugging information, make sure
        * linker creates a PDB file for it. */
-      add_infile ("--pdb=\"\"", "*");
+      add_infile ("--pdb=", "*");
       break;
 
     default:
