@@ -1632,7 +1632,7 @@ static void
 number_types (void)
 {
   struct pdb_type *t;
-  uint16_t type_num = FIRST_TYPE_NUM, id_num = FIRST_TYPE_NUM;
+  uint16_t type_num = FIRST_TYPE_NUM;
 
   t = types;
   while (t)
@@ -1645,18 +1645,6 @@ number_types (void)
 
     switch (t->cv_type)
     {
-      case LF_STRING_ID:
-      case LF_UDT_SRC_LINE:
-	t->id = id_num;
-	id_num++;
-
-	if (id_num == 0) // overflow
-	{
-	  fprintf(stderr, "too many CodeView IDs\n");
-	  xexit(1);
-	}
-      break;
-
       case LF_POINTER: {
 	struct pdb_pointer *ptr = (struct pdb_pointer *)t->data;
 
