@@ -627,68 +627,76 @@ static void
 write_line_numbers ()
 {
   struct pdb_func *func = funcs;
+  unsigned int lines_part = 0;
 
   while (func)
     {
-      struct pdb_line *l;
-      unsigned int num_entries = 0;
-
-      if (!func->lines)
-	{
-	  func = func->next;
-	  continue;
-	}
-
-      l = func->lines;
-      while (l)
-	{
-	  num_entries++;
-	  l = l->next;
-	}
-
-      fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_LINES);
-      fprintf (asm_out_file, "\t.long\t[.linesend%u]-[.linesstart%u]\n",
-	       func->num, func->num);
-      fprintf (asm_out_file, ".linesstart%u:\n", func->num);
-
-      fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n",
-	       func->num);	// address
-
-      // section (filled in by linker)
-      fprintf (asm_out_file, "\t.short\t0\n");
-
-      fprintf (asm_out_file, "\t.short\t0\n");	// flags
-      fprintf (asm_out_file,
-	       "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n",
-	       func->num, func->num);	// length
-
-      // file ID (0x18 is size of checksum struct)
-      fprintf (asm_out_file, "\t.long\t0x%x\n", func->source_file * 0x18);
-      fprintf (asm_out_file, "\t.long\t0x%x\n", num_entries);
-      // length of file block
-      fprintf (asm_out_file, "\t.long\t0x%x\n", 0xc + (num_entries * 8));
-
-      l = func->lines;
-      while (l)
-	{
-	  fprintf (asm_out_file,
-		   "\t.long\t[.line%u]-[" FUNC_BEGIN_LABEL "%u]\n",
-		   l->entry, func->num);	// offset
-	  fprintf (asm_out_file, "\t.long\t0x%x\n", l->line);	// line no.
-
-	  l = l->next;
-	}
-
       while (func->lines)
 	{
-	  struct pdb_line *n = func->lines->next;
+	  struct pdb_line *l, *last_line;
+	  unsigned int num_entries = 0, source_file, first_entry;
 
-	  free (func->lines);
+	  source_file = func->lines->source_file;
 
-	  func->lines = n;
+	  l = last_line = func->lines;
+	  while (l && l->source_file == source_file)
+	    {
+	      num_entries++;
+	      last_line = l;
+	      l = l->next;
+	    }
+
+	  first_entry = func->lines->entry;
+
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_LINES);
+	  fprintf (asm_out_file, "\t.long\t[.linesend%u]-[.linesstart%u]\n",
+		  lines_part, lines_part);
+	  fprintf (asm_out_file, ".linesstart%u:\n", lines_part);
+
+	  fprintf (asm_out_file, "\t.long\t[.line%u]\n",
+		   first_entry);	// address
+
+	  // section (filled in by linker)
+	  fprintf (asm_out_file, "\t.short\t0\n");
+
+	  fprintf (asm_out_file, "\t.short\t0\n");	// flags
+
+	  if (last_line->next) // next section of function is another source file
+	    {
+	      fprintf (asm_out_file,
+		       "\t.long\t[.line%u]-[.line%u]\n",
+		       last_line->next->entry, first_entry);	// length
+	    }
+	  else
+	    {
+	      fprintf (asm_out_file,
+		       "\t.long\t[" FUNC_END_LABEL "%u]-[.line%u]\n",
+		       func->num, first_entry);		// length
+	    }
+
+	  // file ID (0x18 is size of checksum struct)
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", source_file * 0x18);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", num_entries);
+	  // length of file block
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", 0xc + (num_entries * 8));
+
+	  while (func->lines && func->lines->source_file == source_file)
+	    {
+	      struct pdb_line *n = func->lines->next;
+
+	      fprintf (asm_out_file,
+		      "\t.long\t[.line%u]-[.line%u]\n",
+		      func->lines->entry, first_entry);	// offset
+	      fprintf (asm_out_file, "\t.long\t0x%x\n", func->lines->line);	// line no.
+
+	      free (func->lines);
+
+	      func->lines = n;
+	    }
+
+	  fprintf (asm_out_file, ".linesend%u:\n", lines_part);
+	  lines_part++;
 	}
-
-      fprintf (asm_out_file, ".linesend%u:\n", func->num);
 
       func = func->next;
     }
@@ -1698,7 +1706,6 @@ static void
 pdbout_begin_function (tree func)
 {
   expanded_location xloc;
-  struct pdb_source_file *psf;
   struct pdb_func *f = (struct pdb_func *) xmalloc (sizeof (struct pdb_func));
 
   f->next = funcs;
@@ -1725,22 +1732,8 @@ pdbout_begin_function (tree func)
 
   xloc = expand_location (DECL_SOURCE_LOCATION (func));
 
-  f->source_file = 0;
-
-  psf = source_files;
-  while (psf)
-    {
-      if (!strcmp (xloc.file, psf->name))
-	{
-	  f->source_file = psf->num;
-	  break;
-	}
-
-      psf = psf->next;
-    }
-
   if (xloc.line != 0)
-    pdbout_source_line (xloc.line, 0, NULL, 0, 0);
+    pdbout_source_line (xloc.line, 0, xloc.file, 0, 0);
 }
 
 /* We've been passed a late global declaration, i.e. a global function -
@@ -3940,11 +3933,25 @@ pdbout_source_line (unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
 		    bool is_stmt ATTRIBUTE_UNUSED)
 {
   struct pdb_line *ent;
+  struct pdb_source_file *psf;
+  unsigned int source_file = 0;
 
   if (!cur_func)
     return;
 
-  if (cur_func->last_line && cur_func->last_line->line == line)
+  psf = source_files;
+  while (psf)
+  {
+    if (!strcmp (text, psf->name))
+    {
+      source_file = psf->num;
+      break;
+    }
+
+    psf = psf->next;
+  }
+
+  if (cur_func->last_line && cur_func->last_line->line == line && cur_func->last_line->source_file == source_file)
     return;
 
   ent = (struct pdb_line *) xmalloc (sizeof (struct pdb_line));
@@ -3952,6 +3959,7 @@ pdbout_source_line (unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
   ent->next = NULL;
   ent->line = line;
   ent->entry = num_line_number_entries;
+  ent->source_file = source_file;
 
   if (cur_func->last_line)
     cur_func->last_line->next = ent;

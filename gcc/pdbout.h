@@ -73,6 +73,7 @@ struct pdb_line
   struct pdb_line *next;
   unsigned int line;
   unsigned int entry;
+  unsigned int source_file;
 };
 
 enum pdb_local_var_type
@@ -128,7 +129,6 @@ struct pdb_func
   int num;
   unsigned int public_flag;
   struct pdb_type *type;
-  unsigned int source_file;
   struct pdb_line *lines, *last_line;
   struct pdb_local_var *local_vars, *last_local_var;
   struct pdb_var_location *var_locs, *last_var_loc;
