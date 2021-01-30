@@ -4393,13 +4393,12 @@ map_register_no (unsigned int regno, machine_mode mode)
 /* We've been given a declaration for a local variable. Allocate a
  * pdb_local_var and add it to the list for this scope block. */
 static void
-add_local (const char *name, tree t, struct pdb_type *type, rtx rtl,
+add_local (const char *name, tree t, struct pdb_type *type, rtx orig_rtl,
 	   unsigned int block_num)
 {
   struct pdb_local_var *plv;
   size_t name_len = strlen (name);
-
-  rtl = eliminate_regs (rtl, VOIDmode, NULL_RTX);
+  rtx rtl;
 
   plv =
     (struct pdb_local_var *) xmalloc (offsetof (struct pdb_local_var, name) +
@@ -4411,6 +4410,8 @@ add_local (const char *name, tree t, struct pdb_type *type, rtx rtl,
   plv->block_num = block_num;
   plv->var_type = pdb_local_var_unknown;
   memcpy (plv->name, name, name_len + 1);
+
+  rtl = eliminate_regs (orig_rtl, VOIDmode, NULL_RTX);
 
   if (MEM_P (rtl))
     {
@@ -4443,10 +4444,10 @@ add_local (const char *name, tree t, struct pdb_type *type, rtx rtl,
       plv->reg = map_register_no (REGNO (rtl), GET_MODE (rtl));
     }
 
-  /* If using sjlj exceptions on x86, the stack will later get shifted by
-   * 16 bytes - we need to account for that now. */
   if (!TARGET_64BIT)
     {
+      /* If using sjlj exceptions on x86, the stack will later get shifted by
+       * 16 bytes - we need to account for that now. */
       if (plv->var_type == pdb_local_var_regrel &&
 	  plv->reg == CV_X86_EBP &&
 	  plv->offset < 0 &&
@@ -4454,6 +4455,23 @@ add_local (const char *name, tree t, struct pdb_type *type, rtx rtl,
 	  targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
 	{
 	  plv->offset -= 16;
+	}
+    }
+  else
+    {
+      /* On amd64, eliminate_regs seems to sometimes give bogus values for rbp offsets - why? */
+      if (plv->var_type == pdb_local_var_regrel &&
+	  plv->reg == CV_AMD64_RBP)
+	{
+	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
+	    {
+	      plv->offset = cfun->machine->frame.hard_frame_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	    plv->offset = cfun->machine->frame.hard_frame_pointer_offset;
 	}
     }
 
@@ -4519,7 +4537,7 @@ pdbout_function_decl (tree decl)
 	  struct pdb_type *type = find_type (TREE_TYPE (f));
 
 	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
-		     type, f->parm_decl.common.rtl, 0);
+		     type, DECL_RTL(f), 0);
 
 	  if (type)
 	    type->used = true;
