@@ -4655,7 +4655,7 @@ pdbout_function_decl (tree decl)
 static void
 pdbout_var_location (rtx_insn * loc_note)
 {
-  rtx value;
+  rtx value, orig_rtl;
   tree var;
   struct pdb_var_location *var_loc;
 
@@ -4669,7 +4669,7 @@ pdbout_var_location (rtx_insn * loc_note)
     return;
 
   var = NOTE_VAR_LOCATION_DECL (loc_note);
-  value = NOTE_VAR_LOCATION_LOC (loc_note);
+  value = orig_rtl = NOTE_VAR_LOCATION_LOC (loc_note);
 
   if (value)
     value = eliminate_regs (value, VOIDmode, NULL_RTX);
@@ -4718,20 +4718,9 @@ pdbout_var_location (rtx_insn * loc_note)
 	  var_loc->type = pdb_var_loc_unknown;
 	  break;
 	}
-    }
 
-  /* If using sjlj exceptions on x86, the stack will later get shifted by
-   * 16 bytes - we need to account for that now. */
-  if (!TARGET_64BIT)
-    {
-      if (var_loc->type == pdb_var_loc_regrel &&
-	  var_loc->reg == CV_X86_EBP &&
-	  var_loc->offset < 0 &&
-	  cfun->eh->region_tree &&
-	  targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
-	{
-	  var_loc->offset -= 16;
-	}
+      if (var_loc->type == pdb_var_loc_regrel)
+	var_loc->offset = fix_variable_offset(orig_rtl, var_loc->reg, var_loc->offset);
     }
 
   fprintf (asm_out_file, ".varloc%u:\n", var_loc_number);
