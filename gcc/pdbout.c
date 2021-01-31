@@ -4390,6 +4390,126 @@ map_register_no (unsigned int regno, machine_mode mode)
     return (unsigned int) map_register_no_x86 (regno, mode);
 }
 
+/* We can't rely on eliminate_regs for stack offsets - it seems that some compiler
+ * passes alter the stack without changing the values in the reg_eliminate array
+ * that eliminate_regs relies on. */
+static int32_t
+fix_variable_offset (rtx orig_rtl, unsigned int reg, int32_t offset)
+{
+  if (!TARGET_64BIT)
+    {
+      if (reg == CV_X86_EBP)
+	{
+	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	    return cfun->machine->frame.hard_frame_pointer_offset;
+	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset -
+		     cfun->machine->frame.frame_pointer_offset +
+		     XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset -
+		     cfun->machine->frame.frame_pointer_offset;
+	    }
+	}
+      else if (reg == CV_X86_ESP)
+	{
+	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
+	  {
+	    return cfun->machine->frame.stack_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	  }
+	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	    return cfun->machine->frame.stack_pointer_offset;
+	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset -
+		     cfun->machine->frame.frame_pointer_offset +
+		     XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset -
+		     cfun->machine->frame.frame_pointer_offset;
+	    }
+	}
+    }
+  else
+    {
+      if (reg == CV_AMD64_RBP)
+	{
+	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	    return cfun->machine->frame.hard_frame_pointer_offset;
+	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset -
+		     cfun->machine->frame.frame_pointer_offset +
+		     XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset -
+		     cfun->machine->frame.frame_pointer_offset;
+	    }
+	}
+      else if (reg == CV_AMD64_RSP)
+	{
+	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	    return cfun->machine->frame.stack_pointer_offset;
+	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset -
+		     cfun->machine->frame.frame_pointer_offset +
+		     XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset -
+		     cfun->machine->frame.frame_pointer_offset;
+	    }
+	}
+    }
+
+  return offset;
+}
+
 /* We've been given a declaration for a local variable. Allocate a
  * pdb_local_var and add it to the list for this scope block. */
 static void
@@ -4444,66 +4564,8 @@ add_local (const char *name, tree t, struct pdb_type *type, rtx orig_rtl,
       plv->reg = map_register_no (REGNO (rtl), GET_MODE (rtl));
     }
 
-  if (!TARGET_64BIT)
-    {
-      /* If using sjlj exceptions on x86, the stack will later get shifted by
-       * 16 bytes - we need to account for that now. */
-      if (plv->var_type == pdb_local_var_regrel &&
-	  plv->reg == CV_X86_EBP &&
-	  plv->offset < 0 &&
-	  cfun->eh->region_tree &&
-	  targetm_common.except_unwind_info (&global_options) == UI_SJLJ)
-	{
-	  plv->offset -= 16;
-	}
-    }
-  else
-    {
-      /* We can't rely on eliminate_regs for stack offsets - it seems that some compiler
-       * passes alter the stack without changing the values in the reg_eliminate array
-       * that eliminate_regs relies on. */
-
-      if (plv->var_type == pdb_local_var_regrel &&
-	  plv->reg == CV_AMD64_RBP)
-	{
-	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
-	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
-	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
-	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
-	    {
-	      plv->offset = cfun->machine->frame.hard_frame_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
-	    }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
-	    plv->offset = cfun->machine->frame.hard_frame_pointer_offset;
-	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
-		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
-		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
-		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
-	    {
-	      plv->offset = cfun->machine->frame.hard_frame_pointer_offset -
-			    cfun->machine->frame.frame_pointer_offset +
-			    XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
-	    }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
-	    {
-	      plv->offset = cfun->machine->frame.hard_frame_pointer_offset -
-			    cfun->machine->frame.frame_pointer_offset;
-	    }
-	}
-      else if (plv->var_type == pdb_local_var_regrel &&
-	       plv->reg == CV_AMD64_RSP)
-	{
-	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
-	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
-	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
-	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
-	  {
-	    plv->offset = cfun->machine->frame.stack_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
-	  }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
-	    plv->offset = cfun->machine->frame.stack_pointer_offset;
-	}
-    }
+  if (plv->var_type == pdb_local_var_regrel)
+    plv->offset = fix_variable_offset(orig_rtl, plv->reg, plv->offset);
 
   if (cur_func->last_local_var)
     cur_func->last_local_var->next = plv;
