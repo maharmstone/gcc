@@ -4472,6 +4472,20 @@ add_local (const char *name, tree t, struct pdb_type *type, rtx orig_rtl,
 	    }
 	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
 	    plv->offset = cfun->machine->frame.hard_frame_pointer_offset;
+	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+	    GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+	    GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+	    REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
+	    {
+	      plv->offset = cfun->machine->frame.hard_frame_pointer_offset -
+			    cfun->machine->frame.frame_pointer_offset +
+			    XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	    {
+	      plv->offset = cfun->machine->frame.hard_frame_pointer_offset -
+			    cfun->machine->frame.frame_pointer_offset;
+	    }
 	}
     }
 
