@@ -2712,7 +2712,7 @@ find_type_enum (tree t)
   struct pdb_fieldlist *fieldlist;
   struct pdb_fieldlist_entry *ent;
   struct pdb_enum *en;
-  unsigned int num_entries, size;
+  unsigned int num_entries;
   struct pdb_type *en_type;
   char *name;
   struct pdb_type **slot;
@@ -2765,18 +2765,7 @@ find_type_enum (tree t)
 
   // add type for enum
 
-  size = TYPE_SIZE (t) ? TREE_INT_CST_ELT (TYPE_SIZE (t), 0) : 0;
-
-  if (size == 8)
-    en_type = TYPE_UNSIGNED (t) ? byte_type : signed_byte_type;
-  else if (size == 16)
-    en_type = TYPE_UNSIGNED (t) ? uint16_type : int16_type;
-  else if (size == 32)
-    en_type = TYPE_UNSIGNED (t) ? uint32_type : int32_type;
-  else if (size == 64)
-    en_type = TYPE_UNSIGNED (t) ? uint64_type : int64_type;
-  else
-    en_type = NULL;
+  en_type = TREE_TYPE (t) ? find_type (TREE_TYPE (t)) : NULL;
 
   if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == IDENTIFIER_NODE)
     name = xstrdup (IDENTIFIER_POINTER (TYPE_NAME (t)));
