@@ -2243,7 +2243,8 @@ get_struct_name (tree t)
 
   /* Append template information */
 
-  if (TREE_CODE (t) == RECORD_TYPE && CLASSTYPE_USE_TEMPLATE (t))
+  if (TREE_CODE (t) == RECORD_TYPE && TYPE_LANG_SPECIFIC (t) && CLASSTYPE_USE_TEMPLATE (t)
+      && CLASSTYPE_TEMPLATE_INFO (t))
     args = TI_ARGS (CLASSTYPE_TEMPLATE_INFO (t));
   else if (DECL_USE_TEMPLATE (t) && DECL_TEMPLATE_INFO (t))
     args = TI_ARGS (DECL_TEMPLATE_INFO (t));
