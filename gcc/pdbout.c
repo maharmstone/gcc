@@ -54,6 +54,11 @@ static void pdbout_begin_function (tree func);
 static void pdbout_late_global_decl (tree var);
 static void pdbout_start_source_file (unsigned int line ATTRIBUTE_UNUSED,
 				      const char *file);
+static void pdbout_source_line (unsigned int line,
+				unsigned int column ATTRIBUTE_UNUSED,
+				const char *text,
+				int discriminator ATTRIBUTE_UNUSED,
+				bool is_stmt ATTRIBUTE_UNUSED);
 static void pdbout_function_decl (tree decl);
 static void pdbout_var_location (rtx_insn * loc_note);
 static void pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED,
@@ -69,6 +74,7 @@ static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
+static unsigned int num_line_number_entries = 0;
 static unsigned int num_source_files = 0;
 static unsigned int var_loc_number = 1;
 static hash_table <pdb_type_tree_hasher> tree_hash_table (31);
@@ -97,7 +103,7 @@ const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_begin_block,
   pdbout_end_block,
   debug_true_const_tree,	/* ignore_block */
-  debug_nothing_int_int_charstar_int_bool,	/* source_line */
+  pdbout_source_line,
   pdbout_begin_prologue,
   debug_nothing_int_charstar,	/* end_prologue */
   debug_nothing_int_charstar,	/* begin_epilogue */
@@ -617,6 +623,88 @@ write_file_checksums ()
   fprintf (asm_out_file, ".Lchksumsend:\n");
 }
 
+/* Loop through each function, and output the line number to
+ * address mapping. */
+static void
+write_line_numbers ()
+{
+  struct pdb_func *func = funcs;
+  unsigned int lines_part = 0;
+
+  while (func)
+    {
+      while (func->lines)
+	{
+	  struct pdb_line *l, *last_line;
+	  unsigned int num_entries = 0, source_file, first_entry;
+
+	  source_file = func->lines->source_file;
+
+	  l = last_line = func->lines;
+	  while (l && l->source_file == source_file)
+	    {
+	      num_entries++;
+	      last_line = l;
+	      l = l->next;
+	    }
+
+	  first_entry = func->lines->entry;
+
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_LINES);
+	  fprintf (asm_out_file, "\t.long\t[.Llinesend%u]-[.Llinesstart%u]\n",
+		   lines_part, lines_part);
+	  fprintf (asm_out_file, ".Llinesstart%u:\n", lines_part);
+
+	  // offset
+	  fprintf (asm_out_file, "\t.secrel32\t.Lline%u\n", first_entry);
+	  // section
+	  fprintf (asm_out_file, "\t.secidx\t.Lline%u\n", first_entry);
+
+	  fprintf (asm_out_file, "\t.short\t0\n");	// flags
+
+	  // next section of function is another source file
+	  if (last_line->next)
+	    {
+	      fprintf (asm_out_file, "\t.long\t[.Lline%u]-[.Lline%u]\n",
+		       last_line->next->entry, first_entry);	// length
+	    }
+	  else
+	    {
+	      fprintf (asm_out_file,
+		       "\t.long\t[" FUNC_END_LABEL "%u]-[.Lline%u]\n",
+		       func->num, first_entry);	// length
+	    }
+
+	  // file ID (0x18 is size of checksum struct)
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", source_file * 0x18);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", num_entries);
+	  // length of file block
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", 0xc + (num_entries * 8));
+
+	  while (func->lines && func->lines->source_file == source_file)
+	    {
+	      struct pdb_line *n = func->lines->next;
+
+	      // offset
+	      fprintf (asm_out_file, "\t.long\t[.Lline%u]-[.Lline%u]\n",
+		       func->lines->entry, first_entry);
+
+	      // line no.
+	      fprintf (asm_out_file, "\t.long\t0x%x\n", func->lines->line);
+
+	      free (func->lines);
+
+	      func->lines = n;
+	    }
+
+	  fprintf (asm_out_file, ".Llinesend%u:\n", lines_part);
+	  lines_part++;
+	}
+
+      func = func->next;
+    }
+}
+
 /* Output the .debug$S section, which has everything except the
  * type definitions (global variables, functions, string table,
  * file checksums, line numbers).
@@ -688,6 +776,8 @@ write_pdb_section (void)
 
   write_file_checksums ();
 
+  write_line_numbers ();
+
   while (funcs)
     {
       struct pdb_func *n = funcs->next;
@@ -728,6 +818,7 @@ get_tree_name (tree t)
 static void
 pdbout_begin_function (tree func)
 {
+  expanded_location xloc;
   struct pdb_func *f = (struct pdb_func *) xmalloc (sizeof (struct pdb_func));
 
   f->next = funcs;
@@ -735,6 +826,7 @@ pdbout_begin_function (tree func)
   f->num = current_function_funcdef_no;
   f->public_flag = TREE_PUBLIC (func);
   f->type = find_type (TREE_TYPE (func));
+  f->lines = f->last_line = NULL;
   f->local_vars = f->last_local_var = NULL;
   f->var_locs = f->last_var_loc = NULL;
 
@@ -747,6 +839,11 @@ pdbout_begin_function (tree func)
 
   cur_func = f;
   cur_block = &f->block;
+
+  xloc = expand_location (DECL_SOURCE_LOCATION (func));
+
+  if (xloc.line != 0)
+    pdbout_source_line (xloc.line, 0, xloc.file, 0, 0);
 }
 
 /* We've been passed a late global declaration, i.e. a global variable -
@@ -1182,6 +1279,57 @@ static void
 pdbout_init (const char *file)
 {
   add_source_file (file);
+}
+
+/* We've encountered a new line of source code. Add an asm label for this,
+ * and record the mapping for later. */
+static void
+pdbout_source_line (unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
+		    const char *text,
+		    int discriminator ATTRIBUTE_UNUSED,
+		    bool is_stmt ATTRIBUTE_UNUSED)
+{
+  struct pdb_line *ent;
+  struct pdb_source_file *psf;
+  unsigned int source_file = 0;
+
+  if (!cur_func)
+    return;
+
+  psf = source_files;
+  while (psf)
+    {
+      if (!strcmp (text, psf->name))
+	{
+	  source_file = psf->num;
+	  break;
+	}
+
+      psf = psf->next;
+    }
+
+  if (cur_func->last_line && cur_func->last_line->line == line
+      && cur_func->last_line->source_file == source_file)
+    return;
+
+  ent = (struct pdb_line *) xmalloc (sizeof (struct pdb_line));
+
+  ent->next = NULL;
+  ent->line = line;
+  ent->entry = num_line_number_entries;
+  ent->source_file = source_file;
+
+  if (cur_func->last_line)
+    cur_func->last_line->next = ent;
+
+  cur_func->last_line = ent;
+
+  if (!cur_func->lines)
+    cur_func->lines = ent;
+
+  fprintf (asm_out_file, ".Lline%u:\n", num_line_number_entries);
+
+  num_line_number_entries++;
 }
 
 /* Given an x86 gcc register no., return the CodeView equivalent. */
