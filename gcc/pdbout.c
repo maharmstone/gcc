@@ -95,18 +95,21 @@ static uint32_t source_file_string_offset = 1;
 static unsigned int num_line_number_entries = 0;
 static unsigned int num_source_files = 0;
 static unsigned int var_loc_number = 1;
-static hash_table<pdb_type_tree_hasher> tree_hash_table(31);
-static struct pdb_type *byte_type, *signed_byte_type, *wchar_type, *char16_type, *uint16_type, *int16_type,
-		       *char32_type, *uint32_type, *int32_type, *uint64_type, *int64_type, *uint128_type,
-		       *int128_type, *long_type, *ulong_type, *hresult_type;
-static struct pdb_type *float16_type, *float32_type, *float48_type, *float64_type, *float80_type, *float128_type;
-static struct pdb_type *bool8_type, *bool16_type, *bool32_type, *bool64_type, *bool128_type;
-static struct pdb_type *complex16_type, *complex32_type, *complex48_type, *complex64_type, *complex80_type,
-		       *complex128_type;
+static hash_table <pdb_type_tree_hasher> tree_hash_table (31);
+static struct pdb_type *byte_type, *signed_byte_type, *wchar_type,
+  *char16_type, *uint16_type, *int16_type, *char32_type, *uint32_type,
+  *int32_type, *uint64_type, *int64_type, *uint128_type, *int128_type,
+  *long_type, *ulong_type, *hresult_type;
+static struct pdb_type *float16_type, *float32_type, *float48_type,
+  *float64_type, *float80_type, *float128_type;
+static struct pdb_type *bool8_type, *bool16_type, *bool32_type, *bool64_type,
+  *bool128_type;
+static struct pdb_type *complex16_type, *complex32_type, *complex48_type,
+  *complex64_type, *complex80_type, *complex128_type;
 static struct pdb_type *void_type, *nullptr_type;
 static bool builtins_initialized = false;
-static hash_table<alias_hasher> alias_hash_table(31);
-static hash_table<struct_hasher> struct_hash_table(31);
+static hash_table <alias_hasher> alias_hash_table (31);
+static hash_table <struct_hasher> struct_hash_table (31);
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -189,11 +192,10 @@ write_var_location (struct pdb_var_location *var_loc,
       if (next_var_loc_number != 0)
 	fprintf (asm_out_file, "\t.short\t[.varloc%u]-[.varloc%u]\n",
 		 next_var_loc_number, var_loc->var_loc_number);
-      else {
-	fprintf (asm_out_file,
-		 "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n",
-		 func_num, var_loc->var_loc_number);	// to end of function
-      }
+      else
+	{
+	  fprintf (asm_out_file, "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n", func_num, var_loc->var_loc_number);	// to end of function
+	}
 
       break;
 
@@ -215,11 +217,10 @@ write_var_location (struct pdb_var_location *var_loc,
       if (next_var_loc_number != 0)
 	fprintf (asm_out_file, "\t.short\t[.varloc%u]-[.varloc%u]\n",
 		 next_var_loc_number, var_loc->var_loc_number);
-      else {
-	fprintf (asm_out_file,
-		 "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n",
-		 func_num, var_loc->var_loc_number);	// to end of function
-      }
+      else
+	{
+	  fprintf (asm_out_file, "\t.short\t[" FUNC_END_LABEL "%u]-[.varloc%u]\n", func_num, var_loc->var_loc_number);	// to end of function
+	}
 
       break;
 
@@ -303,7 +304,7 @@ pdbout_local_variable (struct pdb_local_var *v,
   switch (v->var_type)
     {
     case pdb_local_var_regrel:
-      if (v->reg == CV_X86_EBP) // ebp is a special case
+      if (v->reg == CV_X86_EBP)	// ebp is a special case
 	{
 	  len = 13 + name_len;
 
@@ -317,11 +318,11 @@ pdbout_local_variable (struct pdb_local_var *v,
 
 	  /* Output BPRELSYM32 struct */
 
-	  fprintf (asm_out_file, "\t.short\t0x%x\n",
-		   (uint16_t) (len - sizeof (uint16_t)));	// reclen
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", S_BPREL32);
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
-	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type ? v->type->id : 0);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n",
+		   v->type ? v->type->id : 0);
 
 	  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
 	}
@@ -339,11 +340,11 @@ pdbout_local_variable (struct pdb_local_var *v,
 
 	  /* Output REGREL32 struct */
 
-	  fprintf (asm_out_file, "\t.short\t0x%x\n",
-		   (uint16_t) (len - sizeof (uint16_t)));	// reclen
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGREL32);
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
-	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->type ? v->type->id : 0);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n",
+		   v->type ? v->type->id : 0);
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
 
 	  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
@@ -368,8 +369,7 @@ pdbout_local_variable (struct pdb_local_var *v,
 
       /* Output REGSYM struct */
 
-      fprintf (asm_out_file, "\t.short\t0x%x\n",
-	       (uint16_t) (len - sizeof (uint16_t)));	// reclen
+      fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
       fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGISTER);
       fprintf (asm_out_file, "\t.long\t0x%x\n", v->type ? v->type->id : 0);
       fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
@@ -395,8 +395,7 @@ pdbout_local_variable (struct pdb_local_var *v,
 
       /* Output DATASYM32 struct */
 
-      fprintf (asm_out_file, "\t.short\t0x%x\n",
-	       (uint16_t) (len - sizeof (uint16_t)));	// reclen
+      fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
       fprintf (asm_out_file, "\t.short\t0x%x\n", S_LDATA32);
       fprintf (asm_out_file, "\t.short\t0x%x\n", v->type ? v->type->id : 0);
       fprintf (asm_out_file, "\t.short\t0\n");
@@ -444,20 +443,20 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
       fprintf (asm_out_file, "\t.short\t0x%x\n", S_BLOCK32);
 
       // pParent
-      if (block->num != 0) {
-	fprintf (asm_out_file, "\t.long\t[.cvblockstart%u]-[.debug$S]\n",
-		 block->num);
-      } else {
-	fprintf (asm_out_file, "\t.long\t[.cvprocstart%u]-[.debug$S]\n",
-		 func->num);
-      }
+      if (block->num != 0)
+	{
+	  fprintf (asm_out_file, "\t.long\t[.cvblockstart%u]-[.debug$S]\n",
+		   block->num);
+	}
+      else
+	{
+	  fprintf (asm_out_file, "\t.long\t[.cvprocstart%u]-[.debug$S]\n",
+		   func->num);
+	}
 
-      fprintf (asm_out_file, "\t.long\t[.cvblockend%u]-[.debug$S]\n",
-	       block->children->num);	// pEnd
-      fprintf (asm_out_file, "\t.long\t[.blockend%u]-[.blockstart%u]\n",
-	       block->children->num, block->children->num);	// length
-      fprintf (asm_out_file, "\t.long\t[.blockstart%u]\n",
-	       block->children->num);	// offset
+      fprintf (asm_out_file, "\t.long\t[.cvblockend%u]-[.debug$S]\n", block->children->num);	// pEnd
+      fprintf (asm_out_file, "\t.long\t[.blockend%u]-[.blockstart%u]\n", block->children->num, block->children->num);	// length
+      fprintf (asm_out_file, "\t.long\t[.blockstart%u]\n", block->children->num);	// offset
 
       // section (will be filled in by the linker)
       fprintf (asm_out_file, "\t.short\t0\n");
@@ -495,23 +494,18 @@ pdbout_proc32 (struct pdb_func *func)
     align = 0;
 
   fprintf (asm_out_file, ".cvprocstart%u:\n", func->num);
-  fprintf (asm_out_file, "\t.short\t0x%x\n",
-	   (uint16_t) (len - sizeof (uint16_t)));	// reclen
+  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n",
 	   func->public_flag ? S_GPROC32 : S_LPROC32);
   fprintf (asm_out_file, "\t.long\t0\n");	// pParent
-  fprintf (asm_out_file, "\t.long\t[.cvprocend%u]-[.debug$S]\n",
-	   func->num);	// pEnd
+  fprintf (asm_out_file, "\t.long\t[.cvprocend%u]-[.debug$S]\n", func->num);	// pEnd
   fprintf (asm_out_file, "\t.long\t0\n");	// pNext
-  fprintf (asm_out_file,
-	   "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n",
-	   func->num, func->num);	// len
+  fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n", func->num, func->num);	// len
   fprintf (asm_out_file, "\t.long\t0\n");	// DbgStart
   fprintf (asm_out_file, "\t.long\t0\n");	// DbgEnd
   fprintf (asm_out_file, "\t.short\t0x%x\n", func->type ? func->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
-  fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n",
-	   func->num);	// off
+  fprintf (asm_out_file, "\t.long\t[" FUNC_BEGIN_LABEL "%u]\n", func->num);	// off
 
   // section (will get set by the linker)
   fprintf (asm_out_file, "\t.short\t0\n");
@@ -570,8 +564,7 @@ pdbout_ldata32 (struct pdb_global_var *v)
   if (len % 4 != 0)
     len += 4 - (len % 4);
 
-  fprintf (asm_out_file, "\t.short\t0x%x\n",
-	   (uint16_t) (len - sizeof (uint16_t)));	// reclen
+  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) (len - sizeof (uint16_t)));	// reclen
   fprintf (asm_out_file, "\t.short\t0x%x\n",
 	   v->public_flag ? S_GDATA32 : S_LDATA32);
   fprintf (asm_out_file, "\t.short\t0x%x\n", v->type ? v->type->id : 0);
@@ -650,28 +643,23 @@ write_line_numbers ()
 
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", DEBUG_S_LINES);
 	  fprintf (asm_out_file, "\t.long\t[.linesend%u]-[.linesstart%u]\n",
-		  lines_part, lines_part);
+		   lines_part, lines_part);
 	  fprintf (asm_out_file, ".linesstart%u:\n", lines_part);
 
-	  fprintf (asm_out_file, "\t.long\t[.line%u]\n",
-		   first_entry);	// address
+	  fprintf (asm_out_file, "\t.long\t[.line%u]\n", first_entry);	// address
 
 	  // section (filled in by linker)
 	  fprintf (asm_out_file, "\t.short\t0\n");
 
 	  fprintf (asm_out_file, "\t.short\t0\n");	// flags
 
-	  if (last_line->next) // next section of function is another source file
+	  if (last_line->next)	// next section of function is another source file
 	    {
-	      fprintf (asm_out_file,
-		       "\t.long\t[.line%u]-[.line%u]\n",
-		       last_line->next->entry, first_entry);	// length
+	      fprintf (asm_out_file, "\t.long\t[.line%u]-[.line%u]\n", last_line->next->entry, first_entry);	// length
 	    }
 	  else
 	    {
-	      fprintf (asm_out_file,
-		       "\t.long\t[" FUNC_END_LABEL "%u]-[.line%u]\n",
-		       func->num, first_entry);		// length
+	      fprintf (asm_out_file, "\t.long\t[" FUNC_END_LABEL "%u]-[.line%u]\n", func->num, first_entry);	// length
 	    }
 
 	  // file ID (0x18 is size of checksum struct)
@@ -684,9 +672,7 @@ write_line_numbers ()
 	    {
 	      struct pdb_line *n = func->lines->next;
 
-	      fprintf (asm_out_file,
-		      "\t.long\t[.line%u]-[.line%u]\n",
-		      func->lines->entry, first_entry);	// offset
+	      fprintf (asm_out_file, "\t.long\t[.line%u]-[.line%u]\n", func->lines->entry, first_entry);	// offset
 	      fprintf (asm_out_file, "\t.long\t0x%x\n", func->lines->line);	// line no.
 
 	      free (func->lines);
@@ -856,20 +842,28 @@ write_fieldlist (struct pdb_fieldlist *fl)
 	  if (fl->entries[i].value >= 0x8000 || fl->entries[i].value < 0)
 	    {
 	      if (fl->entries[i].value >= -127 && fl->entries[i].value < 0)
-		len++; 	// LF_CHAR
+		len++;		// LF_CHAR
 	      else if (fl->entries[i].value >= -0x7fff &&
-		       fl->entries[i].value <= 0x7fff) {
-		len += 2; // LF_SHORT
-	      } else if (fl->entries[i].value >= 0x8000 &&
-			 fl->entries[i].value <= 0xffff) {
-		len += 2; // LF_USHORT
-	      } else if (fl->entries[i].value >= -0x7fffffff &&
-			 fl->entries[i].value <= 0x7fffffff) {
-		len += 4; // LF_LONG
-	      } else if (fl->entries[i].value >= 0x80000000 &&
-			 fl->entries[i].value <= 0xffffffff) {
-		len += 4; // LF_ULONG
-	      } else
+		       fl->entries[i].value <= 0x7fff)
+		{
+		  len += 2;	// LF_SHORT
+		}
+	      else if (fl->entries[i].value >= 0x8000 &&
+		       fl->entries[i].value <= 0xffff)
+		{
+		  len += 2;	// LF_USHORT
+		}
+	      else if (fl->entries[i].value >= -0x7fffffff &&
+		       fl->entries[i].value <= 0x7fffffff)
+		{
+		  len += 4;	// LF_LONG
+		}
+	      else if (fl->entries[i].value >= 0x80000000 &&
+		       fl->entries[i].value <= 0xffffffff)
+		{
+		  len += 4;	// LF_ULONG
+		}
+	      else
 		len += 8;	// LF_QUADWORD or LF_UQUADWORD
 	    }
 
@@ -895,7 +889,8 @@ write_fieldlist (struct pdb_fieldlist *fl)
 	  unsigned int align;
 
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].fld_attr);
-	  fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].type ? fl->entries[i].type->id : 0);
+	  fprintf (asm_out_file, "\t.short\t0x%x\n",
+		   fl->entries[i].type ? fl->entries[i].type->id : 0);
 	  fprintf (asm_out_file, "\t.short\t0\n");	// padding
 	  fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].offset);
 
@@ -946,8 +941,8 @@ write_fieldlist (struct pdb_fieldlist *fl)
 	    {
 	      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_SHORT);
 	      fprintf (asm_out_file, "\t.short\t0x%x\n",
-		       (unsigned int) ((int16_t) fl->entries[i].
-				       value & 0xffff));
+		       (unsigned int) ((int16_t) fl->
+				       entries[i].value & 0xffff));
 
 	      align = (align + 2) % 4;
 	    }
@@ -956,8 +951,8 @@ write_fieldlist (struct pdb_fieldlist *fl)
 	    {
 	      fprintf (asm_out_file, "\t.short\t0x%x\n", LF_USHORT);
 	      fprintf (asm_out_file, "\t.short\t0x%x\n",
-		       (unsigned int) ((uint16_t) fl->entries[i].
-				       value & 0xffff));
+		       (unsigned int) ((uint16_t) fl->
+				       entries[i].value & 0xffff));
 
 	      align = (align + 2) % 4;
 	    }
@@ -1026,7 +1021,8 @@ write_struct (uint16_t type, struct pdb_struct *str)
   fprintf (asm_out_file, "\t.short\t0x%x\n", type);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->property.value);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", str->field_type ? str->field_type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   str->field_type ? str->field_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// derived
   fprintf (asm_out_file, "\t.short\t0\n");	// vshape
   fprintf (asm_out_file, "\t.short\t0\n");
@@ -1067,7 +1063,8 @@ write_union (struct pdb_struct *str)
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UNION);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->property.value);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", str->field_type ? str->field_type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   str->field_type ? str->field_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", str->size);
 
@@ -1106,7 +1103,8 @@ write_enum (struct pdb_enum *en)
   fprintf (asm_out_file, "\t.short\t0\n");	// property
   fprintf (asm_out_file, "\t.short\t0x%x\n", en->type ? en->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
-  fprintf (asm_out_file, "\t.short\t0x%x\n", en->field_type ? en->field_type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   en->field_type ? en->field_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 
   if (en->name)
@@ -1148,11 +1146,11 @@ write_array (struct pdb_array *arr)
   if (arr->length >= 0x8000)
     {
       if (arr->length <= 0xffff)
-	len += 2;	// LF_USHORT
+	len += 2;		// LF_USHORT
       else if (arr->length <= 0xffffffff)
-	len += 4;	// LF_ULONG
+	len += 4;		// LF_ULONG
       else
-	len += 8;	// LF_UQUADWORD
+	len += 8;		// LF_UQUADWORD
     }
 
   align = 4 - (len % 4);
@@ -1165,7 +1163,8 @@ write_array (struct pdb_array *arr)
 
   fprintf (asm_out_file, "\t.short\t0x%x\n", arr->type ? arr->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
-  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->index_type ? arr->index_type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   arr->index_type ? arr->index_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 
   if (arr->length >= 0x8000)
@@ -1220,7 +1219,8 @@ write_arglist (struct pdb_arglist *arglist)
 
   for (unsigned int i = 0; i < arglist->count; i++)
     {
-      fprintf (asm_out_file, "\t.short\t0x%x\n", arglist->args[i] ? arglist->args[i]->id : 0);
+      fprintf (asm_out_file, "\t.short\t0x%x\n",
+	       arglist->args[i] ? arglist->args[i]->id : 0);
       fprintf (asm_out_file, "\t.short\t0\n");	// padding
     }
 
@@ -1239,12 +1239,14 @@ write_procedure (struct pdb_proc *proc)
 {
   fprintf (asm_out_file, "\t.short\t0xe\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_PROCEDURE);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->return_type ? proc->return_type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   proc->return_type ? proc->return_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->calling_convention);
   fprintf (asm_out_file, "\t.byte\t0x%x\n", proc->attributes);
   fprintf (asm_out_file, "\t.short\t0x%x\n", proc->num_args);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", proc->arg_list ? proc->arg_list->id : 0);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   proc->arg_list ? proc->arg_list->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 }
 
@@ -1289,7 +1291,8 @@ write_udt_src_line (struct pdb_udt_src_line *t)
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UDT_SRC_LINE);
   fprintf (asm_out_file, "\t.short\t0x%x\n", t->type ? t->type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
-  fprintf (asm_out_file, "\t.short\t0x%x\n", t->source_file ? t->source_file->id : 0);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   t->source_file ? t->source_file->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.long\t0x%x\n", t->line);
 }
@@ -1313,7 +1316,8 @@ write_bitfield (struct pdb_bitfield *t)
 {
   fprintf (asm_out_file, "\t.short\t0xa\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", LF_BITFIELD);
-  fprintf (asm_out_file, "\t.short\t0x%x\n", t->underlying_type ? t->underlying_type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   t->underlying_type ? t->underlying_type->id : 0);
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
   fprintf (asm_out_file, "\t.byte\t0x%x\n", t->size);
   fprintf (asm_out_file, "\t.byte\t0x%x\n", t->offset);
@@ -1346,7 +1350,7 @@ write_type (struct pdb_type *t)
       break;
 
     case LF_POINTER:
-      if (t->id < FIRST_TYPE_NUM) // pointer to builtin
+      if (t->id < FIRST_TYPE_NUM)	// pointer to builtin
 	return;
 
       write_pointer ((struct pdb_pointer *) t->data);
@@ -1620,7 +1624,8 @@ mark_referenced_types_used (void)
 
 	    case LF_UDT_SRC_LINE:
 	      {
-		struct pdb_udt_src_line *pusl = (struct pdb_udt_src_line *) t->data;
+		struct pdb_udt_src_line *pusl =
+		  (struct pdb_udt_src_line *) t->data;
 
 		if (pusl->source_file && !pusl->source_file->used)
 		  {
@@ -1644,47 +1649,48 @@ number_types (void)
 
   t = types;
   while (t)
-  {
-    if (!t->used || t->id != 0)
     {
-      t = t->next;
-      continue;
-    }
+      if (!t->used || t->id != 0)
+	{
+	  t = t->next;
+	  continue;
+	}
 
-    switch (t->cv_type)
-    {
-      case LF_POINTER: {
-	struct pdb_pointer *ptr = (struct pdb_pointer *)t->data;
-
-	if (ptr->type && ptr->type->id != 0 && ptr->type->id < 0x100)
-	  {	// pointers to builtins have their own constants
-	    if (ptr->attr.s.ptrtype == CV_PTR_NEAR32)
-	      {
-		t->id = (CV_TM_NPTR32 << 8) | ptr->type->id;
-		break;
-	      }
-	    else if (ptr->attr.s.ptrtype == CV_PTR_64)
-	      {
-		t->id = (CV_TM_NPTR64 << 8) | ptr->type->id;
-		break;
-	      }
-	  }
-	[[fallthrough]];
-      }
-
-      default:
-	t->id = type_num;
-	type_num++;
-
-	if (type_num == 0) // overflow
+      switch (t->cv_type)
+	{
+	case LF_POINTER:
 	  {
-	    fprintf(stderr, "too many CodeView types\n");
-	    xexit(1);
-	  }
-    }
+	    struct pdb_pointer *ptr = (struct pdb_pointer *) t->data;
 
-    t = t->next;
-  }
+	    if (ptr->type && ptr->type->id != 0 && ptr->type->id < 0x100)
+	      {			// pointers to builtins have their own constants
+		if (ptr->attr.s.ptrtype == CV_PTR_NEAR32)
+		  {
+		    t->id = (CV_TM_NPTR32 << 8) | ptr->type->id;
+		    break;
+		  }
+		else if (ptr->attr.s.ptrtype == CV_PTR_64)
+		  {
+		    t->id = (CV_TM_NPTR64 << 8) | ptr->type->id;
+		    break;
+		  }
+	      }
+	    [[fallthrough]];
+	  }
+
+	default:
+	  t->id = type_num;
+	  type_num++;
+
+	  if (type_num == 0)	// overflow
+	    {
+	      fprintf (stderr, "too many CodeView types\n");
+	      xexit (1);
+	    }
+	}
+
+      t = t->next;
+    }
 }
 
 /* We've finished compilation - output the .debug$S and .debug$T sections
@@ -1783,7 +1789,8 @@ find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
     {
       bf = (struct pdb_bitfield *) type->data;
 
-      if (bf->underlying_type == underlying_type && bf->size == size && bf->offset == offset)
+      if (bf->underlying_type == underlying_type && bf->size == size
+	  && bf->offset == offset)
 	return type;
 
       last_entry = type;
@@ -1833,7 +1840,8 @@ add_struct_forward_declaration (tree t, const char *name)
 
   if (name)
     {
-      strtype = struct_hash_table.find_with_hash(name, struct_hasher::hash(name));
+      strtype =
+	struct_hash_table.find_with_hash (name, struct_hasher::hash (name));
 
       if (strtype)
 	return strtype;
@@ -1878,7 +1886,10 @@ add_struct_forward_declaration (tree t, const char *name)
 
   if (name)
     {
-      struct pdb_type **slot = struct_hash_table.find_slot_with_hash(name, struct_hasher::hash(name), INSERT);
+      struct pdb_type **slot =
+	struct_hash_table.find_slot_with_hash (name,
+					       struct_hasher::hash (name),
+					       INSERT);
       *slot = strtype;
     }
 
@@ -1890,7 +1901,7 @@ add_struct_forward_declaration (tree t, const char *name)
  * We can't use the C++ pretty printer for this as this file gets
  * compiled into libbackend.a. */
 static void
-append_template_element (char **n, size_t * len, tree arg, char suffix)
+append_template_element (char **n, size_t *len, tree arg, char suffix)
 {
   char *tmp;
   char *name = *n;
@@ -2243,8 +2254,8 @@ get_struct_name (tree t)
 
   /* Append template information */
 
-  if (TREE_CODE (t) == RECORD_TYPE && TYPE_LANG_SPECIFIC (t) && CLASSTYPE_USE_TEMPLATE (t)
-      && CLASSTYPE_TEMPLATE_INFO (t))
+  if (TREE_CODE (t) == RECORD_TYPE && TYPE_LANG_SPECIFIC (t)
+      && CLASSTYPE_USE_TEMPLATE (t) && CLASSTYPE_TEMPLATE_INFO (t))
     args = TI_ARGS (CLASSTYPE_TEMPLATE_INFO (t));
   else if (DECL_USE_TEMPLATE (t) && DECL_TEMPLATE_INFO (t))
     args = TI_ARGS (DECL_TEMPLATE_INFO (t));
@@ -2335,73 +2346,73 @@ add_type_fieldlist (struct pdb_type *t)
 
   type = fieldlist_types;
   while (type)
-  {
-    struct pdb_fieldlist *fl1 = (struct pdb_fieldlist *) t->data;
-    struct pdb_fieldlist *fl2 = (struct pdb_fieldlist *) type->data;
-
-    if (fl1->count == fl2->count)
     {
-      bool same = true;
+      struct pdb_fieldlist *fl1 = (struct pdb_fieldlist *) t->data;
+      struct pdb_fieldlist *fl2 = (struct pdb_fieldlist *) type->data;
 
-      for (unsigned int i = 0; i < fl1->count; i++)
-      {
-	struct pdb_fieldlist_entry *pfe1 =
-	(struct pdb_fieldlist_entry *)&fl1->entries[i];
-	struct pdb_fieldlist_entry *pfe2 =
-	(struct pdb_fieldlist_entry *)&fl2->entries[i];
-
-	if (pfe1->cv_type != pfe2->cv_type)
+      if (fl1->count == fl2->count)
 	{
-	  same = false;
-	  break;
+	  bool same = true;
+
+	  for (unsigned int i = 0; i < fl1->count; i++)
+	    {
+	      struct pdb_fieldlist_entry *pfe1 =
+		(struct pdb_fieldlist_entry *) &fl1->entries[i];
+	      struct pdb_fieldlist_entry *pfe2 =
+		(struct pdb_fieldlist_entry *) &fl2->entries[i];
+
+	      if (pfe1->cv_type != pfe2->cv_type)
+		{
+		  same = false;
+		  break;
+		}
+
+	      if (pfe1->cv_type == LF_MEMBER)
+		{
+		  if (pfe1->type != pfe2->type ||
+		      pfe1->offset != pfe2->offset ||
+		      pfe1->fld_attr != pfe2->fld_attr ||
+		      ((pfe1->name || pfe2->name) &&
+		       (!pfe1->name || !pfe2->name ||
+			strcmp (pfe1->name, pfe2->name))))
+		    {
+		      same = false;
+		      break;
+		    }
+		}
+	      else if (pfe1->cv_type == LF_ENUMERATE)
+		{
+		  if (pfe1->value != pfe2->value ||
+		      ((pfe1->name || pfe2->name) &&
+		       (!pfe1->name || !pfe2->name ||
+			strcmp (pfe1->name, pfe2->name))))
+		    {
+		      same = false;
+		      break;
+		    }
+		}
+	    }
+
+	  if (same)
+	    {
+	      for (unsigned int i = 0; i < fl1->count; i++)
+		{
+		  struct pdb_fieldlist_entry *pfe1 =
+		    (struct pdb_fieldlist_entry *) &fl1->entries[i];
+
+		  if (pfe1->name)
+		    free (pfe1->name);
+		}
+
+	      free (t);
+
+	      return type;
+	    }
 	}
 
-	if (pfe1->cv_type == LF_MEMBER)
-	{
-	  if (pfe1->type != pfe2->type ||
-	    pfe1->offset != pfe2->offset ||
-	    pfe1->fld_attr != pfe2->fld_attr ||
-	    ((pfe1->name || pfe2->name) &&
-	    (!pfe1->name || !pfe2->name ||
-	    strcmp (pfe1->name, pfe2->name))))
-	  {
-	    same = false;
-	    break;
-	  }
-	}
-	else if (pfe1->cv_type == LF_ENUMERATE)
-	{
-	  if (pfe1->value != pfe2->value ||
-	    ((pfe1->name || pfe2->name) &&
-	    (!pfe1->name || !pfe2->name ||
-	    strcmp (pfe1->name, pfe2->name))))
-	  {
-	    same = false;
-	    break;
-	  }
-	}
-      }
-
-      if (same)
-      {
-	for (unsigned int i = 0; i < fl1->count; i++)
-	{
-	  struct pdb_fieldlist_entry *pfe1 =
-	  (struct pdb_fieldlist_entry *)&fl1->entries[i];
-
-	  if (pfe1->name)
-	    free (pfe1->name);
-	}
-
-	free (t);
-
-	return type;
-      }
+      last_entry = type;
+      type = type->next2;
     }
-
-    last_entry = type;
-    type = type->next2;
-  }
 
   t->next = t->next2 = NULL;
   t->id = 0;
@@ -2432,9 +2443,9 @@ struct_hasher::hash (struct_hasher::compare_type name)
 inline bool
 struct_hasher::equal (const value_type type, compare_type name)
 {
-  struct pdb_struct *str = (struct pdb_struct *)type->data;
+  struct pdb_struct *str = (struct pdb_struct *) type->data;
 
-  return !strcmp(str->name, name);
+  return !strcmp (str->name, name);
 }
 
 /* For a given struct, class, or union, allocate a new pdb_type and
@@ -2443,27 +2454,30 @@ static struct pdb_type *
 find_type_struct (tree t, bool is_union)
 {
   tree f;
-  struct pdb_type *fltype = NULL, *strtype, *fwddef = NULL, *last_entry = NULL;
+  struct pdb_type *fltype = NULL, *strtype, *fwddef = NULL, *last_entry =
+    NULL;
   struct pdb_fieldlist *fieldlist;
   struct pdb_fieldlist_entry *ent;
   struct pdb_struct *str;
   unsigned int num_entries = 0;
   bool new_fwddef = false;
   char *name = get_struct_name (t);
-  uint16_t size = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
+  uint16_t size =
+    TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
   union pdb_property prop;
   struct pdb_type **slot;
 
   if (name)
     {
-      strtype = struct_hash_table.find_with_hash(name, struct_hasher::hash(name));
+      strtype =
+	struct_hash_table.find_with_hash (name, struct_hasher::hash (name));
 
       /* Use type found in hash map, unless this is a substantive definition
        * replacing a forward declaration. */
 
       if (strtype)
 	{
-	  str = (struct pdb_struct *)strtype->data;
+	  str = (struct pdb_struct *) strtype->data;
 
 	  if (TYPE_SIZE (t) == 0 || str->property.s.fwdref != 1)
 	    return strtype;
@@ -2514,7 +2528,10 @@ find_type_struct (tree t, bool is_union)
 	  new_fwddef = true;
 	  fwddef->tree = t;
 
-	  slot = tree_hash_table.find_slot_with_hash(t, pdb_type_tree_hasher::hash(t), INSERT);
+	  slot =
+	    tree_hash_table.find_slot_with_hash (t,
+						 pdb_type_tree_hasher::
+						 hash (t), INSERT);
 	  *slot = fwddef;
 	}
     }
@@ -2525,8 +2542,10 @@ find_type_struct (tree t, bool is_union)
 
       fltype =
 	(struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
-				     offsetof (struct pdb_fieldlist, entries) +
-				     (num_entries * sizeof (struct pdb_fieldlist_entry)));
+				     offsetof (struct pdb_fieldlist,
+					       entries) +
+				     (num_entries *
+				      sizeof (struct pdb_fieldlist_entry)));
       fltype->cv_type = LF_FIELDLIST;
       fltype->tree = NULL;
 
@@ -2553,7 +2572,8 @@ find_type_struct (tree t, bool is_union)
 
 		  if (DECL_BIT_FIELD_TYPE (f))
 		    {
-		      struct pdb_type *underlying_type = find_type (DECL_BIT_FIELD_TYPE (f));
+		      struct pdb_type *underlying_type =
+			find_type (DECL_BIT_FIELD_TYPE (f));
 
 		      ent->type =
 			find_type_bitfield (underlying_type,
@@ -2600,8 +2620,10 @@ find_type_struct (tree t, bool is_union)
 				(bit_offset / 8) + fl->entries[i].offset;
 			      ent->fld_attr = fl->entries[i].fld_attr;
 			      ent->name =
-				fl->entries[i].name ? xstrdup (fl->entries[i].
-							       name) : NULL;
+				fl->entries[i].name ? xstrdup (fl->
+							       entries
+							       [i].name) :
+				NULL;
 
 			      ent++;
 			    }
@@ -2628,13 +2650,12 @@ find_type_struct (tree t, bool is_union)
       strtype = struct_types;
       while (strtype)
 	{
-	  str = (struct pdb_struct *)strtype->data;
+	  str = (struct pdb_struct *) strtype->data;
 
 	  if (str->count == num_entries &&
 	      str->field_type == fltype &&
 	      str->size == size &&
-	      str->property.value == prop.value &&
-	      !str->name)
+	      str->property.value == prop.value && !str->name)
 	    return strtype;
 
 	  last_entry = strtype;
@@ -2691,13 +2712,18 @@ find_type_struct (tree t, bool is_union)
 
   if (strtype->tree)
     {
-      slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+      slot =
+	tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t),
+					     INSERT);
       *slot = strtype;
     }
 
   if (name)
     {
-      slot = struct_hash_table.find_slot_with_hash(name, struct_hasher::hash(name), INSERT);
+      slot =
+	struct_hash_table.find_slot_with_hash (name,
+					       struct_hasher::hash (name),
+					       INSERT);
       *slot = strtype;
     }
 
@@ -2733,7 +2759,8 @@ find_type_enum (tree t)
   fltype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
 				 offsetof (struct pdb_fieldlist, entries) +
-				(num_entries * sizeof (struct pdb_fieldlist_entry)));
+				 (num_entries *
+				  sizeof (struct pdb_fieldlist_entry)));
   fltype->cv_type = LF_FIELDLIST;
   fltype->tree = NULL;
 
@@ -2785,8 +2812,7 @@ find_type_enum (tree t)
 	  en->type == en_type &&
 	  en->field_type == fltype &&
 	  ((!en->name && !name)
-	  || (en->name && name
-	  && !strcmp (en->name, name))))
+	   || (en->name && name && !strcmp (en->name, name))))
 	{
 	  if (name)
 	    free (name);
@@ -2826,7 +2852,8 @@ find_type_enum (tree t)
 
   last_type = enumtype;
 
-  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+  slot =
+    tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t), INSERT);
   *slot = enumtype;
 
   return enumtype;
@@ -2861,16 +2888,16 @@ find_type_pointer (tree t)
       TYPE_REF_IS_RVALUE (t) ? CV_PTR_MODE_RVREF : CV_PTR_MODE_LVREF;
 
   t2 = pointer_types;
-  while (t2) {
-    ptr = (struct pdb_pointer *) t2->data;
+  while (t2)
+    {
+      ptr = (struct pdb_pointer *) t2->data;
 
-    if (ptr->type == type &&
-      ptr->attr.num == v.attr.num)
+      if (ptr->type == type && ptr->attr.num == v.attr.num)
 	return t2;
 
-    last_entry = t2;
-    t2 = t2->next2;
-  }
+      last_entry = t2;
+      t2 = t2->next2;
+    }
 
   ptrtype =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
@@ -2898,7 +2925,8 @@ find_type_pointer (tree t)
 
   last_type = ptrtype;
 
-  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+  slot =
+    tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t), INSERT);
   *slot = ptrtype;
 
   return ptrtype;
@@ -2911,7 +2939,8 @@ find_type_array (tree t)
 {
   struct pdb_type *arrtype, *last_entry = NULL, *type;
   struct pdb_array *arr;
-  uint64_t length = TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
+  uint64_t length =
+    TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
   struct pdb_type **slot;
 
   type = find_type (TREE_TYPE (t));
@@ -2958,7 +2987,8 @@ find_type_array (tree t)
 
   last_type = arrtype;
 
-  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+  slot =
+    tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t), INSERT);
   *slot = arrtype;
 
   return arrtype;
@@ -2975,8 +3005,7 @@ add_arglist_type (struct pdb_type *t)
   while (t2)
     {
       struct pdb_arglist *arglist1 = (struct pdb_arglist *) t->data;
-      struct pdb_arglist *arglist2 =
-	(struct pdb_arglist *) t2->data;
+      struct pdb_arglist *arglist2 = (struct pdb_arglist *) t2->data;
 
       if (arglist1->count == arglist2->count)
 	{
@@ -3084,37 +3113,38 @@ find_type_function (tree t)
   if (TARGET_64BIT)
     calling_convention = CV_CALL_NEAR_C;
   else
-  {
-    switch (ix86_get_callcvt (t))
     {
-      case IX86_CALLCVT_CDECL:
-	calling_convention = CV_CALL_NEAR_C;
-	break;
+      switch (ix86_get_callcvt (t))
+	{
+	case IX86_CALLCVT_CDECL:
+	  calling_convention = CV_CALL_NEAR_C;
+	  break;
 
-      case IX86_CALLCVT_STDCALL:
-	calling_convention = CV_CALL_NEAR_STD;
-	break;
+	case IX86_CALLCVT_STDCALL:
+	  calling_convention = CV_CALL_NEAR_STD;
+	  break;
 
-      case IX86_CALLCVT_FASTCALL:
-	calling_convention = CV_CALL_NEAR_FAST;
-	break;
+	case IX86_CALLCVT_FASTCALL:
+	  calling_convention = CV_CALL_NEAR_FAST;
+	  break;
 
-      case IX86_CALLCVT_THISCALL:
-	calling_convention = CV_CALL_THISCALL;
-	break;
+	case IX86_CALLCVT_THISCALL:
+	  calling_convention = CV_CALL_THISCALL;
+	  break;
 
-      default:
-	calling_convention = CV_CALL_NEAR_C;
+	default:
+	  calling_convention = CV_CALL_NEAR_C;
+	}
     }
-  }
 
   proctype = proc_types;
   while (proctype)
     {
       proc = (struct pdb_proc *) proctype->data;
 
-      if (proc->return_type == return_type && proc->calling_convention == calling_convention &&
-	  proc->num_args == num_args && proc->arg_list == arglisttype)
+      if (proc->return_type == return_type
+	  && proc->calling_convention == calling_convention
+	  && proc->num_args == num_args && proc->arg_list == arglisttype)
 	return proctype;
 
       last_entry = proctype;
@@ -3151,7 +3181,8 @@ find_type_function (tree t)
 
   last_type = proctype;
 
-  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+  slot =
+    tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t), INSERT);
   *slot = proctype;
 
   return proctype;
@@ -3214,7 +3245,8 @@ find_type_modifier (tree t)
 
   last_type = type;
 
-  slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+  slot =
+    tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t), INSERT);
   *slot = type;
 
   return type;
@@ -3237,7 +3269,7 @@ add_inbuilt_type (tree t, uint16_t id)
 {
   struct pdb_type *type, **slot;
 
-  type = (struct pdb_type *)xmalloc (offsetof (struct pdb_type, data));
+  type = (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data));
   type->cv_type = 0;
   type->tree = t;
   type->next = type->next2 = NULL;
@@ -3254,7 +3286,9 @@ add_inbuilt_type (tree t, uint16_t id)
 
   if (t)
     {
-      slot = tree_hash_table.find_slot_with_hash(t, htab_hash_pointer(t), INSERT);
+      slot =
+	tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t),
+					     INSERT);
       *slot = type;
     }
 
@@ -3264,53 +3298,57 @@ add_inbuilt_type (tree t, uint16_t id)
 static void
 add_inbuilt_types (void)
 {
-  add_inbuilt_type(char_type_node, CV_BUILTIN_TYPE_NARROW_CHARACTER);
-  add_inbuilt_type(signed_char_type_node, CV_BUILTIN_TYPE_SIGNED_CHARACTER);
-  add_inbuilt_type(unsigned_char_type_node, CV_BUILTIN_TYPE_UNSIGNED_CHARACTER);
-  add_inbuilt_type(short_integer_type_node, CV_BUILTIN_TYPE_INT16SHORT);
-  add_inbuilt_type(short_unsigned_type_node, CV_BUILTIN_TYPE_UINT16SHORT);
-  long_type = add_inbuilt_type(long_integer_type_node, CV_BUILTIN_TYPE_INT32LONG);
-  ulong_type = add_inbuilt_type(long_unsigned_type_node, CV_BUILTIN_TYPE_UINT32LONG);
-  add_inbuilt_type(long_long_integer_type_node, CV_BUILTIN_TYPE_INT64QUAD);
-  add_inbuilt_type(long_long_unsigned_type_node, CV_BUILTIN_TYPE_UINT64QUAD);
+  add_inbuilt_type (char_type_node, CV_BUILTIN_TYPE_NARROW_CHARACTER);
+  add_inbuilt_type (signed_char_type_node, CV_BUILTIN_TYPE_SIGNED_CHARACTER);
+  add_inbuilt_type (unsigned_char_type_node,
+		    CV_BUILTIN_TYPE_UNSIGNED_CHARACTER);
+  add_inbuilt_type (short_integer_type_node, CV_BUILTIN_TYPE_INT16SHORT);
+  add_inbuilt_type (short_unsigned_type_node, CV_BUILTIN_TYPE_UINT16SHORT);
+  long_type =
+    add_inbuilt_type (long_integer_type_node, CV_BUILTIN_TYPE_INT32LONG);
+  ulong_type =
+    add_inbuilt_type (long_unsigned_type_node, CV_BUILTIN_TYPE_UINT32LONG);
+  add_inbuilt_type (long_long_integer_type_node, CV_BUILTIN_TYPE_INT64QUAD);
+  add_inbuilt_type (long_long_unsigned_type_node, CV_BUILTIN_TYPE_UINT64QUAD);
 
-  byte_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BYTE);
-  signed_byte_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_SBYTE);
-  wchar_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_WIDE_CHARACTER);
-  char16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_CHARACTER16);
-  uint16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT16);
-  int16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT16);
-  char32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_CHARACTER32);
-  uint32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT32);
-  int32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT32);
-  uint64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT64);
-  int64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT64);
-  uint128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_UINT128);
-  int128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_INT128);
-  hresult_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_HRESULT);
+  byte_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_BYTE);
+  signed_byte_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_SBYTE);
+  wchar_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_WIDE_CHARACTER);
+  char16_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_CHARACTER16);
+  uint16_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_UINT16);
+  int16_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_INT16);
+  char32_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_CHARACTER32);
+  uint32_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_UINT32);
+  int32_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_INT32);
+  uint64_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_UINT64);
+  int64_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_INT64);
+  uint128_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_UINT128);
+  int128_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_INT128);
+  hresult_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_HRESULT);
 
-  float16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT16);
-  float32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT32);
-  float48_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT48);
-  float64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT64);
-  float80_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT80);
-  float128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_FLOAT128);
+  float16_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_FLOAT16);
+  float32_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_FLOAT32);
+  float48_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_FLOAT48);
+  float64_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_FLOAT64);
+  float80_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_FLOAT80);
+  float128_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_FLOAT128);
 
-  bool8_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN8);
-  bool16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN16);
-  bool32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN32);
-  bool64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN64);
-  bool128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_BOOLEAN128);
+  bool8_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_BOOLEAN8);
+  bool16_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_BOOLEAN16);
+  bool32_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_BOOLEAN32);
+  bool64_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_BOOLEAN64);
+  bool128_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_BOOLEAN128);
 
-  complex16_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX16);
-  complex32_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX32);
-  complex48_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX48);
-  complex64_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX64);
-  complex80_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX80);
-  complex128_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_COMPLEX128);
+  complex16_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_COMPLEX16);
+  complex32_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_COMPLEX32);
+  complex48_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_COMPLEX48);
+  complex64_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_COMPLEX64);
+  complex80_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_COMPLEX80);
+  complex128_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_COMPLEX128);
 
-  void_type = add_inbuilt_type(NULL, CV_BUILTIN_TYPE_VOID);
-  nullptr_type = add_inbuilt_type(NULL, (CV_TM_NPTR << 8) | CV_BUILTIN_TYPE_VOID);
+  void_type = add_inbuilt_type (NULL, CV_BUILTIN_TYPE_VOID);
+  nullptr_type =
+    add_inbuilt_type (NULL, (CV_TM_NPTR << 8) | CV_BUILTIN_TYPE_VOID);
 
   builtins_initialized = true;
 }
@@ -3332,14 +3370,14 @@ find_type (tree t)
 
   // search through typedefs
 
-  al = alias_hash_table.find_with_hash(t, alias_hasher::hash(t));
+  al = alias_hash_table.find_with_hash (t, alias_hasher::hash (t));
 
   if (al)
     return al->type;
 
   // search through existing types
 
-  type = tree_hash_table.find_with_hash(t, pdb_type_tree_hasher::hash(t));
+  type = tree_hash_table.find_with_hash (t, pdb_type_tree_hasher::hash (t));
 
   if (type)
     return type;
@@ -3492,7 +3530,10 @@ find_type (tree t)
 
   if (TYPE_MAIN_VARIANT (t) != t)
     {
-      type = tree_hash_table.find_with_hash(TYPE_MAIN_VARIANT (t), pdb_type_tree_hasher::hash(TYPE_MAIN_VARIANT (t)));
+      type =
+	tree_hash_table.find_with_hash (TYPE_MAIN_VARIANT (t),
+					pdb_type_tree_hasher::
+					hash (TYPE_MAIN_VARIANT (t)));
 
       if (type)
 	return type;
@@ -3534,13 +3575,14 @@ add_string_type (const char *s)
   size_t len = strlen (s);
 
   t = string_types;
-  while (t) {
-    if (!strcmp(s, (char*)t->data))
-      return t;
+  while (t)
+    {
+      if (!strcmp (s, (char *) t->data))
+	return t;
 
-    last_string = t;
-    t = t->next2;
-  }
+      last_string = t;
+      t = t->next2;
+    }
 
   type =
     (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) + len + 1);
@@ -3573,7 +3615,8 @@ add_string_type (const char *s)
  * The linker will transform this into a LF_UDT_MOD_SRC_LINE, which also
  * records the object file. */
 static void
-add_udt_src_line_type (struct pdb_type *ref_type, struct pdb_type *source_file, uint32_t line)
+add_udt_src_line_type (struct pdb_type *ref_type,
+		       struct pdb_type *source_file, uint32_t line)
 {
   struct pdb_type *type;
   struct pdb_udt_src_line *pusl;
@@ -3662,7 +3705,11 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 
 		    str->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
 
-		    slot = struct_hash_table.find_slot_with_hash(str->name, struct_hasher::hash(str->name), INSERT);
+		    slot =
+		      struct_hash_table.find_slot_with_hash (str->name,
+							     struct_hasher::
+							     hash (str->name),
+							     INSERT);
 		    *slot = a->type;
 		  }
 
@@ -3681,7 +3728,11 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 	    }
 	}
 
-      slot = alias_hash_table.find_slot_with_hash(TREE_TYPE (t), htab_hash_pointer(TREE_TYPE (t)), INSERT);
+      slot =
+	alias_hash_table.find_slot_with_hash (TREE_TYPE (t),
+					      htab_hash_pointer (TREE_TYPE
+								 (t)),
+					      INSERT);
       *slot = a;
 
       aliases = a;
@@ -3931,17 +3982,18 @@ pdbout_source_line (unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
 
   psf = source_files;
   while (psf)
-  {
-    if (!strcmp (text, psf->name))
     {
-      source_file = psf->num;
-      break;
+      if (!strcmp (text, psf->name))
+	{
+	  source_file = psf->num;
+	  break;
+	}
+
+      psf = psf->next;
     }
 
-    psf = psf->next;
-  }
-
-  if (cur_func->last_line && cur_func->last_line->line == line && cur_func->last_line->source_file == source_file)
+  if (cur_func->last_line && cur_func->last_line->line == line
+      && cur_func->last_line->source_file == source_file)
     return;
 
   ent = (struct pdb_line *) xmalloc (sizeof (struct pdb_line));
@@ -4395,9 +4447,11 @@ fix_variable_offset (rtx orig_rtl, unsigned int reg, int32_t offset)
 	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
 	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
 	    {
-	      return cfun->machine->frame.hard_frame_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	      return cfun->machine->frame.hard_frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
 	    }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
 	    return cfun->machine->frame.hard_frame_pointer_offset;
 	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
 		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
@@ -4405,13 +4459,14 @@ fix_variable_offset (rtx orig_rtl, unsigned int reg, int32_t offset)
 		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
 	    {
 	      return cfun->machine->frame.hard_frame_pointer_offset -
-		     cfun->machine->frame.frame_pointer_offset +
-		     XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+		cfun->machine->frame.frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
 	    }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
 	    {
 	      return cfun->machine->frame.hard_frame_pointer_offset -
-		     cfun->machine->frame.frame_pointer_offset;
+		cfun->machine->frame.frame_pointer_offset;
 	    }
 	}
       else if (reg == CV_X86_ESP)
@@ -4420,10 +4475,12 @@ fix_variable_offset (rtx orig_rtl, unsigned int reg, int32_t offset)
 	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
 	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
 	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
-	  {
-	    return cfun->machine->frame.stack_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
-	  }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
 	    return cfun->machine->frame.stack_pointer_offset;
 	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
 		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
@@ -4431,13 +4488,14 @@ fix_variable_offset (rtx orig_rtl, unsigned int reg, int32_t offset)
 		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
 	    {
 	      return cfun->machine->frame.stack_pointer_offset -
-		     cfun->machine->frame.frame_pointer_offset +
-		     XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+		cfun->machine->frame.frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
 	    }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
 	    {
 	      return cfun->machine->frame.stack_pointer_offset -
-		     cfun->machine->frame.frame_pointer_offset;
+		cfun->machine->frame.frame_pointer_offset;
 	    }
 	}
     }
@@ -4450,9 +4508,11 @@ fix_variable_offset (rtx orig_rtl, unsigned int reg, int32_t offset)
 	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
 	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
 	    {
-	      return cfun->machine->frame.hard_frame_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	      return cfun->machine->frame.hard_frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
 	    }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
 	    return cfun->machine->frame.hard_frame_pointer_offset;
 	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
 		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
@@ -4460,13 +4520,14 @@ fix_variable_offset (rtx orig_rtl, unsigned int reg, int32_t offset)
 		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
 	    {
 	      return cfun->machine->frame.hard_frame_pointer_offset -
-		     cfun->machine->frame.frame_pointer_offset +
-		     XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+		cfun->machine->frame.frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
 	    }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
 	    {
 	      return cfun->machine->frame.hard_frame_pointer_offset -
-		     cfun->machine->frame.frame_pointer_offset;
+		cfun->machine->frame.frame_pointer_offset;
 	    }
 	}
       else if (reg == CV_AMD64_RSP)
@@ -4476,9 +4537,11 @@ fix_variable_offset (rtx orig_rtl, unsigned int reg, int32_t offset)
 	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
 	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
 	    {
-	      return cfun->machine->frame.stack_pointer_offset + XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	      return cfun->machine->frame.stack_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
 	    }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
 	    return cfun->machine->frame.stack_pointer_offset;
 	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
 		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
@@ -4486,13 +4549,14 @@ fix_variable_offset (rtx orig_rtl, unsigned int reg, int32_t offset)
 		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
 	    {
 	      return cfun->machine->frame.stack_pointer_offset -
-		     cfun->machine->frame.frame_pointer_offset +
-		     XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+		cfun->machine->frame.frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
 	    }
-	  else if (REG_P (XEXP (orig_rtl, 0)) && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
 	    {
 	      return cfun->machine->frame.stack_pointer_offset -
-		     cfun->machine->frame.frame_pointer_offset;
+		cfun->machine->frame.frame_pointer_offset;
 	    }
 	}
     }
@@ -4555,7 +4619,7 @@ add_local (const char *name, tree t, struct pdb_type *type, rtx orig_rtl,
     }
 
   if (plv->var_type == pdb_local_var_regrel)
-    plv->offset = fix_variable_offset(orig_rtl, plv->reg, plv->offset);
+    plv->offset = fix_variable_offset (orig_rtl, plv->reg, plv->offset);
 
   if (cur_func->last_local_var)
     cur_func->last_local_var->next = plv;
@@ -4582,8 +4646,7 @@ pdbout_function_decl_block (tree block)
 	  struct pdb_type *type = find_type (TREE_TYPE (f));
 
 	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
-		     type, DECL_RTL (f),
-		     BLOCK_NUMBER (block));
+		     type, DECL_RTL (f), BLOCK_NUMBER (block));
 
 	  if (type)
 	    type->used = true;
@@ -4619,7 +4682,7 @@ pdbout_function_decl (tree decl)
 	  struct pdb_type *type = find_type (TREE_TYPE (f));
 
 	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
-		     type, DECL_RTL(f), 0);
+		     type, DECL_RTL (f), 0);
 
 	  if (type)
 	    type->used = true;
@@ -4710,7 +4773,8 @@ pdbout_var_location (rtx_insn * loc_note)
 	}
 
       if (var_loc->type == pdb_var_loc_regrel)
-	var_loc->offset = fix_variable_offset(orig_rtl, var_loc->reg, var_loc->offset);
+	var_loc->offset =
+	  fix_variable_offset (orig_rtl, var_loc->reg, var_loc->offset);
     }
 
   fprintf (asm_out_file, ".varloc%u:\n", var_loc_number);

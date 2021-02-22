@@ -1318,7 +1318,8 @@ struct pdb_type_tree_hasher : nofree_ptr_hash <struct pdb_type>
 
   static inline hashval_t hash (compare_type);
 
-  static inline hashval_t hash (const value_type t) {
+  static inline hashval_t hash (const value_type t)
+  {
     return hash (t->tree);
   }
 
@@ -1332,7 +1333,8 @@ struct alias_hasher : nofree_ptr_hash <struct pdb_alias>
 
   static inline hashval_t hash (compare_type);
 
-  static inline hashval_t hash (const value_type t) {
+  static inline hashval_t hash (const value_type t)
+  {
     return hash (t->tree);
   }
 
@@ -1346,8 +1348,9 @@ struct struct_hasher : nofree_ptr_hash <struct pdb_type>
 
   static inline hashval_t hash (compare_type);
 
-  static inline hashval_t hash (const value_type t) {
-    struct pdb_struct *str = (struct pdb_struct *)t->data;
+  static inline hashval_t hash (const value_type t)
+  {
+    struct pdb_struct *str = (struct pdb_struct *) t->data;
 
     return hash (str->name);
   }
