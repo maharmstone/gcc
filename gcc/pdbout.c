@@ -32,6 +32,12 @@
 #include "function.h"
 #include "output.h"
 #include "target.h"
+#include "rtl.h"
+#include "insn-config.h"
+#include "reload.h"
+#include "cp/cp-tree.h"
+#include "common/common-target.h"
+#include "except.h"
 
 #define FUNC_BEGIN_LABEL	".Lstartfunc"
 #define FUNC_END_LABEL		".Lendfunc"
@@ -44,10 +50,16 @@ static void pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 static void pdbout_finish (const char *filename);
 static void pdbout_begin_function (tree func);
 static void pdbout_late_global_decl (tree var);
+static void pdbout_function_decl (tree decl);
+static void pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED,
+				unsigned int blocknum);
+static void pdbout_end_block (unsigned int line ATTRIBUTE_UNUSED,
+			      unsigned int blocknum);
 
 static struct pdb_type *find_type (tree t);
 
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
+static struct pdb_block *cur_block = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
 static hash_table <pdb_type_tree_hasher> tree_hash_table (31);
@@ -73,8 +85,8 @@ const struct gcc_debug_hooks pdb_debug_hooks = {
   debug_nothing_int_charstar,	/* undef */
   debug_nothing_int_charstar,	/* start_source_file */
   debug_nothing_int,		/* end_source_file */
-  debug_nothing_int_int,	/* begin_block */
-  debug_nothing_int_int,	/* end_block */
+  pdbout_begin_block,
+  pdbout_end_block,
   debug_true_const_tree,	/* ignore_block */
   debug_nothing_int_int_charstar_int_bool,	/* source_line */
   pdbout_begin_prologue,
@@ -84,7 +96,7 @@ const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_begin_function,
   debug_nothing_int,		/* end_function */
   debug_nothing_tree,		/* register_main_translation_unit */
-  debug_nothing_tree,		/* function_decl */
+  pdbout_function_decl,
   debug_nothing_tree,		/* early_global_decl */
   pdbout_late_global_decl,
   debug_nothing_tree_int,	/* type_decl */
@@ -120,6 +132,198 @@ pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 		     const char *file ATTRIBUTE_UNUSED)
 {
   fprintf (asm_out_file, FUNC_END_LABEL "%u:\n", current_function_funcdef_no);
+}
+
+/* Output the information as to where to a local variable can be found. */
+static void
+pdbout_local_variable (struct pdb_local_var *v)
+{
+  uint16_t len, align;
+  size_t name_len = strlen (v->name);
+
+  switch (v->var_type)
+    {
+    case pdb_local_var_regrel:
+      if (v->reg == CV_X86_EBP) // ebp is a special case
+	{
+	  len = 13 + name_len;
+
+	  if (len % 4 != 0)
+	    {
+	      align = 4 - (len % 4);
+	      len += 4 - (len % 4);
+	    }
+	  else
+	    align = 0;
+
+	  /* Output BPRELSYM32 struct */
+
+	  fprintf (asm_out_file, "\t.short\t0x%x\n",
+		   (uint16_t) (len - sizeof (uint16_t)));	// reclen
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", S_BPREL32);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n",
+		   v->type ? v->type->id : 0);
+
+	  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+	}
+      else
+	{
+	  len = 15 + name_len;
+
+	  if (len % 4 != 0)
+	    {
+	      align = 4 - (len % 4);
+	      len += 4 - (len % 4);
+	    }
+	  else
+	    align = 0;
+
+	  /* Output REGREL32 struct */
+
+	  fprintf (asm_out_file, "\t.short\t0x%x\n",
+		   (uint16_t) (len - sizeof (uint16_t)));	// reclen
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGREL32);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", v->offset);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n",
+		   v->type ? v->type->id : 0);
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
+
+	  ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+	}
+
+      for (unsigned int i = 0; i < align; i++)
+	{
+	  fprintf (asm_out_file, "\t.byte\t0\n");
+	}
+      break;
+
+    case pdb_local_var_register:
+      len = 11 + name_len;
+
+      if (len % 4 != 0)
+	{
+	  align = 4 - (len % 4);
+	  len += 4 - (len % 4);
+	}
+      else
+	align = 0;
+
+      /* Output REGSYM struct */
+
+      fprintf (asm_out_file, "\t.short\t0x%x\n",
+	       (uint16_t) (len - sizeof (uint16_t)));	// reclen
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_REGISTER);
+      fprintf (asm_out_file, "\t.long\t0x%x\n",
+	       v->type ? v->type->id : 0);
+      fprintf (asm_out_file, "\t.short\t0x%x\n", v->reg);
+
+      ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+
+      for (unsigned int i = 0; i < align; i++)
+	{
+	  fprintf (asm_out_file, "\t.byte\t0\n");
+	}
+      break;
+
+    case pdb_local_var_symbol:
+      len = 15 + name_len;
+
+      if (len % 4 != 0)
+	{
+	  align = 4 - (len % 4);
+	  len += 4 - (len % 4);
+	}
+      else
+	align = 0;
+
+      /* Output DATASYM32 struct */
+
+      fprintf (asm_out_file, "\t.short\t0x%x\n",
+	       (uint16_t) (len - sizeof (uint16_t)));	// reclen
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_LDATA32);
+      fprintf (asm_out_file, "\t.short\t0x%x\n",
+	       v->type ? v->type->id : 0);
+      fprintf (asm_out_file, "\t.short\t0\n");
+
+      fprintf (asm_out_file, "\t.secrel32\t");	// offset
+      ASM_OUTPUT_LABELREF (asm_out_file, v->symbol);
+      fprintf (asm_out_file, "\n");
+
+      fprintf (asm_out_file, "\t.secidx\t");	// section
+      ASM_OUTPUT_LABELREF (asm_out_file, v->symbol);
+      fprintf (asm_out_file, "\n");
+
+      ASM_OUTPUT_ASCII (asm_out_file, v->name, name_len + 1);
+
+      for (unsigned int i = 0; i < align; i++)
+	{
+	  fprintf (asm_out_file, "\t.byte\t0\n");
+	}
+      break;
+
+    default:
+      break;
+    }
+}
+
+/* Output BLOCKSYM32 structure, describing block-level scope
+ * for the purpose of local variables. */
+static void
+pdbout_block (struct pdb_block *block, struct pdb_func *func)
+{
+  struct pdb_local_var *local_var = func->local_vars;
+
+  while (local_var)
+    {
+      if (local_var->block_num == block->num)
+	pdbout_local_variable (local_var);
+
+      local_var = local_var->next;
+    }
+
+  while (block->children)
+    {
+      struct pdb_block *n = block->children->next;
+
+      fprintf (asm_out_file, ".Lcvblockstart%u:\n", block->children->num);
+      fprintf (asm_out_file, "\t.short\t0x16\n");	// reclen
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_BLOCK32);
+
+      // pParent
+      if (block->num != 0)
+	{
+	  fprintf (asm_out_file, "\t.long\t[.Lcvblockstart%u]-[.debug$S]\n",
+		   block->num);
+	}
+      else
+	{
+	  fprintf (asm_out_file, "\t.long\t[.Lcvprocstart%u]-[.debug$S]\n",
+		   func->num);
+	}
+
+      fprintf (asm_out_file, "\t.long\t[.Lcvblockend%u]-[.debug$S]\n",
+	       block->children->num);	// pEnd
+      fprintf (asm_out_file, "\t.long\t[.Lblockend%u]-[.Lblockstart%u]\n",
+	       block->children->num, block->children->num);	// length
+      fprintf (asm_out_file, "\t.secrel32\t.Lblockstart%u\n",
+	       block->children->num);	// offset
+      fprintf (asm_out_file, "\t.secidx\t.Lblockstart%u\n",
+	       block->children->num);	// offset
+
+      fprintf (asm_out_file, "\t.byte\t0\n");	// name (zero-length string)
+      fprintf (asm_out_file, "\t.byte\t0\n");	// padding
+
+      pdbout_block (block->children, func);
+
+      fprintf (asm_out_file, ".Lcvblockend%u:\n", block->children->num);
+      fprintf (asm_out_file, "\t.short\t0x2\n");
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_END);
+
+      free (block->children);
+
+      block->children = n;
+    }
 }
 
 /* Output PROCSYM32 structure, which describes a global function (S_GPROC32)
@@ -174,12 +378,26 @@ pdbout_proc32 (struct pdb_func *func)
       fprintf (asm_out_file, "\t.byte\t0\n");
     }
 
+  pdbout_block (&func->block, func);
+
   // end procedure
 
   fprintf (asm_out_file, ".Lcvprocend%u:\n", func->num);
 
   fprintf (asm_out_file, "\t.short\t0x2\n");
   fprintf (asm_out_file, "\t.short\t0x%x\n", S_END);
+
+  while (func->local_vars)
+    {
+      struct pdb_local_var *n = func->local_vars->next;
+
+      if (func->local_vars->symbol)
+	free (func->local_vars->symbol);
+
+      free (func->local_vars);
+
+      func->local_vars = n;
+    }
 }
 
 /* Output DATASYM32 structure, describing a global variable: either
@@ -312,10 +530,17 @@ pdbout_begin_function (tree func)
   f->num = current_function_funcdef_no;
   f->public_flag = TREE_PUBLIC (func);
   f->type = find_type (TREE_TYPE (func));
+  f->local_vars = f->last_local_var = NULL;
+
+  f->block.next = NULL;
+  f->block.parent = NULL;
+  f->block.num = 0;
+  f->block.children = f->block.last_child = NULL;
 
   funcs = f;
 
   cur_func = f;
+  cur_block = &f->block;
 }
 
 /* We've been passed a late global declaration, i.e. a global variable -
@@ -623,4 +848,1045 @@ find_type (tree t)
     }
 
     return NULL;
+}
+
+/* Given an x86 gcc register no., return the CodeView equivalent. */
+static enum pdb_x86_register
+map_register_no_x86 (unsigned int regno, machine_mode mode)
+{
+  switch (mode)
+    {
+    case E_SImode:
+      switch (regno)
+	{
+	case AX_REG:
+	  return CV_X86_EAX;
+
+	case DX_REG:
+	  return CV_X86_EDX;
+
+	case CX_REG:
+	  return CV_X86_ECX;
+
+	case BX_REG:
+	  return CV_X86_EBX;
+
+	case SI_REG:
+	  return CV_X86_ESI;
+
+	case DI_REG:
+	  return CV_X86_EDI;
+
+	case BP_REG:
+	  return CV_X86_EBP;
+
+	case SP_REG:
+	  return CV_X86_ESP;
+
+	case FLAGS_REG:
+	  return CV_X86_EFLAGS;
+	}
+
+      break;
+
+    case E_HImode:
+      switch (regno)
+	{
+	case AX_REG:
+	  return CV_X86_AX;
+
+	case DX_REG:
+	  return CV_X86_DX;
+
+	case CX_REG:
+	  return CV_X86_CX;
+
+	case BX_REG:
+	  return CV_X86_BX;
+
+	case SI_REG:
+	  return CV_X86_SI;
+
+	case DI_REG:
+	  return CV_X86_DI;
+
+	case BP_REG:
+	  return CV_X86_BP;
+
+	case SP_REG:
+	  return CV_X86_SP;
+
+	case FLAGS_REG:
+	  return CV_X86_FLAGS;
+	}
+
+      break;
+
+    case E_QImode:
+      switch (regno)
+	{
+	case AX_REG:
+	  return CV_X86_AL;
+
+	case DX_REG:
+	  return CV_X86_DL;
+
+	case CX_REG:
+	  return CV_X86_CL;
+
+	case BX_REG:
+	  return CV_X86_BL;
+	}
+
+      break;
+
+    case E_SFmode:
+    case E_DFmode:
+      switch (regno)
+	{
+	case XMM0_REG:
+	  return CV_X86_XMM0;
+
+	case XMM1_REG:
+	  return CV_X86_XMM1;
+
+	case XMM2_REG:
+	  return CV_X86_XMM2;
+
+	case XMM3_REG:
+	  return CV_X86_XMM3;
+
+	case XMM4_REG:
+	  return CV_X86_XMM4;
+
+	case XMM5_REG:
+	  return CV_X86_XMM5;
+
+	case XMM6_REG:
+	  return CV_X86_XMM6;
+
+	case XMM7_REG:
+	  return CV_X86_XMM7;
+
+	case ST0_REG:
+	  return CV_X86_ST0;
+
+	case ST1_REG:
+	  return CV_X86_ST1;
+
+	case ST2_REG:
+	  return CV_X86_ST2;
+
+	case ST3_REG:
+	  return CV_X86_ST3;
+
+	case ST4_REG:
+	  return CV_X86_ST4;
+
+	case ST5_REG:
+	  return CV_X86_ST5;
+
+	case ST6_REG:
+	  return CV_X86_ST6;
+
+	case ST7_REG:
+	  return CV_X86_ST7;
+	}
+
+      break;
+
+    case E_DImode:
+      /* Suppress warning for 64-bit pseudo-registers on x86, e.g. an 8-byte
+       * struct put in ecx:edx. Not representible with CodeView? */
+      return CV_X86_NONE;
+
+    default:
+      break;
+    }
+
+  warning (0, "could not map x86 register %u, mode %u to CodeView constant",
+	   regno, mode);
+
+  return CV_X86_NONE;
+}
+
+/* Given an amd64 gcc register no., return the CodeView equivalent. */
+static enum pdb_amd64_register
+map_register_no_amd64 (unsigned int regno, machine_mode mode)
+{
+  switch (mode)
+    {
+    case E_SImode:
+    case E_SFmode:
+    case E_SDmode:
+      switch (regno)
+	{
+	case AX_REG:
+	  return CV_AMD64_EAX;
+
+	case DX_REG:
+	  return CV_AMD64_EDX;
+
+	case CX_REG:
+	  return CV_AMD64_ECX;
+
+	case BX_REG:
+	  return CV_AMD64_EBX;
+
+	case SI_REG:
+	  return CV_AMD64_ESI;
+
+	case DI_REG:
+	  return CV_AMD64_EDI;
+
+	case BP_REG:
+	  return CV_AMD64_EBP;
+
+	case SP_REG:
+	  return CV_AMD64_ESP;
+
+	case FLAGS_REG:
+	  return CV_AMD64_EFLAGS;
+
+	case R8_REG:
+	  return CV_AMD64_R8D;
+
+	case R9_REG:
+	  return CV_AMD64_R9D;
+
+	case R10_REG:
+	  return CV_AMD64_R10D;
+
+	case R11_REG:
+	  return CV_AMD64_R11D;
+
+	case R12_REG:
+	  return CV_AMD64_R12D;
+
+	case R13_REG:
+	  return CV_AMD64_R13D;
+
+	case R14_REG:
+	  return CV_AMD64_R14D;
+
+	case R15_REG:
+	  return CV_AMD64_R15D;
+
+	case XMM0_REG:
+	  return CV_AMD64_XMM0_0;
+
+	case XMM1_REG:
+	  return CV_AMD64_XMM1_0;
+
+	case XMM2_REG:
+	  return CV_AMD64_XMM2_0;
+
+	case XMM3_REG:
+	  return CV_AMD64_XMM3_0;
+
+	case XMM4_REG:
+	  return CV_AMD64_XMM4_0;
+
+	case XMM5_REG:
+	  return CV_AMD64_XMM5_0;
+
+	case XMM6_REG:
+	  return CV_AMD64_XMM6_0;
+
+	case XMM7_REG:
+	  return CV_AMD64_XMM7_0;
+
+	case XMM8_REG:
+	  return CV_AMD64_XMM8_0;
+
+	case XMM9_REG:
+	  return CV_AMD64_XMM9_0;
+
+	case XMM10_REG:
+	  return CV_AMD64_XMM10_0;
+
+	case XMM11_REG:
+	  return CV_AMD64_XMM11_0;
+
+	case XMM12_REG:
+	  return CV_AMD64_XMM12_0;
+
+	case XMM13_REG:
+	  return CV_AMD64_XMM13_0;
+
+	case XMM14_REG:
+	  return CV_AMD64_XMM14_0;
+
+	case XMM15_REG:
+	  return CV_AMD64_XMM15_0;
+	}
+
+      break;
+
+    case E_DImode:
+    case E_DDmode:
+    case E_DFmode:
+      switch (regno)
+	{
+	case AX_REG:
+	  return CV_AMD64_RAX;
+
+	case DX_REG:
+	  return CV_AMD64_RDX;
+
+	case CX_REG:
+	  return CV_AMD64_RCX;
+
+	case BX_REG:
+	  return CV_AMD64_RBX;
+
+	case SI_REG:
+	  return CV_AMD64_RSI;
+
+	case DI_REG:
+	  return CV_AMD64_RDI;
+
+	case BP_REG:
+	  return CV_AMD64_RBP;
+
+	case SP_REG:
+	  return CV_AMD64_RSP;
+
+	case R8_REG:
+	  return CV_AMD64_R8;
+
+	case R9_REG:
+	  return CV_AMD64_R9;
+
+	case R10_REG:
+	  return CV_AMD64_R10;
+
+	case R11_REG:
+	  return CV_AMD64_R11;
+
+	case R12_REG:
+	  return CV_AMD64_R12;
+
+	case R13_REG:
+	  return CV_AMD64_R13;
+
+	case R14_REG:
+	  return CV_AMD64_R14;
+
+	case R15_REG:
+	  return CV_AMD64_R15;
+
+	case XMM0_REG:
+	  return CV_AMD64_XMM0L;
+
+	case XMM1_REG:
+	  return CV_AMD64_XMM1L;
+
+	case XMM2_REG:
+	  return CV_AMD64_XMM2L;
+
+	case XMM3_REG:
+	  return CV_AMD64_XMM3L;
+
+	case XMM4_REG:
+	  return CV_AMD64_XMM4L;
+
+	case XMM5_REG:
+	  return CV_AMD64_XMM5L;
+
+	case XMM6_REG:
+	  return CV_AMD64_XMM6L;
+
+	case XMM7_REG:
+	  return CV_AMD64_XMM7L;
+
+	case XMM8_REG:
+	  return CV_AMD64_XMM8L;
+
+	case XMM9_REG:
+	  return CV_AMD64_XMM9L;
+
+	case XMM10_REG:
+	  return CV_AMD64_XMM10L;
+
+	case XMM11_REG:
+	  return CV_AMD64_XMM11L;
+
+	case XMM12_REG:
+	  return CV_AMD64_XMM12L;
+
+	case XMM13_REG:
+	  return CV_AMD64_XMM13L;
+
+	case XMM14_REG:
+	  return CV_AMD64_XMM14L;
+
+	case XMM15_REG:
+	  return CV_AMD64_XMM15L;
+	}
+
+      break;
+
+    case E_TImode:
+      switch (regno)
+	{
+	case AX_REG:
+	  return CV_AMD64_RAX;
+
+	case DX_REG:
+	  return CV_AMD64_RDX;
+
+	case CX_REG:
+	  return CV_AMD64_RCX;
+
+	case BX_REG:
+	  return CV_AMD64_RBX;
+
+	case SI_REG:
+	  return CV_AMD64_RSI;
+
+	case DI_REG:
+	  return CV_AMD64_RDI;
+
+	case BP_REG:
+	  return CV_AMD64_RBP;
+
+	case SP_REG:
+	  return CV_AMD64_RSP;
+
+	case R8_REG:
+	  return CV_AMD64_R8;
+
+	case R9_REG:
+	  return CV_AMD64_R9;
+
+	case R10_REG:
+	  return CV_AMD64_R10;
+
+	case R11_REG:
+	  return CV_AMD64_R11;
+
+	case R12_REG:
+	  return CV_AMD64_R12;
+
+	case R13_REG:
+	  return CV_AMD64_R13;
+
+	case R14_REG:
+	  return CV_AMD64_R14;
+
+	case R15_REG:
+	  return CV_AMD64_R15;
+
+	case XMM0_REG:
+	  return CV_AMD64_XMM0;
+
+	case XMM1_REG:
+	  return CV_AMD64_XMM1;
+
+	case XMM2_REG:
+	  return CV_AMD64_XMM2;
+
+	case XMM3_REG:
+	  return CV_AMD64_XMM3;
+
+	case XMM4_REG:
+	  return CV_AMD64_XMM4;
+
+	case XMM5_REG:
+	  return CV_AMD64_XMM5;
+
+	case XMM6_REG:
+	  return CV_AMD64_XMM6;
+
+	case XMM7_REG:
+	  return CV_AMD64_XMM7;
+
+	case XMM8_REG:
+	  return CV_AMD64_XMM8;
+
+	case XMM9_REG:
+	  return CV_AMD64_XMM9;
+
+	case XMM10_REG:
+	  return CV_AMD64_XMM10;
+
+	case XMM11_REG:
+	  return CV_AMD64_XMM11;
+
+	case XMM12_REG:
+	  return CV_AMD64_XMM12;
+
+	case XMM13_REG:
+	  return CV_AMD64_XMM13;
+
+	case XMM14_REG:
+	  return CV_AMD64_XMM14;
+
+	case XMM15_REG:
+	  return CV_AMD64_XMM15;
+	}
+
+      break;
+
+    case E_HImode:
+      switch (regno)
+	{
+	case AX_REG:
+	  return CV_AMD64_AX;
+
+	case DX_REG:
+	  return CV_AMD64_DX;
+
+	case CX_REG:
+	  return CV_AMD64_CX;
+
+	case BX_REG:
+	  return CV_AMD64_BX;
+
+	case SI_REG:
+	  return CV_AMD64_SI;
+
+	case DI_REG:
+	  return CV_AMD64_DI;
+
+	case BP_REG:
+	  return CV_AMD64_BP;
+
+	case SP_REG:
+	  return CV_AMD64_SP;
+
+	case FLAGS_REG:
+	  return CV_AMD64_FLAGS;
+
+	case R8_REG:
+	  return CV_AMD64_R8W;
+
+	case R9_REG:
+	  return CV_AMD64_R9W;
+
+	case R10_REG:
+	  return CV_AMD64_R10W;
+
+	case R11_REG:
+	  return CV_AMD64_R11W;
+
+	case R12_REG:
+	  return CV_AMD64_R12W;
+
+	case R13_REG:
+	  return CV_AMD64_R13W;
+
+	case R14_REG:
+	  return CV_AMD64_R14W;
+
+	case R15_REG:
+	  return CV_AMD64_R15W;
+	}
+
+      break;
+
+    case E_QImode:
+      switch (regno)
+	{
+	case AX_REG:
+	  return CV_AMD64_AL;
+
+	case DX_REG:
+	  return CV_AMD64_DL;
+
+	case CX_REG:
+	  return CV_AMD64_CL;
+
+	case BX_REG:
+	  return CV_AMD64_BL;
+
+	case SI_REG:
+	  return CV_AMD64_SIL;
+
+	case DI_REG:
+	  return CV_AMD64_DIL;
+
+	case BP_REG:
+	  return CV_AMD64_BPL;
+
+	case SP_REG:
+	  return CV_AMD64_SPL;
+
+	case R8_REG:
+	  return CV_AMD64_R8B;
+
+	case R9_REG:
+	  return CV_AMD64_R9B;
+
+	case R10_REG:
+	  return CV_AMD64_R10B;
+
+	case R11_REG:
+	  return CV_AMD64_R11B;
+
+	case R12_REG:
+	  return CV_AMD64_R12B;
+
+	case R13_REG:
+	  return CV_AMD64_R13B;
+
+	case R14_REG:
+	  return CV_AMD64_R14B;
+
+	case R15_REG:
+	  return CV_AMD64_R15B;
+	}
+
+      break;
+
+    case E_TFmode:
+      switch (regno)
+	{
+	case XMM0_REG:
+	  return CV_AMD64_XMM0;
+
+	case XMM1_REG:
+	  return CV_AMD64_XMM1;
+
+	case XMM2_REG:
+	  return CV_AMD64_XMM2;
+
+	case XMM3_REG:
+	  return CV_AMD64_XMM3;
+
+	case XMM4_REG:
+	  return CV_AMD64_XMM4;
+
+	case XMM5_REG:
+	  return CV_AMD64_XMM5;
+
+	case XMM6_REG:
+	  return CV_AMD64_XMM6;
+
+	case XMM7_REG:
+	  return CV_AMD64_XMM7;
+
+	case XMM8_REG:
+	  return CV_AMD64_XMM8;
+
+	case XMM9_REG:
+	  return CV_AMD64_XMM9;
+
+	case XMM10_REG:
+	  return CV_AMD64_XMM10;
+
+	case XMM11_REG:
+	  return CV_AMD64_XMM11;
+
+	case XMM12_REG:
+	  return CV_AMD64_XMM12;
+
+	case XMM13_REG:
+	  return CV_AMD64_XMM13;
+
+	case XMM14_REG:
+	  return CV_AMD64_XMM14;
+
+	case XMM15_REG:
+	  return CV_AMD64_XMM15;
+	}
+
+      break;
+
+    case E_XFmode:
+      switch (regno)
+	{
+	case ST0_REG:
+	  return CV_AMD64_ST0;
+
+	case ST1_REG:
+	  return CV_AMD64_ST1;
+
+	case ST2_REG:
+	  return CV_AMD64_ST2;
+
+	case ST3_REG:
+	  return CV_AMD64_ST3;
+
+	case ST4_REG:
+	  return CV_AMD64_ST4;
+
+	case ST5_REG:
+	  return CV_AMD64_ST5;
+
+	case ST6_REG:
+	  return CV_AMD64_ST6;
+
+	case ST7_REG:
+	  return CV_AMD64_ST7;
+
+	case AX_REG:
+	  return CV_AMD64_RAX;
+
+	case DX_REG:
+	  return CV_AMD64_RDX;
+
+	case CX_REG:
+	  return CV_AMD64_RCX;
+
+	case BX_REG:
+	  return CV_AMD64_RBX;
+
+	case SI_REG:
+	  return CV_AMD64_RSI;
+
+	case DI_REG:
+	  return CV_AMD64_RDI;
+
+	case BP_REG:
+	  return CV_AMD64_RBP;
+
+	case SP_REG:
+	  return CV_AMD64_RSP;
+
+	case R8_REG:
+	  return CV_AMD64_R8;
+
+	case R9_REG:
+	  return CV_AMD64_R9;
+
+	case R10_REG:
+	  return CV_AMD64_R10;
+
+	case R11_REG:
+	  return CV_AMD64_R11;
+
+	case R12_REG:
+	  return CV_AMD64_R12;
+
+	case R13_REG:
+	  return CV_AMD64_R13;
+
+	case R14_REG:
+	  return CV_AMD64_R14;
+
+	case R15_REG:
+	  return CV_AMD64_R15;
+	}
+
+      break;
+
+    default:
+      break;
+    }
+
+  warning (0, "could not map amd64 register %u, mode %u to CodeView constant",
+	   regno, mode);
+
+  return CV_AMD64_NONE;
+}
+
+/* Map a gcc register constant to its CodeView equivalent. */
+static unsigned int
+map_register_no (unsigned int regno, machine_mode mode)
+{
+  if (regno >= FIRST_PSEUDO_REGISTER)
+    return 0;
+
+  if (TARGET_64BIT)
+    return (unsigned int) map_register_no_amd64 (regno, mode);
+  else
+    return (unsigned int) map_register_no_x86 (regno, mode);
+}
+
+/* We can't rely on eliminate_regs for stack offsets - it seems that some
+ * compiler passes alter the stack without changing the values in the
+ * reg_eliminate array that eliminate_regs relies on. */
+static int32_t
+fix_variable_offset (rtx orig_rtl, unsigned int reg, int32_t offset)
+{
+  if (!TARGET_64BIT)
+    {
+      if (reg == CV_X86_EBP)
+	{
+	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	    return cfun->machine->frame.hard_frame_pointer_offset;
+	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset -
+		cfun->machine->frame.frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset -
+		cfun->machine->frame.frame_pointer_offset;
+	    }
+	}
+      else if (reg == CV_X86_ESP)
+	{
+	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	    return cfun->machine->frame.stack_pointer_offset;
+	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset -
+		cfun->machine->frame.frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset -
+		cfun->machine->frame.frame_pointer_offset;
+	    }
+	}
+    }
+  else
+    {
+      if (reg == CV_AMD64_RBP)
+	{
+	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	    return cfun->machine->frame.hard_frame_pointer_offset;
+	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset -
+		cfun->machine->frame.frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.hard_frame_pointer_offset -
+		cfun->machine->frame.frame_pointer_offset;
+	    }
+	}
+      else if (reg == CV_AMD64_RSP)
+	{
+	  if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+	      GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+	      REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == ARGP_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == ARGP_REG)
+	    return cfun->machine->frame.stack_pointer_offset;
+	  else if (GET_CODE (XEXP (orig_rtl, 0)) == PLUS &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 0)) == REG &&
+		   GET_CODE (XEXP (XEXP (orig_rtl, 0), 1)) == CONST_INT &&
+		   REGNO (XEXP (XEXP (orig_rtl, 0), 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset -
+		cfun->machine->frame.frame_pointer_offset +
+		XINT (XEXP (XEXP (orig_rtl, 0), 1), 0);
+	    }
+	  else if (REG_P (XEXP (orig_rtl, 0))
+		   && REGNO (XEXP (orig_rtl, 0)) == FRAME_REG)
+	    {
+	      return cfun->machine->frame.stack_pointer_offset -
+		cfun->machine->frame.frame_pointer_offset;
+	    }
+	}
+    }
+
+  return offset;
+}
+
+/* We've been given a declaration for a local variable. Allocate a
+ * pdb_local_var and add it to the list for this scope block. */
+static void
+add_local (const char *name, tree t, struct pdb_type *type, rtx orig_rtl,
+	   unsigned int block_num)
+{
+  struct pdb_local_var *plv;
+  size_t name_len = strlen (name);
+  rtx rtl;
+
+  plv =
+    (struct pdb_local_var *) xmalloc (offsetof (struct pdb_local_var, name) +
+				      name_len + 1);
+  plv->next = NULL;
+  plv->type = type;
+  plv->symbol = NULL;
+  plv->t = t;
+  plv->block_num = block_num;
+  plv->var_type = pdb_local_var_unknown;
+  memcpy (plv->name, name, name_len + 1);
+
+  rtl = eliminate_regs (orig_rtl, VOIDmode, NULL_RTX);
+
+  if (MEM_P (rtl))
+    {
+      if (GET_CODE (XEXP (rtl, 0)) == PLUS
+	  && GET_CODE (XEXP (XEXP (rtl, 0), 0)) == REG
+	  && GET_CODE (XEXP (XEXP (rtl, 0), 1)) == CONST_INT)
+	{
+	  plv->var_type = pdb_local_var_regrel;
+	  plv->reg =
+	    map_register_no (REGNO (XEXP (XEXP (rtl, 0), 0)),
+			     GET_MODE (XEXP (XEXP (rtl, 0), 0)));
+	  plv->offset = XINT (XEXP (XEXP (rtl, 0), 1), 0);
+	}
+      else if (REG_P (XEXP (rtl, 0)))
+	{
+	  plv->var_type = pdb_local_var_regrel;
+	  plv->reg =
+	    map_register_no (REGNO (XEXP (rtl, 0)), GET_MODE (XEXP (rtl, 0)));
+	  plv->offset = 0;
+	}
+      else if (SYMBOL_REF_P (XEXP (rtl, 0)))
+	{
+	  plv->var_type = pdb_local_var_symbol;
+	  plv->symbol = xstrdup (XSTR (XEXP (rtl, 0), 0));
+	}
+    }
+  else if (REG_P (rtl))
+    {
+      plv->var_type = pdb_local_var_register;
+      plv->reg = map_register_no (REGNO (rtl), GET_MODE (rtl));
+    }
+
+  if (plv->var_type == pdb_local_var_regrel)
+    plv->offset = fix_variable_offset (orig_rtl, plv->reg, plv->offset);
+
+  if (cur_func->last_local_var)
+    cur_func->last_local_var->next = plv;
+
+  cur_func->last_local_var = plv;
+
+  if (!cur_func->local_vars)
+    cur_func->local_vars = plv;
+}
+
+/* We've encountered a scope block within a function - loop through and
+ * add any function declarations, then call recursively for any
+ * sub-blocks. */
+static void
+pdbout_function_decl_block (tree block)
+{
+  tree f;
+
+  f = BLOCK_VARS (block);
+  while (f)
+    {
+      if (TREE_CODE (f) == VAR_DECL && DECL_RTL_SET_P (f) && DECL_NAME (f))
+	{
+	  struct pdb_type *type = find_type (TREE_TYPE (f));
+
+	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
+		     type, DECL_RTL (f), BLOCK_NUMBER (block));
+	}
+
+      f = TREE_CHAIN (f);
+    }
+
+  f = BLOCK_SUBBLOCKS (block);
+  while (f)
+    {
+      pdbout_function_decl_block (f);
+
+      f = BLOCK_CHAIN (f);
+    }
+}
+
+/* We've encountered a function declaration. Add the parameters as local
+ * variables, then loop through and add its scope blocks. */
+static void
+pdbout_function_decl (tree decl)
+{
+  tree f;
+
+  if (!cur_func)
+    return;
+
+  f = DECL_ARGUMENTS (decl);
+  while (f)
+    {
+      if (TREE_CODE (f) == PARM_DECL && DECL_NAME (f))
+	{
+	  struct pdb_type *type = find_type (TREE_TYPE (f));
+
+	  add_local (IDENTIFIER_POINTER (DECL_NAME (f)), f,
+		     type, DECL_RTL (f), 0);
+	}
+
+      f = TREE_CHAIN (f);
+    }
+
+  pdbout_function_decl_block (DECL_INITIAL (decl));
+
+  cur_func = NULL;
+  cur_block = NULL;
+}
+
+/* We've encountered the start of a scope block - output an asm label so
+ * it can be referred to elsewhere. */
+static void
+pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
+{
+  struct pdb_block *b;
+
+  fprintf (asm_out_file, ".Lblockstart%u:\n", blocknum);
+
+  b = (struct pdb_block *) xmalloc (sizeof (pdb_block));
+
+  if (cur_block->last_child)
+    cur_block->last_child->next = b;
+
+  cur_block->last_child = b;
+
+  if (!cur_block->children)
+    cur_block->children = b;
+
+  b->parent = cur_block;
+  b->num = blocknum;
+  b->children = b->last_child = NULL;
+  b->next = NULL;
+
+  cur_block = b;
+}
+
+/* We've encountered the end of a scope block - output an asm label so
+ * it can be referred to elsewhere. */
+static void
+pdbout_end_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
+{
+  fprintf (asm_out_file, ".Lblockend%u:\n", blocknum);
+
+  cur_block = cur_block->parent;
 }
