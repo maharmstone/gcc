@@ -1641,6 +1641,7 @@ mark_referenced_types_used (void)
   while (changed);
 }
 
+/* Loop through our types and assign them sequential numbers. */
 static void
 number_types (void)
 {
@@ -2339,6 +2340,8 @@ get_struct_name (tree t)
   return name;
 }
 
+/* Add a fieldlist - this type does double duty as the basis
+ * of both enums and structs. */
 static struct pdb_type *
 add_type_fieldlist (struct pdb_type *t)
 {
@@ -2994,6 +2997,7 @@ find_type_array (tree t)
   return arrtype;
 }
 
+/* Add an argument list type. */
 static pdb_type *
 add_arglist_type (struct pdb_type *t)
 {
@@ -3295,6 +3299,9 @@ add_inbuilt_type (tree t, uint16_t id)
   return type;
 }
 
+/* Initialize the inbuilt types, ones that we won't output: the integers,
+ * the floats, the bools, etc. Pointers to these are also counted as
+ * predefined types, but we take care of these in number_types. */
 static void
 add_inbuilt_types (void)
 {
@@ -3840,7 +3847,6 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 /* Given a Unix-style path, construct a fake Windows path, which is what windbg
  * and Visual Studio are expecting. This maps / to Z:\, which is the default
  * behaviour on Wine. */
-
 static char *
 make_windows_path (char *src)
 {
