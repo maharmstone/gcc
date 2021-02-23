@@ -79,6 +79,7 @@ static struct pdb_type *arglist_types = NULL;
 static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
 static struct pdb_type *modifier_types = NULL;
+static struct pdb_type *array_types = NULL;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
 static unsigned int num_line_number_entries = 0;
@@ -816,6 +817,71 @@ write_pointer (struct pdb_pointer *ptr)
   fprintf (asm_out_file, "\t.long\t0x%x\n", ptr->attr.num);
 }
 
+/* Output a lfArray structure. */
+static void
+write_array (struct pdb_array *arr)
+{
+  uint16_t len = 15, align;
+
+  if (arr->length >= 0x8000)
+    {
+      if (arr->length <= 0xffff)
+	len += 2;		// LF_USHORT
+      else if (arr->length <= 0xffffffff)
+	len += 4;		// LF_ULONG
+      else
+	len += 8;		// LF_UQUADWORD
+    }
+
+  align = 4 - (len % 4);
+
+  if (align != 4)
+    len += align;
+
+  fprintf (asm_out_file, "\t.short\t0x%lx\n", len - sizeof (uint16_t));
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ARRAY);
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", arr->type ? arr->type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   arr->index_type ? arr->index_type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+
+  if (arr->length >= 0x8000)
+    {
+      if (arr->length <= 0xffff)
+	{
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_USHORT);
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", (uint16_t) arr->length);
+	}
+      else if (arr->length <= 0xffffffff)
+	{
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_ULONG);
+	  fprintf (asm_out_file, "\t.long\t0x%x\n", (uint32_t) arr->length);
+	}
+      else
+	{
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UQUADWORD);
+	  fprintf (asm_out_file, "\t.quad\t0x%" PRIx64 "\n", arr->length);
+	}
+    }
+  else
+    fprintf (asm_out_file, "\t.short\t0x%x\n", (uint32_t) arr->length);
+
+  fprintf (asm_out_file, "\t.byte\t0\n");	// empty string
+
+  if (align != 4)
+    {
+      if (align == 3)
+	fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+      if (align >= 2)
+	fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+      fprintf (asm_out_file, "\t.byte\t0xf1\n");
+    }
+}
+
 /* Output a lfArgList structure, describing the arguments that a
  * procedure expects. */
 static void
@@ -888,6 +954,10 @@ write_type (struct pdb_type *t)
 	return;
 
       write_pointer ((struct pdb_pointer *) t->data);
+      break;
+
+    case LF_ARRAY:
+      write_array ((struct pdb_array *) t->data);
       break;
 
     case LF_ARGLIST:
@@ -1072,6 +1142,66 @@ pdbout_late_global_decl (tree var)
   v->type = find_type (TREE_TYPE (var));
 
   global_vars = v;
+}
+
+/* Given an array type t, allocate a new pdb_type and add it to the
+ * type list. */
+static struct pdb_type *
+find_type_array (tree t)
+{
+  struct pdb_type *arrtype, *last_entry = NULL, *type;
+  struct pdb_array *arr;
+  uint64_t length =
+    TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
+  struct pdb_type **slot;
+
+  type = find_type (TREE_TYPE (t));
+
+  if (!type)
+    return NULL;
+
+  arrtype = array_types;
+  while (arrtype)
+    {
+      arr = (struct pdb_array *) arrtype->data;
+
+      if (arr->type == type && arr->length == length)
+	return arrtype;
+
+      last_entry = arrtype;
+      arrtype = arrtype->next2;
+    }
+
+  arrtype =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_array));
+  arrtype->cv_type = LF_ARRAY;
+  arrtype->tree = t;
+  arrtype->next = arrtype->next2 = NULL;
+  arrtype->id = 0;
+
+  arr = (struct pdb_array *) arrtype->data;
+  arr->type = type;
+  arr->index_type = ulong_type;
+  arr->length = length;
+
+  if (last_entry)
+    last_entry->next2 = arrtype;
+  else
+    array_types = arrtype;
+
+  if (last_type)
+    last_type->next = arrtype;
+  else
+    types = arrtype;
+
+  last_type = arrtype;
+
+  slot =
+    tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t), INSERT);
+  *slot = arrtype;
+
+  return arrtype;
 }
 
 /* Add an argument list type. */
@@ -1681,6 +1811,9 @@ find_type (tree t)
     case POINTER_TYPE:
     case REFERENCE_TYPE:
       return find_type_pointer (t);
+
+    case ARRAY_TYPE:
+      return find_type_array (t);
 
     case FUNCTION_TYPE:
     case METHOD_TYPE:

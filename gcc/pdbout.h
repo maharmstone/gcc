@@ -36,6 +36,14 @@
 #define S_DEFRANGE_REGISTER		0x1141
 #define S_DEFRANGE_REGISTER_REL		0x1145
 #define LF_ARGLIST			0x1201
+#define LF_ARRAY			0x1503
+#define LF_CHAR				0x8000
+#define LF_SHORT			0x8001
+#define LF_USHORT			0x8002
+#define LF_LONG				0x8003
+#define LF_ULONG			0x8004
+#define LF_QUADWORD			0x8009
+#define LF_UQUADWORD			0x800a
 
 /* Format version as of MSVC 7 */
 #define CV_SIGNATURE_C13	4
@@ -159,6 +167,13 @@ struct pdb_pointer
     } s;
     uint32_t num;
   } attr;
+};
+
+struct pdb_array
+{
+  struct pdb_type *type;
+  struct pdb_type *index_type;
+  uint64_t length;
 };
 
 struct pdb_arglist
