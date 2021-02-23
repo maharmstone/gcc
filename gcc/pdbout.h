@@ -36,7 +36,10 @@
 #define S_DEFRANGE_REGISTER		0x1141
 #define S_DEFRANGE_REGISTER_REL		0x1145
 #define LF_ARGLIST			0x1201
+#define LF_FIELDLIST			0x1203
+#define LF_ENUMERATE			0x1502
 #define LF_ARRAY			0x1503
+#define LF_ENUM				0x1507
 #define LF_CHAR				0x8000
 #define LF_SHORT			0x8001
 #define LF_USHORT			0x8002
@@ -132,6 +135,46 @@ struct pdb_global_var
   char *asm_name;
   unsigned int public_flag;
   struct pdb_type *type;
+};
+
+// CV_fldattr_t in cvinfo
+#define CV_FLDATTR_PRIVATE	0x0001
+#define CV_FLDATTR_PROTECTED	0x0002
+#define CV_FLDATTR_PUBLIC	0x0003
+#define CV_FLDATTR_VIRTUAL	0x0004
+#define CV_FLDATTR_STATIC	0x0008
+#define CV_FLDATTR_FRIEND	0x000C
+#define CV_FLDATTR_INTRO	0x0010
+#define CV_FLDATTR_PUREVIRT	0x0014
+#define CV_FLDATTR_PUREINTRO	0x0018
+#define CV_FLDATTR_PSEUDO	0x0020
+#define CV_FLDATTR_NOINHERIT	0x0040
+#define CV_FLDATTR_NOCONSTRUCT	0x0080
+#define CV_FLDATTR_COMPGENX	0x0100
+#define CV_FLDATTR_SEALED	0x0200
+
+struct pdb_fieldlist_entry
+{
+  uint16_t cv_type;
+  struct pdb_type *type;
+  uint16_t offset;
+  uint16_t fld_attr;
+  int64_t value;
+  char *name;
+};
+
+struct pdb_fieldlist
+{
+  unsigned int count;
+  struct pdb_fieldlist_entry entries[1];
+};
+
+struct pdb_enum
+{
+  unsigned int count;
+  struct pdb_type *type;
+  struct pdb_type *field_type;
+  char *name;
 };
 
 // from CV_ptrtype_e in cvdump
