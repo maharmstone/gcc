@@ -3344,6 +3344,8 @@ alias_hasher::equal (const value_type type, compare_type tree)
 static void
 pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 {
+  struct pdb_type *type;
+
   /* We need to record the typedefs to ensure e.g. that Windows'
    * LPWSTR gets mapped to wchar_t* rather than uint16_t*.
    * There is a LF_ALIAS / lfAlias in Microsoft's header files, but
@@ -3365,6 +3367,47 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 	  && !strcmp (IDENTIFIER_POINTER (DECL_NAME (t)), "HRESULT"))
 	a->type = hresult_type;
 
+      // give name if previously anonymous
+
+      if (a->type)
+	{
+	  switch (a->type->cv_type)
+	    {
+	    case LF_STRUCTURE:
+	    case LF_CLASS:
+	    case LF_UNION:
+	      {
+		struct pdb_struct *str = (struct pdb_struct *) a->type->data;
+
+		if (!str->name)
+		  {
+		    struct pdb_type **slot;
+
+		    str->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+
+		    slot =
+		      struct_hash_table.find_slot_with_hash (str->name,
+							     struct_hasher::
+							     hash (str->name),
+							     INSERT);
+		    *slot = a->type;
+		  }
+
+		break;
+	      }
+
+	    case LF_ENUM:
+	      {
+		struct pdb_enum *en = (struct pdb_enum *) a->type->data;
+
+		if (!en->name)
+		  en->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+
+		break;
+	      }
+	    }
+	}
+
       slot =
 	alias_hash_table.find_slot_with_hash (TREE_TYPE (t),
 					      htab_hash_pointer (TREE_TYPE
@@ -3377,7 +3420,41 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
       return;
     }
 
-  find_type (TREE_TYPE (t));
+  type = find_type (TREE_TYPE (t));
+
+  if (!type || type->id != 0)
+    return;
+
+  if (DECL_NAME (t) && IDENTIFIER_POINTER (DECL_NAME (t))
+      && IDENTIFIER_POINTER (DECL_NAME (t))[0] != '.')
+    {
+      // give name if previously anonymous
+
+      switch (type->cv_type)
+	{
+	case LF_STRUCTURE:
+	case LF_CLASS:
+	case LF_UNION:
+	  {
+	    struct pdb_struct *str = (struct pdb_struct *) type->data;
+
+	    if (!str->name)
+	      str->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+
+	    break;
+	  }
+
+	case LF_ENUM:
+	  {
+	    struct pdb_enum *en = (struct pdb_enum *) type->data;
+
+	    if (!en->name)
+	      en->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+
+	    break;
+	  }
+	}
+    }
 }
 
 #ifndef _WIN32
