@@ -85,6 +85,7 @@ static struct pdb_type *modifier_types = NULL;
 static struct pdb_type *fieldlist_types = NULL;
 static struct pdb_type *struct_types = NULL, *last_struct_type = NULL;
 static struct pdb_type *enum_types = NULL;
+static struct pdb_type *bitfield_types = NULL;
 static struct pdb_type *array_types = NULL;
 static struct pdb_alias *aliases = NULL;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
@@ -1312,6 +1313,22 @@ write_modifier (struct pdb_modifier *t)
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 }
 
+/* Output lfBitfield structure. */
+static void
+write_bitfield (struct pdb_bitfield *t)
+{
+  fprintf (asm_out_file, "\t.short\t0xa\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_BITFIELD);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   t->underlying_type ? t->underlying_type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.byte\t0x%x\n", t->size);
+  fprintf (asm_out_file, "\t.byte\t0x%x\n", t->offset);
+
+  fprintf (asm_out_file, "\t.byte\t0xf2\n");	// alignment
+  fprintf (asm_out_file, "\t.byte\t0xf1\n");	// alignment
+}
+
 /* Given a pdb_type, output its definition. */
 static void
 write_type (struct pdb_type *t)
@@ -1356,6 +1373,10 @@ write_type (struct pdb_type *t)
 
     case LF_MODIFIER:
       write_modifier ((struct pdb_modifier *) t->data);
+      break;
+
+    case LF_BITFIELD:
+      write_bitfield ((struct pdb_bitfield *) t->data);
       break;
     }
 }
@@ -1546,6 +1567,57 @@ pdbout_late_global_decl (tree var)
   v->type = find_type (TREE_TYPE (var));
 
   global_vars = v;
+}
+
+/* Allocate a new pdb_type for a bitfield. */
+static struct pdb_type *
+find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
+		    unsigned int offset)
+{
+  struct pdb_type *type, *last_entry = NULL;
+  struct pdb_bitfield *bf;
+
+  type = bitfield_types;
+  while (type)
+    {
+      bf = (struct pdb_bitfield *) type->data;
+
+      if (bf->underlying_type == underlying_type && bf->size == size
+	  && bf->offset == offset)
+	return type;
+
+      last_entry = type;
+      type = type->next2;
+    }
+
+  type =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_bitfield));
+
+  type->cv_type = LF_BITFIELD;
+  type->tree = NULL;
+  type->next = type->next2 = NULL;
+  type->id = 0;
+
+  bf = (struct pdb_bitfield *) type->data;
+
+  bf->underlying_type = underlying_type;
+  bf->size = size;
+  bf->offset = offset;
+
+  if (last_entry)
+    last_entry->next2 = type;
+  else
+    bitfield_types = type;
+
+  if (last_type)
+    last_type->next = type;
+  else
+    types = type;
+
+  last_type = type;
+
+  return type;
 }
 
 /* Allocate a pdb_type for a forward declaration for a struct. The debugger
@@ -1844,8 +1916,25 @@ find_type_struct (tree t, bool is_union)
 		  ent->fld_attr = CV_FLDATTR_PUBLIC;
 		  ent->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (f)));
 
-		  ent->type = find_type (TREE_TYPE (f));
-		  ent->offset = bit_offset / 8;
+		  if (DECL_BIT_FIELD_TYPE (f))
+		    {
+		      struct pdb_type *underlying_type =
+			find_type (DECL_BIT_FIELD_TYPE (f));
+
+		      ent->type =
+			find_type_bitfield (underlying_type,
+					    TREE_INT_CST_ELT (DECL_SIZE (f),
+							      0),
+					    TREE_INT_CST_ELT
+					    (DECL_FIELD_BIT_OFFSET (f), 0));
+		      ent->offset =
+			TREE_INT_CST_ELT (DECL_FIELD_OFFSET (f), 0);
+		    }
+		  else
+		    {
+		      ent->type = find_type (TREE_TYPE (f));
+		      ent->offset = bit_offset / 8;
+		    }
 
 		  ent++;
 		}
