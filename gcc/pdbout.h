@@ -201,6 +201,13 @@ struct pdb_type
   uint8_t data[1];
 };
 
+struct pdb_alias
+{
+  struct pdb_alias *next;
+  tree_node *tree;
+  struct pdb_type *type;
+};
+
 #define CV_BUILTIN_TYPE_VOID			0x0003
 #define CV_BUILTIN_TYPE_HRESULT			0x0008
 #define CV_BUILTIN_TYPE_SIGNED_CHARACTER	0x0010
@@ -1220,6 +1227,21 @@ enum pdb_amd64_register
   CV_AMD64_YMM15D1 = 685,
   CV_AMD64_YMM15D2 = 686,
   CV_AMD64_YMM15D3 = 687
+};
+
+struct alias_hasher : nofree_ptr_hash <struct pdb_alias>
+{
+  typedef struct pdb_alias *value_type;
+  typedef tree compare_type;
+
+  static inline hashval_t hash (compare_type);
+
+  static inline hashval_t hash (const value_type t)
+  {
+    return hash (t->tree);
+  }
+
+  static inline bool equal (const value_type, compare_type);
 };
 
 #endif

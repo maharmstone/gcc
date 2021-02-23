@@ -55,6 +55,7 @@ static void pdbout_init (const char *filename);
 static void pdbout_finish (const char *filename);
 static void pdbout_begin_function (tree func);
 static void pdbout_late_global_decl (tree var);
+static void pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED);
 static void pdbout_start_source_file (unsigned int line ATTRIBUTE_UNUSED,
 				      const char *file);
 static void pdbout_source_line (unsigned int line,
@@ -80,6 +81,7 @@ static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
 static struct pdb_type *modifier_types = NULL;
 static struct pdb_type *array_types = NULL;
+static struct pdb_alias *aliases = NULL;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
 static unsigned int num_line_number_entries = 0;
@@ -98,6 +100,7 @@ static struct pdb_type *complex16_type, *complex32_type, *complex48_type,
   *complex64_type, *complex80_type, *complex128_type;
 static struct pdb_type *void_type, *nullptr_type;
 static bool builtins_initialized = false;
+static hash_table <alias_hasher> alias_hash_table (31);
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -122,7 +125,7 @@ const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_function_decl,
   debug_nothing_tree,		/* early_global_decl */
   pdbout_late_global_decl,
-  debug_nothing_tree_int,	/* type_decl */
+  pdbout_type_decl,
   debug_nothing_tree_tree_tree_bool_bool,	/* imported_module_or_decl */
   debug_false_tree_charstarstar_uhwistar,	/* die_ref_for_decl */
   debug_nothing_tree_charstar_uhwi,	/* register_external_die */
@@ -999,6 +1002,17 @@ write_pdb_type_section (void)
 
       types = n;
     }
+
+  while (aliases)
+    {
+      struct pdb_alias *n;
+
+      n = aliases->next;
+
+      free (aliases);
+
+      aliases = n;
+    }
 }
 
 /* Loop through our types and assign them sequential numbers. */
@@ -1635,12 +1649,20 @@ static struct pdb_type *
 find_type (tree t)
 {
   struct pdb_type *type;
+  struct pdb_alias *al;
 
   if (!builtins_initialized)
     add_builtin_types ();
 
   if (!t)
     return NULL;
+
+  // search through typedefs
+
+  al = alias_hash_table.find_with_hash (t, alias_hasher::hash (t));
+
+  if (al)
+    return al->type;
 
   // search through existing types
 
@@ -1822,6 +1844,58 @@ find_type (tree t)
     default:
       return NULL;
     }
+}
+
+inline hashval_t
+alias_hasher::hash (alias_hasher::compare_type tree)
+{
+  return htab_hash_pointer (tree);
+}
+
+inline bool
+alias_hasher::equal (const value_type type, compare_type tree)
+{
+  return type->tree == tree;
+}
+
+/* We've encountered a type definition - add it to the type list. */
+static void
+pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
+{
+  /* We need to record the typedefs to ensure e.g. that Windows'
+   * LPWSTR gets mapped to wchar_t* rather than uint16_t*.
+   * There is a LF_ALIAS / lfAlias in Microsoft's header files, but
+   * it seems to have been forgotten about - MSVC won't generate it. */
+
+  if (DECL_ORIGINAL_TYPE (t))	// typedef
+    {
+      struct pdb_alias *a, **slot;
+
+      a = (struct pdb_alias *) xmalloc (sizeof (struct pdb_alias));
+
+      a->next = aliases;
+      a->tree = TREE_TYPE (t);
+      a->type = find_type (DECL_ORIGINAL_TYPE (t));
+
+      // HRESULTs have their own value
+      if (a->type == long_type && DECL_NAME (t)
+	  && IDENTIFIER_POINTER (DECL_NAME (t))
+	  && !strcmp (IDENTIFIER_POINTER (DECL_NAME (t)), "HRESULT"))
+	a->type = hresult_type;
+
+      slot =
+	alias_hash_table.find_slot_with_hash (TREE_TYPE (t),
+					      htab_hash_pointer (TREE_TYPE
+								 (t)),
+					      INSERT);
+      *slot = a;
+
+      aliases = a;
+
+      return;
+    }
+
+  find_type (TREE_TYPE (t));
 }
 
 #ifndef _WIN32
