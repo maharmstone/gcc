@@ -76,6 +76,7 @@ static struct pdb_block *cur_block = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
 static struct pdb_type *arglist_types = NULL;
+static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
@@ -803,6 +804,17 @@ free_type (struct pdb_type *t)
   free (t);
 }
 
+/* Output a lfPointer structure. */
+static void
+write_pointer (struct pdb_pointer *ptr)
+{
+  fprintf (asm_out_file, "\t.short\t0xa\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_POINTER);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", ptr->type ? ptr->type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.long\t0x%x\n", ptr->attr.num);
+}
+
 /* Output a lfArgList structure, describing the arguments that a
  * procedure expects. */
 static void
@@ -857,6 +869,13 @@ write_type (struct pdb_type *t)
 {
   switch (t->cv_type)
     {
+    case LF_POINTER:
+      if (t->id < FIRST_TYPE_NUM)	// pointer to builtin
+	return;
+
+      write_pointer ((struct pdb_pointer *) t->data);
+      break;
+
     case LF_ARGLIST:
       write_arglist ((struct pdb_arglist *) t->data);
       break;
@@ -910,13 +929,38 @@ number_types (void)
 	  continue;
 	}
 
-      t->id = type_num;
-      type_num++;
-
-      if (type_num == 0)	// overflow
+      switch (t->cv_type)
 	{
-	  fprintf (stderr, "too many CodeView types\n");
-	  xexit (1);
+	case LF_POINTER:
+	  {
+	    struct pdb_pointer *ptr = (struct pdb_pointer *) t->data;
+
+	    // pointers to builtins have their own constants
+	    if (ptr->type && ptr->type->id != 0 && ptr->type->id < 0x100)
+	      {
+		if (ptr->attr.s.ptrtype == CV_PTR_NEAR32)
+		  {
+		    t->id = (CV_TM_NPTR32 << 8) | ptr->type->id;
+		    break;
+		  }
+		else if (ptr->attr.s.ptrtype == CV_PTR_64)
+		  {
+		    t->id = (CV_TM_NPTR64 << 8) | ptr->type->id;
+		    break;
+		  }
+	      }
+	    [[fallthrough]];
+	  }
+
+	default:
+	  t->id = type_num;
+	  type_num++;
+
+	  if (type_num == 0)	// overflow
+	    {
+	      fprintf (stderr, "too many CodeView types\n");
+	      xexit (1);
+	    }
 	}
 
       t = t->next;
@@ -1070,6 +1114,77 @@ add_arglist_type (struct pdb_type *t)
     arglist_types = t;
 
   return t;
+}
+
+/* Given a pointer type t, allocate a new pdb_type and add it to the
+ * type list. */
+static struct pdb_type *
+find_type_pointer (tree t)
+{
+  struct pdb_type *ptrtype, *t2, *last_entry = NULL, *type;
+  struct pdb_pointer *ptr, v;
+  unsigned int size = TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8;
+  struct pdb_type **slot;
+
+  type = find_type (TREE_TYPE (t));
+
+  if (!type)
+    return NULL;
+
+  v.attr.num = 0;
+
+  v.attr.s.size = size;
+
+  if (size == 8)
+    v.attr.s.ptrtype = CV_PTR_64;
+  else if (size == 4)
+    v.attr.s.ptrtype = CV_PTR_NEAR32;
+
+  if (TREE_CODE (t) == REFERENCE_TYPE)
+    v.attr.s.ptrmode =
+      TYPE_REF_IS_RVALUE (t) ? CV_PTR_MODE_RVREF : CV_PTR_MODE_LVREF;
+
+  t2 = pointer_types;
+  while (t2)
+    {
+      ptr = (struct pdb_pointer *) t2->data;
+
+      if (ptr->type == type && ptr->attr.num == v.attr.num)
+	return t2;
+
+      last_entry = t2;
+      t2 = t2->next2;
+    }
+
+  ptrtype =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_pointer));
+  ptrtype->cv_type = LF_POINTER;
+  ptrtype->tree = t;
+  ptrtype->next = ptrtype->next2 = NULL;
+  ptrtype->id = 0;
+
+  ptr = (struct pdb_pointer *) ptrtype->data;
+  ptr->type = type;
+  ptr->attr.num = v.attr.num;
+
+  if (last_entry)
+    last_entry->next2 = ptrtype;
+  else
+    pointer_types = ptrtype;
+
+  if (last_type)
+    last_type->next = ptrtype;
+  else
+    types = ptrtype;
+
+  last_type = ptrtype;
+
+  slot =
+    tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t), INSERT);
+  *slot = ptrtype;
+
+  return ptrtype;
 }
 
 /* Given a function type t, allocate a new pdb_type and add it to the
@@ -1478,6 +1593,10 @@ find_type (tree t)
 
   switch (TREE_CODE (t))
     {
+    case POINTER_TYPE:
+    case REFERENCE_TYPE:
+      return find_type_pointer (t);
+
     case FUNCTION_TYPE:
     case METHOD_TYPE:
       return find_type_function (t);

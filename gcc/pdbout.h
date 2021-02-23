@@ -21,6 +21,7 @@
 #define GCC_PDBOUT_H 1
 
 #define S_END				0x0006
+#define LF_POINTER			0x1002
 #define LF_PROCEDURE			0x1008
 #define S_BLOCK32			0x1103
 #define S_REGISTER			0x1106
@@ -122,6 +123,41 @@ struct pdb_global_var
   char *asm_name;
   unsigned int public_flag;
   struct pdb_type *type;
+};
+
+// from CV_ptrtype_e in cvdump
+#define CV_PTR_NEAR32		0x0a
+#define CV_PTR_64		0x0c
+
+// from CV_ptrmode_e in cvdump
+#define CV_PTR_MODE_PTR		0x0
+#define CV_PTR_MODE_LVREF	0x1
+#define CV_PTR_MODE_PMEM	0x2
+#define CV_PTR_MODE_PMFUNC	0x3
+#define CV_PTR_MODE_RVREF	0x4
+
+struct pdb_pointer
+{
+  struct pdb_type *type;
+  union
+  {
+    struct
+    {
+      uint32_t ptrtype:5;
+      uint32_t ptrmode:3;
+      uint32_t isflat32:1;
+      uint32_t isvolatile:1;
+      uint32_t isconst:1;
+      uint32_t isunaligned:1;
+      uint32_t isrestrict:1;
+      uint32_t size:6;
+      uint32_t ismocom:1;
+      uint32_t islref:1;
+      uint32_t isrref:1;
+      uint32_t unused:10;
+    } s;
+    uint32_t num;
+  } attr;
 };
 
 struct pdb_arglist
