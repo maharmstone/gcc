@@ -78,6 +78,7 @@ static struct pdb_type *types = NULL, *last_type = NULL;
 static struct pdb_type *arglist_types = NULL;
 static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
+static struct pdb_type *modifier_types = NULL;
 static struct pdb_source_file *source_files = NULL, *last_source_file = NULL;
 static uint32_t source_file_string_offset = 1;
 static unsigned int num_line_number_entries = 0;
@@ -863,6 +864,19 @@ write_procedure (struct pdb_proc *proc)
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 }
 
+/* Output lfModifier structure, representing a const or volatile version
+ * of an existing type. */
+static void
+write_modifier (struct pdb_modifier *t)
+{
+  fprintf (asm_out_file, "\t.short\t0xa\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_MODIFIER);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->type ? t->type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->modifier);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+}
+
 /* Given a pdb_type, output its definition. */
 static void
 write_type (struct pdb_type *t)
@@ -882,6 +896,10 @@ write_type (struct pdb_type *t)
 
     case LF_PROCEDURE:
       write_procedure ((struct pdb_proc *) t->data);
+      break;
+
+    case LF_MODIFIER:
+      write_modifier ((struct pdb_modifier *) t->data);
       break;
     }
 }
@@ -1318,6 +1336,68 @@ find_type_function (tree t)
   return proctype;
 }
 
+/* Given a CV-modified type t, allocate a new pdb_type modifying
+ * the base type, and add it to the type list. */
+static struct pdb_type *
+find_type_modifier (tree t)
+{
+  struct pdb_type *type, *last_entry = NULL, *base_type;
+  struct pdb_modifier *mod;
+  uint16_t modifier = 0;
+  struct pdb_type **slot;
+
+  base_type = find_type (TYPE_MAIN_VARIANT (t));
+
+  if (TYPE_READONLY (t))
+    modifier |= CV_MODIFIER_CONST;
+
+  if (TYPE_VOLATILE (t))
+    modifier |= CV_MODIFIER_VOLATILE;
+
+  type = modifier_types;
+  while (type)
+    {
+      mod = (struct pdb_modifier *) type->data;
+
+      if (mod->type == base_type && mod->modifier == modifier)
+	return type;
+
+      last_entry = type;
+      type = type->next2;
+    }
+
+  type =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_modifier));
+  type->cv_type = LF_MODIFIER;
+  type->tree = t;
+  type->next = type->next2 = NULL;
+  type->id = 0;
+
+  mod = (struct pdb_modifier *) type->data;
+
+  mod->type = base_type;
+  mod->modifier = modifier;
+
+  if (last_entry)
+    last_entry->next2 = type;
+  else
+    modifier_types = type;
+
+  if (last_type)
+    last_type->next = type;
+  else
+    types = type;
+
+  last_type = type;
+
+  slot =
+    tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t), INSERT);
+  *slot = type;
+
+  return type;
+}
+
 inline hashval_t
 pdb_type_tree_hasher::hash (pdb_type_tree_hasher::compare_type tree)
 {
@@ -1438,6 +1518,11 @@ find_type (tree t)
 
   if (type)
     return type;
+
+  // add modifier type if const or volatile
+
+  if (TYPE_READONLY (t) || TYPE_VOLATILE (t))
+    return find_type_modifier (t);
 
   switch (TREE_CODE (t))
     {
