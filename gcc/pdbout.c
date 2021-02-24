@@ -79,6 +79,7 @@ static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_block *cur_block = NULL;
 static struct pdb_global_var *global_vars = NULL;
 static struct pdb_type *types = NULL, *last_type = NULL;
+static struct pdb_type *string_types = NULL;
 static struct pdb_type *arglist_types = NULL;
 static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
@@ -1301,6 +1302,53 @@ write_procedure (struct pdb_proc *proc)
   fprintf (asm_out_file, "\t.short\t0\n");	// padding
 }
 
+/* Output lfStringId structure. */
+static void
+write_string_id (struct pdb_type *t)
+{
+  size_t string_len = strlen ((const char *) t->data);
+  size_t len = 9 + string_len, align;
+
+  if (len % 4 != 0)
+    align = 4 - (len % 4);
+  else
+    align = 0;
+
+  len += align;
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   (uint16_t) (len - sizeof (uint16_t)));
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_STRING_ID);
+  fprintf (asm_out_file, "\t.long\t0\n");
+  ASM_OUTPUT_ASCII (asm_out_file, (const char *) t->data, string_len + 1);
+
+  if (align == 3)
+    fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+  if (align >= 2)
+    fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+  if (align >= 1)
+    fprintf (asm_out_file, "\t.byte\t0xf1\n");
+}
+
+/* Output lfUdtSrcLine structure, describing on which line in a file a
+ * type is defined. The linker transforms this into a lfUdtModSrcLine
+ * structure (LF_UDT_MOD_SRC_LINE), which also adds details of the
+ * "module" (i.e. object file). */
+static void
+write_udt_src_line (struct pdb_udt_src_line *t)
+{
+  fprintf (asm_out_file, "\t.short\t0xe\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", LF_UDT_SRC_LINE);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", t->type ? t->type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   t->source_file ? t->source_file->id : 0);
+  fprintf (asm_out_file, "\t.short\t0\n");	// padding
+  fprintf (asm_out_file, "\t.long\t0x%x\n", t->line);
+}
+
 /* Output lfModifier structure, representing a const or volatile version
  * of an existing type. */
 static void
@@ -1370,6 +1418,14 @@ write_type (struct pdb_type *t)
 
     case LF_PROCEDURE:
       write_procedure ((struct pdb_proc *) t->data);
+      break;
+
+    case LF_STRING_ID:
+      write_string_id (t);
+      break;
+
+    case LF_UDT_SRC_LINE:
+      write_udt_src_line ((struct pdb_udt_src_line *) t->data);
       break;
 
     case LF_MODIFIER:
@@ -2029,6 +2085,7 @@ find_type_bitfield (struct pdb_type *underlying_type, unsigned int size,
   type->tree = NULL;
   type->next = type->next2 = NULL;
   type->id = 0;
+  type->udt_src_line = NULL;
 
   bf = (struct pdb_bitfield *) type->data;
 
@@ -2081,6 +2138,7 @@ add_struct_forward_declaration (tree t, const char *name)
   strtype->tree = NULL;
   strtype->next = strtype->next2 = NULL;
   strtype->id = 0;
+  strtype->udt_src_line = NULL;
 
   str = (struct pdb_struct *) strtype->data;
   str->count = 0;
@@ -2195,6 +2253,7 @@ add_type_fieldlist (struct pdb_type *t)
 
   t->next = t->next2 = NULL;
   t->id = 0;
+  t->udt_src_line = NULL;
 
   if (last_entry)
     last_entry->next2 = t;
@@ -2459,6 +2518,7 @@ find_type_struct (tree t, bool is_union)
 
   strtype->next = strtype->next2 = NULL;
   strtype->id = 0;
+  strtype->udt_src_line = NULL;
 
   str = (struct pdb_struct *) strtype->data;
   str->count = num_entries;
@@ -2539,6 +2599,7 @@ find_type_array (tree t)
   arrtype->tree = t;
   arrtype->next = arrtype->next2 = NULL;
   arrtype->id = 0;
+  arrtype->udt_src_line = NULL;
 
   arr = (struct pdb_array *) arrtype->data;
   arr->type = type;
@@ -2607,6 +2668,7 @@ add_arglist_type (struct pdb_type *t)
 
   t->next = NULL;
   t->next2 = NULL;
+  t->udt_src_line = NULL;
   t->id = 0;
 
   if (last_type)
@@ -2725,6 +2787,7 @@ find_type_enum (tree t)
   enumtype->tree = t;
   enumtype->next = enumtype->next2 = NULL;
   enumtype->id = 0;
+  enumtype->udt_src_line = NULL;
 
   en = (struct pdb_enum *) enumtype->data;
   en->count = num_entries;
@@ -2798,6 +2861,7 @@ find_type_pointer (tree t)
   ptrtype->tree = t;
   ptrtype->next = ptrtype->next2 = NULL;
   ptrtype->id = 0;
+  ptrtype->udt_src_line = NULL;
 
   ptr = (struct pdb_pointer *) ptrtype->data;
   ptr->type = type;
@@ -2925,6 +2989,7 @@ find_type_function (tree t)
   proctype->tree = t;
   proctype->next = proctype->next2 = NULL;
   proctype->id = 0;
+  proctype->udt_src_line = NULL;
 
   proc = (struct pdb_proc *) proctype->data;
 
@@ -2990,6 +3055,7 @@ find_type_modifier (tree t)
   type->tree = t;
   type->next = type->next2 = NULL;
   type->id = 0;
+  type->udt_src_line = NULL;
 
   mod = (struct pdb_modifier *) type->data;
 
@@ -3037,6 +3103,7 @@ add_builtin_type (tree t, uint16_t id)
   type->tree = t;
   type->next = type->next2 = NULL;
   type->id = id;
+  type->udt_src_line = NULL;
 
   if (last_type)
     last_type->next = type;
@@ -3328,6 +3395,84 @@ find_type (tree t)
     }
 }
 
+/* Add a string as a type. This is only used by add_udt_src_line_type,
+ * which uses it to deduplicate source filenames. */
+static struct pdb_type *
+add_string_type (const char *s)
+{
+  struct pdb_type *type, *t, *last_string = NULL;
+  size_t len = strlen (s);
+
+  t = string_types;
+  while (t)
+    {
+      if (!strcmp (s, (char *) t->data))
+	return t;
+
+      last_string = t;
+      t = t->next2;
+    }
+
+  type =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) + len + 1);
+  type->cv_type = LF_STRING_ID;
+  type->tree = NULL;
+  type->next = type->next2 = NULL;
+  type->udt_src_line = NULL;
+  type->id = 0;
+
+  memcpy (type->data, s, len + 1);
+
+  if (last_string)
+    last_string->next2 = type;
+  else
+    string_types = type;
+
+  if (last_type)
+    last_type->next = type;
+  else
+    types = type;
+
+  last_type = type;
+
+  return type;
+}
+
+/* Add a pdb_udt_src_line fake type to the type list, which records the file
+ * and line number where an actual type is defined.
+ * The linker will transform this into a LF_UDT_MOD_SRC_LINE, which also
+ * records the object file. */
+static void
+add_udt_src_line_type (struct pdb_type *ref_type,
+		       struct pdb_type *source_file, uint32_t line)
+{
+  struct pdb_type *type;
+  struct pdb_udt_src_line *pusl;
+
+  type =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_udt_src_line));
+  type->cv_type = LF_UDT_SRC_LINE;
+  type->tree = NULL;
+  type->next = type->next2 = NULL;
+  type->udt_src_line = NULL;
+  type->id = 0;
+
+  pusl = (struct pdb_udt_src_line *) type->data;
+  pusl->type = ref_type;
+  pusl->source_file = source_file;
+  pusl->line = line;
+
+  if (last_type)
+    last_type->next = type;
+  else
+    types = type;
+
+  last_type = type;
+
+  ref_type->udt_src_line = type;
+}
+
 inline hashval_t
 alias_hasher::hash (alias_hasher::compare_type tree)
 {
@@ -3344,7 +3489,9 @@ alias_hasher::equal (const value_type type, compare_type tree)
 static void
 pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 {
-  struct pdb_type *type;
+  struct pdb_type *string_type, *type;
+  struct pdb_source_file *psf;
+  expanded_location xloc;
 
   /* We need to record the typedefs to ensure e.g. that Windows'
    * LPWSTR gets mapped to wchar_t* rather than uint16_t*.
@@ -3455,6 +3602,65 @@ pdbout_type_decl (tree t, int local ATTRIBUTE_UNUSED)
 	  }
 	}
     }
+
+  if (!DECL_SOURCE_LOCATION (t) || type->udt_src_line)
+    return;
+
+  xloc = expand_location (DECL_SOURCE_LOCATION (t));
+
+  if (!xloc.file)
+    return;
+
+  // don't create LF_UDT_SRC_LINE entry for anonymous types
+
+  switch (type->cv_type)
+    {
+    case LF_STRUCTURE:
+    case LF_CLASS:
+    case LF_UNION:
+      {
+	struct pdb_struct *str = (struct pdb_struct *) type->data;
+
+	if (!str->name)
+	  return;
+
+	break;
+      }
+
+    case LF_ENUM:
+      {
+	struct pdb_enum *en = (struct pdb_enum *) type->data;
+
+	if (!en->name)
+	  return;
+
+	break;
+      }
+
+    default:
+      return;
+    }
+
+  string_type = NULL;
+
+  // add filename as LF_STRING_ID, so linker puts it into string table
+
+  psf = source_files;
+  while (psf)
+    {
+      if (!strcmp (psf->name, xloc.file))
+	{
+	  string_type = add_string_type (psf->name + strlen (psf->name) + 1);
+	  break;
+	}
+
+      psf = psf->next;
+    }
+
+  // add LF_UDT_SRC_LINE entry, which linker transforms
+  // into LF_UDT_MOD_SRC_LINE
+
+  add_udt_src_line_type (type, string_type, xloc.line);
 }
 
 #ifndef _WIN32

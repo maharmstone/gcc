@@ -45,6 +45,8 @@
 #define LF_UNION			0x1506
 #define LF_ENUM				0x1507
 #define LF_MEMBER			0x150d
+#define LF_STRING_ID			0x1605
+#define LF_UDT_SRC_LINE			0x1606
 #define LF_CHAR				0x8000
 #define LF_SHORT			0x8001
 #define LF_USHORT			0x8002
@@ -270,6 +272,13 @@ struct pdb_proc
   struct pdb_type *arg_list;
 };
 
+struct pdb_udt_src_line
+{
+  struct pdb_type *type;
+  struct pdb_type *source_file;
+  uint32_t line;
+};
+
 struct pdb_type
 {
   struct pdb_type *next;
@@ -277,6 +286,7 @@ struct pdb_type
   uint16_t id;
   tree_node *tree;
   uint16_t cv_type;
+  struct pdb_type *udt_src_line;
   uint8_t data[1];
 };
 
