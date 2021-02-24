@@ -37,6 +37,13 @@
 #define CV_SIGNATURE_C13	4
 
 #define DEBUG_S_SYMBOLS			0xf1
+#define DEBUG_S_STRINGTABLE		0xf3
+#define DEBUG_S_FILECHKSMS		0xf4
+
+#define CHKSUM_TYPE_NONE		0
+#define CHKSUM_TYPE_MD5			1
+#define CHKSUM_TYPE_SHA1		2
+#define CHKSUM_TYPE_SHA_256		3
 
 enum pdb_local_var_type
 {
@@ -175,6 +182,15 @@ struct pdb_type_tree_hasher : nofree_ptr_hash <struct pdb_type>
   }
 
   static inline bool equal (const value_type, compare_type);
+};
+
+struct pdb_source_file
+{
+  struct pdb_source_file *next;
+  uint8_t hash[16];
+  uint32_t str_offset;
+  unsigned int num;
+  char name[1];
 };
 
 enum pdb_x86_register
