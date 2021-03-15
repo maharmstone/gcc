@@ -2175,7 +2175,33 @@ get_tree_name (tree t)
   static const char anon_ns[] = "<anonymous>";
 
   if (TREE_CODE (t) == FUNCTION_DECL)
-    name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+    {
+      if (DECL_CXX_CONSTRUCTOR_P (t) || DECL_CXX_DESTRUCTOR_P (t))
+	{
+	  tree ctx = DECL_CONTEXT (t);
+	  const char *basename;
+
+	  if (!ctx || !TYPE_NAME (ctx)
+	      || TREE_CODE (TYPE_NAME (ctx)) != TYPE_DECL)
+	    return NULL;
+
+	  basename = IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (ctx)));
+
+	  if (DECL_CXX_CONSTRUCTOR_P (t))
+	    name = xstrdup (basename);
+	  else
+	    {
+	      name = (char *) xmalloc (strlen (basename) + 2);
+
+	      name[0] = '~';
+	      name[1] = 0;
+
+	      strcat (name, basename);
+	    }
+	}
+      else
+	name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+    }
   else if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == IDENTIFIER_NODE)
     name = xstrdup (IDENTIFIER_POINTER (TYPE_NAME (t)));
   else if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == TYPE_DECL
