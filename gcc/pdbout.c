@@ -84,7 +84,7 @@ static struct pdb_type *arglist_types = NULL;
 static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
 static struct pdb_type *modifier_types = NULL;
-static struct pdb_type *fieldlist_types = NULL;
+static struct pdb_type *fieldlist_types = NULL, *last_fieldlist_type = NULL;
 static struct pdb_type *struct_types = NULL, *last_struct_type = NULL;
 static struct pdb_type *enum_types = NULL;
 static struct pdb_type *bitfield_types = NULL;
@@ -911,6 +911,10 @@ write_fieldlist (struct pdb_fieldlist *fl)
 	    len += strlen (fl->entries[i].name);
 
 	  break;
+
+	case LF_INDEX:
+	  len += 6;
+	  break;
 	}
 
       if (len % 4 != 0)
@@ -1055,6 +1059,12 @@ write_fieldlist (struct pdb_fieldlist *fl)
 
 	    break;
 	  }
+
+	case LF_INDEX:
+	  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+	  fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].type->id);
+	  fprintf (asm_out_file, "\t.short\t0\n"); // padding
+	  break;
 	}
     }
 }
@@ -1753,12 +1763,149 @@ number_types (void)
     }
 }
 
+/* The maximum length for a type entry is 0xffff. If we have a fieldlist
+ * which would be more than that we need to split it, adding an LF_INDEX
+ * entry to point to the continuation entry. */
+static void
+split_large_fieldlists ()
+{
+  struct pdb_type *t = types;
+  struct pdb_type *prev = NULL;
+
+  while (t)
+    {
+      struct pdb_fieldlist *fl;
+      unsigned int len, max_len;
+      bool made_split = false;
+
+      if (t->cv_type != LF_FIELDLIST || !t->used)
+	{
+	  prev = t;
+	  t = t->next;
+	  continue;
+	}
+
+      fl = (struct pdb_fieldlist *) t->data;
+
+      /* Maximum length of 0xffff, minus 8 bytes for the LF_INDEX we might
+       * need to add, rounded down to multiple of 4. */
+      max_len = 0xfff4;
+      len = sizeof (uint16_t) + sizeof (uint16_t); // length + LF_FIELDLIST
+
+      for (int i = fl->count - 1; i >= 0; i--) {
+	  unsigned int delta;
+
+	  delta = 2; // LF_MEMBER, LF_ENUMERATE, or LF_INDEX
+
+	  switch (fl->entries[i].cv_type) {
+	    case LF_MEMBER:
+	      delta += 9;
+	      break;
+
+	    case LF_ENUMERATE:
+	      delta += 5;
+
+	      /* Positive values less than 0x8000 are stored as they are;
+	       * otherwise we prepend two bytes describing what type it is. */
+
+	      if (fl->entries[i].value >= 0x8000 || fl->entries[i].value < 0)
+		{
+		  if (fl->entries[i].value >= -127 && fl->entries[i].value < 0)
+		    delta++; 	// LF_CHAR
+		  else if (fl->entries[i].value >= -0x7fff &&
+			  fl->entries[i].value <= 0x7fff)
+		    {
+		      delta += 2;	// LF_SHORT
+		    }
+		  else if (fl->entries[i].value >= 0x8000 &&
+			  fl->entries[i].value <= 0xffff)
+		    {
+		      delta += 2;	// LF_USHORT
+		    }
+		  else if (fl->entries[i].value >= -0x7fffffff &&
+			  fl->entries[i].value <= 0x7fffffff)
+		    {
+		      delta += 4;	// LF_LONG
+		    }
+		  else if (fl->entries[i].value >= 0x80000000 &&
+			  fl->entries[i].value <= 0xffffffff)
+		    {
+		      delta += 4;	// LF_ULONG
+		    }
+		  else
+		    delta += 8;	// LF_QUADWORD or LF_UQUADWORD
+		}
+	      break;
+
+	    case LF_INDEX:
+	      delta += 6;
+	      break;
+	  }
+
+	  if (fl->entries[i].name)
+	    delta += strlen (fl->entries[i].name);
+
+	  if (delta % 4 != 0)
+	    delta += 4 - (delta % 4);
+
+	  if (len + delta > max_len)
+	    {
+	      struct pdb_type *t2;
+	      struct pdb_fieldlist *fl2;
+	      unsigned int num_entries = fl->count - i - 1;
+
+	      t2 =
+		(struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+			  offsetof (struct pdb_fieldlist, entries) +
+			  (num_entries * sizeof (struct pdb_fieldlist_entry)));
+	      t2->cv_type = LF_FIELDLIST;
+	      t2->next = t;
+	      t2->tree = NULL;
+	      t2->used = true;
+	      t2->id = 0;
+
+	      if (prev)
+		prev->next = t2;
+	      else
+		types = t2;
+
+	      fl2 = (struct pdb_fieldlist *) t2->data;
+	      fl2->count = num_entries;
+
+	      memcpy (fl2->entries, &fl->entries[i + 1],
+		      sizeof (struct pdb_fieldlist_entry) * num_entries);
+
+	      fl->entries[i + 1].cv_type = LF_INDEX;
+	      fl->entries[i + 1].type = t2;
+	      fl->entries[i + 1].name = NULL;
+
+	      fl->count = i + 2;
+
+	      made_split = true;
+	      prev = t2;
+
+	      break;
+	    }
+
+	  len += delta;
+      }
+
+      if (made_split) // might need to be split again
+	continue;
+
+      prev = t;
+      t = t->next;
+    }
+}
+
 /* We've finished compilation - output the .debug$S and .debug$T sections
  * to the asm file. */
 static void
 pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
 {
   mark_referenced_types_used ();
+
+  split_large_fieldlists ();
 
   number_types ();
 
@@ -2493,6 +2640,8 @@ add_type_fieldlist (struct pdb_type *t)
     last_entry->next2 = t;
   else
     fieldlist_types = t;
+
+  last_fieldlist_type = t;
 
   if (last_type)
     last_type->next = t;
