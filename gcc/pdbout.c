@@ -83,6 +83,7 @@ static struct pdb_type *pointer_types = NULL;
 static struct pdb_type *proc_types = NULL;
 static struct pdb_type *modifier_types = NULL;
 static struct pdb_type *fieldlist_types = NULL;
+static struct pdb_type *struct_types = NULL, *last_struct_type = NULL;
 static struct pdb_type *enum_types = NULL;
 static struct pdb_type *array_types = NULL;
 static struct pdb_alias *aliases = NULL;
@@ -105,6 +106,7 @@ static struct pdb_type *complex16_type, *complex32_type, *complex48_type,
 static struct pdb_type *void_type, *nullptr_type;
 static bool builtins_initialized = false;
 static hash_table <alias_hasher> alias_hash_table (31);
+static hash_table <struct_hasher> struct_hash_table (31);
 
 const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_init,
@@ -825,6 +827,17 @@ free_type (struct pdb_type *t)
 	break;
       }
 
+    case LF_CLASS:
+    case LF_STRUCTURE:
+      {
+	struct pdb_struct *str = (struct pdb_struct *) t->data;
+
+	if (str->name)
+	  free (str->name);
+
+	break;
+      }
+
     case LF_ENUM:
       {
 	struct pdb_enum *en = (struct pdb_enum *) t->data;
@@ -839,7 +852,8 @@ free_type (struct pdb_type *t)
   free (t);
 }
 
-/* Output a lfFieldlist structure, which describes the values of an enum. */
+/* Output a lfFieldlist structure, which describes the fields of a struct,
+ * class, or union, or the values of an enum. */
 static void
 write_fieldlist (struct pdb_fieldlist *fl)
 {
@@ -851,6 +865,10 @@ write_fieldlist (struct pdb_fieldlist *fl)
 
       switch (fl->entries[i].cv_type)
 	{
+	case LF_MEMBER:
+	  len += 9 + (fl->entries[i].name ? strlen (fl->entries[i].name) : 0);
+	  break;
+
 	case LF_ENUMERATE:
 	  len += 5;
 
@@ -904,6 +922,43 @@ write_fieldlist (struct pdb_fieldlist *fl)
 
       switch (fl->entries[i].cv_type)
 	{
+	case LF_MEMBER:
+	  {
+	    size_t name_len =
+	      fl->entries[i].name ? strlen (fl->entries[i].name) : 0;
+	    unsigned int align;
+
+	    fprintf (asm_out_file, "\t.short\t0x%x\n",
+		     fl->entries[i].fld_attr);
+	    fprintf (asm_out_file, "\t.short\t0x%x\n",
+		    fl->entries[i].type ? fl->entries[i].type->id : 0);
+	    fprintf (asm_out_file, "\t.short\t0\n");	// padding
+	    fprintf (asm_out_file, "\t.short\t0x%x\n", fl->entries[i].offset);
+
+	    if (fl->entries[i].name)
+	      ASM_OUTPUT_ASCII (asm_out_file, fl->entries[i].name,
+				name_len + 1);
+	    else
+	      fprintf (asm_out_file, "\t.byte\t0\n");
+
+	    // handle alignment padding
+
+	    align = 4 - ((3 + name_len) % 4);
+
+	    if (align != 4)
+	      {
+		if (align == 3)
+		  fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+		if (align >= 2)
+		  fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+		fprintf (asm_out_file, "\t.byte\t0xf1\n");
+	      }
+
+	    break;
+	  }
+
 	case LF_ENUMERATE:
 	  {
 	    size_t name_len =
@@ -997,6 +1052,48 @@ write_fieldlist (struct pdb_fieldlist *fl)
 	    break;
 	  }
 	}
+    }
+}
+
+/* Output a lfClass / lfStructure struct. */
+static void
+write_struct (uint16_t type, struct pdb_struct *str)
+{
+  size_t name_len = str->name ? strlen (str->name) : (sizeof (unnamed) - 1);
+  unsigned int len = 23 + name_len, align;
+
+  if (len % 4 != 0)
+    len += 4 - (len % 4);
+
+  fprintf (asm_out_file, "\t.short\t0x%x\n", len - 2);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", type);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->count);
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->property.value);
+  fprintf (asm_out_file, "\t.short\t0x%x\n",
+	   str->field_type ? str->field_type->id : 0);
+  fprintf (asm_out_file, "\t.short\t0\n");	// derived
+  fprintf (asm_out_file, "\t.short\t0\n");	// vshape
+  fprintf (asm_out_file, "\t.short\t0\n");
+  fprintf (asm_out_file, "\t.short\t0\n");
+  fprintf (asm_out_file, "\t.short\t0\n");
+  fprintf (asm_out_file, "\t.short\t0x%x\n", str->size);
+
+  if (str->name)
+    ASM_OUTPUT_ASCII (asm_out_file, str->name, name_len + 1);
+  else
+    ASM_OUTPUT_ASCII (asm_out_file, unnamed, sizeof (unnamed));
+
+  align = 4 - ((3 + name_len) % 4);
+
+  if (align != 4)
+    {
+      if (align == 3)
+	fprintf (asm_out_file, "\t.byte\t0xf3\n");
+
+      if (align >= 2)
+	fprintf (asm_out_file, "\t.byte\t0xf2\n");
+
+      fprintf (asm_out_file, "\t.byte\t0xf1\n");
     }
 }
 
@@ -1186,6 +1283,11 @@ write_type (struct pdb_type *t)
       write_fieldlist ((struct pdb_fieldlist *) t->data);
       break;
 
+    case LF_CLASS:
+    case LF_STRUCTURE:
+      write_struct (t->cv_type, (struct pdb_struct *) t->data);
+      break;
+
     case LF_ENUM:
       write_enum ((struct pdb_enum *) t->data);
       break;
@@ -1326,6 +1428,13 @@ get_tree_name (tree t)
 
   if (TREE_CODE (t) == FUNCTION_DECL)
     name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
+  else if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == IDENTIFIER_NODE)
+    name = xstrdup (IDENTIFIER_POINTER (TYPE_NAME (t)));
+  else if (TYPE_NAME (t) && TREE_CODE (TYPE_NAME (t)) == TYPE_DECL
+    && IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (t)))[0] != '.')
+    name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (TYPE_NAME (t))));
+  else if (DECL_NAME (t) && TREE_CODE (DECL_NAME (t)) == IDENTIFIER_NODE)
+    name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (t)));
   else
     return NULL;
 
@@ -1396,7 +1505,73 @@ pdbout_late_global_decl (tree var)
   global_vars = v;
 }
 
-/* Add a fieldlist, which is the basis of enums. */
+/* Allocate a pdb_type for a forward declaration for a struct. The debugger
+ * will resolve this automatically, by searching for a substantive
+ * struct definition with the same name. */
+static struct pdb_type *
+add_struct_forward_declaration (tree t, const char *name)
+{
+  struct pdb_type *strtype;
+  struct pdb_struct *str;
+
+  if (name)
+    {
+      strtype =
+	struct_hash_table.find_with_hash (name, struct_hasher::hash (name));
+
+      if (strtype)
+	return strtype;
+    }
+
+  strtype =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_struct));
+
+  if (TYPE_LANG_SPECIFIC (t) && CLASSTYPE_DECLARED_CLASS (t))
+    strtype->cv_type = LF_CLASS;
+  else
+    strtype->cv_type = LF_STRUCTURE;
+
+  strtype->tree = NULL;
+  strtype->next = strtype->next2 = NULL;
+  strtype->id = 0;
+
+  str = (struct pdb_struct *) strtype->data;
+  str->count = 0;
+  str->field_type = NULL;
+  str->size = 0;
+  str->property.value = 0;
+  str->property.s.fwdref = 1;
+  str->name = name ? xstrdup (name) : NULL;
+
+  if (last_struct_type)
+    last_struct_type->next2 = strtype;
+  else
+    struct_types = strtype;
+
+  last_struct_type = strtype;
+
+  if (last_type)
+    last_type->next = strtype;
+  else
+    types = strtype;
+
+  last_type = strtype;
+
+  if (name)
+    {
+      struct pdb_type **slot =
+	struct_hash_table.find_slot_with_hash (name,
+					       struct_hasher::hash (name),
+					       INSERT);
+      *slot = strtype;
+    }
+
+  return strtype;
+}
+
+/* Add a fieldlist - this type does double duty as the basis
+ * of both enums and structs. */
 static struct pdb_type *
 add_type_fieldlist (struct pdb_type *t)
 {
@@ -1425,7 +1600,20 @@ add_type_fieldlist (struct pdb_type *t)
 		  break;
 		}
 
-	      if (pfe1->cv_type == LF_ENUMERATE)
+	      if (pfe1->cv_type == LF_MEMBER)
+		{
+		  if (pfe1->type != pfe2->type ||
+		      pfe1->offset != pfe2->offset ||
+		      pfe1->fld_attr != pfe2->fld_attr ||
+		      ((pfe1->name || pfe2->name) &&
+		       (!pfe1->name || !pfe2->name ||
+			strcmp (pfe1->name, pfe2->name))))
+		    {
+		      same = false;
+		      break;
+		    }
+		}
+	      else if (pfe1->cv_type == LF_ENUMERATE)
 		{
 		  if (pfe1->value != pfe2->value ||
 		      ((pfe1->name || pfe2->name) &&
@@ -1475,6 +1663,278 @@ add_type_fieldlist (struct pdb_type *t)
   last_type = t;
 
   return t;
+}
+
+inline hashval_t
+struct_hasher::hash (struct_hasher::compare_type name)
+{
+  return htab_hash_string (name);
+}
+
+inline bool
+struct_hasher::equal (const value_type type, compare_type name)
+{
+  struct pdb_struct *str = (struct pdb_struct *) type->data;
+
+  return !strcmp (str->name, name);
+}
+
+/* For a given struct or class, allocate a new pdb_type and
+ * add it to the type list. */
+static struct pdb_type *
+find_type_struct (tree t)
+{
+  tree f;
+  struct pdb_type *fltype = NULL, *strtype, *fwddef = NULL,
+		  *last_entry = NULL;
+  struct pdb_fieldlist *fieldlist;
+  struct pdb_fieldlist_entry *ent;
+  struct pdb_struct *str;
+  unsigned int num_entries = 0;
+  bool new_fwddef = false;
+  char *name = get_tree_name (t);
+  uint16_t size =
+    TYPE_SIZE (t) ? (TREE_INT_CST_ELT (TYPE_SIZE (t), 0) / 8) : 0;
+  union pdb_property prop;
+  struct pdb_type **slot;
+
+  if (name)
+    {
+      strtype =
+	struct_hash_table.find_with_hash (name, struct_hasher::hash (name));
+
+      /* Use type found in hash map, unless this is a substantive definition
+       * replacing a forward declaration. */
+
+      if (strtype)
+	{
+	  str = (struct pdb_struct *) strtype->data;
+
+	  if (TYPE_SIZE (t) == 0 || str->property.s.fwdref != 1)
+	    return strtype;
+	}
+    }
+
+  f = TYPE_FIELDS (t);
+
+  while (f)
+    {
+      if (TREE_CODE (f) == FIELD_DECL && DECL_FIELD_OFFSET (f))
+	{
+	  if (DECL_NAME (f) && IDENTIFIER_POINTER (DECL_NAME (f)))
+	    num_entries++;
+	  else
+	    {			// anonymous field
+	      struct pdb_type *type = find_type (TREE_TYPE (f));
+
+	      if (type
+		  && (type->cv_type == LF_CLASS
+		      || type->cv_type == LF_STRUCTURE))
+		{
+		  struct pdb_struct *str2 = (struct pdb_struct *) type->data;
+
+		  if (str2->field_type)
+		    {
+		      struct pdb_fieldlist *fl =
+			(struct pdb_fieldlist *) str2->field_type->data;
+
+		      // count fields of anonymous struct or union as our own
+
+		      num_entries += fl->count;
+		    }
+		}
+	    }
+	}
+
+      f = TREE_CHAIN (f);
+    }
+
+  if (TYPE_SIZE (t) != 0)	// not forward declaration
+    {
+      fwddef = add_struct_forward_declaration (t, name);
+
+      if (!fwddef->tree)
+	{
+	  new_fwddef = true;
+	  fwddef->tree = t;
+
+	  slot =
+	    tree_hash_table.find_slot_with_hash (t,
+						 pdb_type_tree_hasher::
+						 hash (t), INSERT);
+	  *slot = fwddef;
+	}
+    }
+
+  if (num_entries > 0)
+    {
+      // add fieldlist type
+
+      fltype =
+	(struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				     offsetof (struct pdb_fieldlist,
+					       entries) +
+				     (num_entries *
+				      sizeof (struct pdb_fieldlist_entry)));
+      fltype->cv_type = LF_FIELDLIST;
+      fltype->tree = NULL;
+
+      fieldlist = (struct pdb_fieldlist *) fltype->data;
+      fieldlist->count = num_entries;
+
+      ent = fieldlist->entries;
+      f = TYPE_FIELDS (t);
+
+      while (f)
+	{
+	  if (TREE_CODE (f) == FIELD_DECL && DECL_FIELD_OFFSET (f))
+	    {
+	      unsigned int bit_offset =
+		(TREE_INT_CST_ELT (DECL_FIELD_OFFSET (f), 0) * 8) +
+		TREE_INT_CST_ELT (DECL_FIELD_BIT_OFFSET (f), 0);
+
+	      if (DECL_NAME (f) && IDENTIFIER_POINTER (DECL_NAME (f)))
+		{
+
+		  ent->cv_type = LF_MEMBER;
+		  ent->fld_attr = CV_FLDATTR_PUBLIC;
+		  ent->name = xstrdup (IDENTIFIER_POINTER (DECL_NAME (f)));
+
+		  ent->type = find_type (TREE_TYPE (f));
+		  ent->offset = bit_offset / 8;
+
+		  ent++;
+		}
+	      else		// anonymous field
+		{
+		  struct pdb_type *type = find_type (TREE_TYPE (f));
+
+		  if (type
+		      && (type->cv_type == LF_CLASS
+			  || type->cv_type == LF_STRUCTURE))
+		    {
+		      struct pdb_struct *str2 =
+			(struct pdb_struct *) type->data;
+
+		      if (str2->field_type)
+			{
+			  struct pdb_fieldlist *fl =
+			    (struct pdb_fieldlist *) str2->field_type->data;
+
+			  // treat fields of anonymous struct or union
+			  // as our own
+
+			  for (unsigned int i = 0; i < fl->count; i++)
+			    {
+			      ent->cv_type = fl->entries[i].cv_type;
+			      ent->type = fl->entries[i].type;
+			      ent->offset =
+				(bit_offset / 8) + fl->entries[i].offset;
+			      ent->fld_attr = fl->entries[i].fld_attr;
+			      ent->name =
+				fl->entries[i].name ?
+				xstrdup (fl->entries[i].name) : NULL;
+
+			      ent++;
+			    }
+			}
+		    }
+		}
+	    }
+
+	  f = TREE_CHAIN (f);
+	}
+
+      fltype = add_type_fieldlist (fltype);
+    }
+
+  // add type for struct
+
+  prop.value = 0;
+
+  if (!TYPE_SIZE (t))		// forward declaration
+    prop.s.fwdref = 1;
+
+  if (!name)
+    {
+      strtype = struct_types;
+      while (strtype)
+	{
+	  str = (struct pdb_struct *) strtype->data;
+
+	  if (str->count == num_entries &&
+	      str->field_type == fltype &&
+	      str->size == size &&
+	      str->property.value == prop.value &&
+	      !str->name)
+	    return strtype;
+
+	  last_entry = strtype;
+	  strtype = strtype->next2;
+	}
+    }
+  else
+    last_entry = last_struct_type;
+
+  strtype =
+    (struct pdb_type *) xmalloc (offsetof (struct pdb_type, data) +
+				 sizeof (struct pdb_struct));
+
+  if (TYPE_LANG_SPECIFIC (t) && CLASSTYPE_DECLARED_CLASS (t))
+    strtype->cv_type = LF_CLASS;
+  else
+    strtype->cv_type = LF_STRUCTURE;
+
+  if (TYPE_SIZE (t) != 0)	// not forward declaration
+    strtype->tree = t;
+  else
+    strtype->tree = NULL;
+
+  strtype->next = strtype->next2 = NULL;
+  strtype->id = 0;
+
+  str = (struct pdb_struct *) strtype->data;
+  str->count = num_entries;
+  str->field_type = fltype;
+  str->size = size;
+  str->property.value = prop.value;
+  str->name = name;
+
+  if (last_entry)
+    last_entry->next2 = strtype;
+  else
+    struct_types = strtype;
+
+  last_struct_type = strtype;
+
+  if (last_type)
+    last_type->next = strtype;
+  else
+    types = strtype;
+
+  last_type = strtype;
+
+  if (new_fwddef)
+    fwddef->tree = NULL;
+
+  if (strtype->tree)
+    {
+      slot =
+	tree_hash_table.find_slot_with_hash (t, htab_hash_pointer (t),
+					     INSERT);
+      *slot = strtype;
+    }
+
+  if (name)
+    {
+      slot =
+	struct_hash_table.find_slot_with_hash (name,
+					       struct_hasher::hash (name),
+					       INSERT);
+      *slot = strtype;
+    }
+
+  return strtype;
 }
 
 /* Given an array type t, allocate a new pdb_type and add it to the
@@ -2282,6 +2742,9 @@ find_type (tree t)
 
     case ARRAY_TYPE:
       return find_type_array (t);
+
+    case RECORD_TYPE:
+      return find_type_struct (t);
 
     case ENUMERAL_TYPE:
       return find_type_enum (t);

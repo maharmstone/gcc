@@ -39,7 +39,10 @@
 #define LF_FIELDLIST			0x1203
 #define LF_ENUMERATE			0x1502
 #define LF_ARRAY			0x1503
+#define LF_CLASS			0x1504
+#define LF_STRUCTURE			0x1505
 #define LF_ENUM				0x1507
+#define LF_MEMBER			0x150d
 #define LF_CHAR				0x8000
 #define LF_SHORT			0x8001
 #define LF_USHORT			0x8002
@@ -167,6 +170,37 @@ struct pdb_fieldlist
 {
   unsigned int count;
   struct pdb_fieldlist_entry entries[1];
+};
+
+union pdb_property
+{				// CV_prop_t in cvdump
+  struct
+  {
+    uint16_t packed:1;
+    uint16_t ctor:1;
+    uint16_t ovlops:1;
+    uint16_t isnested:1;
+    uint16_t cnested:1;
+    uint16_t opassign:1;
+    uint16_t opcast:1;
+    uint16_t fwdref:1;
+    uint16_t scoped:1;
+    uint16_t hasuniquename:1;
+    uint16_t sealed:1;
+    uint16_t hfa:2;
+    uint16_t intrinsic:1;
+    uint16_t mocom:2;
+  } s;
+  uint16_t value;
+};
+
+struct pdb_struct
+{
+  unsigned int count;
+  struct pdb_type *field_type;
+  uint16_t size;
+  union pdb_property property;
+  char *name;
 };
 
 struct pdb_enum
@@ -1282,6 +1316,23 @@ struct alias_hasher : nofree_ptr_hash <struct pdb_alias>
   static inline hashval_t hash (const value_type t)
   {
     return hash (t->tree);
+  }
+
+  static inline bool equal (const value_type, compare_type);
+};
+
+struct struct_hasher : nofree_ptr_hash <struct pdb_type>
+{
+  typedef struct pdb_type *value_type;
+  typedef const char *compare_type;
+
+  static inline hashval_t hash (compare_type);
+
+  static inline hashval_t hash (const value_type t)
+  {
+    struct pdb_struct *str = (struct pdb_struct *) t->data;
+
+    return hash (str->name);
   }
 
   static inline bool equal (const value_type, compare_type);
