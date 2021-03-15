@@ -73,6 +73,7 @@ static void pdbout_end_block (unsigned int line ATTRIBUTE_UNUSED,
 			      unsigned int blocknum);
 
 static struct pdb_type *find_type (tree t);
+static char *get_tree_name (tree t);
 
 static struct pdb_func *funcs = NULL, *cur_func = NULL;
 static struct pdb_block *cur_block = NULL;
@@ -1484,13 +1485,264 @@ pdbout_finish (const char *filename ATTRIBUTE_UNUSED)
   write_pdb_type_section ();
 }
 
+/* Reallocate the string n, adding the type name of arg and the character
+ * suffix.
+ * We can't use the C++ pretty printer for this as this file gets
+ * compiled into libbackend.a. */
+static void
+append_template_element (char **n, size_t *len, tree arg, char suffix)
+{
+  char *tmp;
+  char *name = *n;
+
+  switch (TREE_CODE (arg))
+    {
+    case RECORD_TYPE:
+    case UNION_TYPE:
+      {
+	char *s = get_tree_name (arg);
+
+	if (s)
+	  {
+	    size_t s_len = strlen (s);
+
+	    tmp = (char *) xmalloc (*len + s_len + 2);
+	    memcpy (tmp, name, *len);
+	    free (name);
+	    name = tmp;
+
+	    memcpy (&name[*len], s, s_len);
+	    name[*len + s_len] = suffix;
+	    name[*len + s_len + 1] = 0;
+	    *len += s_len + 1;
+
+	    free (s);
+	  }
+	else
+	  {
+	    tmp = (char *) xmalloc (*len + 3);
+	    memcpy (tmp, name, *len);
+	    free (name);
+	    name = tmp;
+
+	    name[*len] = '?';
+	    name[*len + 1] = suffix;
+	    name[*len + 2] = 0;
+	    *len += 2;
+	  }
+
+	break;
+      }
+
+    case INTEGER_TYPE:
+    case BOOLEAN_TYPE:
+    case REAL_TYPE:
+    case VOID_TYPE:
+    case NULLPTR_TYPE:
+    case ENUMERAL_TYPE:
+      {
+	const char *s;
+	size_t s_len;
+
+	if (TREE_CODE (arg) == NULLPTR_TYPE)
+	  s = "std::nullptr_t";
+	else
+	  s = IDENTIFIER_POINTER (TYPE_IDENTIFIER (arg));
+
+	s_len = strlen (s);
+
+	tmp = (char *) xmalloc (*len + s_len + 2);
+	memcpy (tmp, name, *len);
+	free (name);
+	name = tmp;
+
+	memcpy (&name[*len], s, s_len);
+	name[*len + s_len] = suffix;
+	name[*len + s_len + 1] = 0;
+	*len += s_len + 1;
+
+	break;
+      }
+
+    case POINTER_TYPE:
+      {
+	append_template_element (&name, len, TREE_TYPE (arg), '*');
+
+	tmp = (char *) xmalloc (*len + 2);
+	memcpy (tmp, name, *len);
+	free (name);
+	name = tmp;
+
+	name[*len] = suffix;
+	name[*len + 1] = 0;
+	(*len)++;
+
+	break;
+      }
+
+    case INTEGER_CST:
+      if (TREE_CODE (TREE_TYPE (arg)) == BOOLEAN_TYPE)
+	{
+	  if (TREE_INT_CST_ELT_CHECK (arg, 0) == 0)
+	    {
+	      static const char str[] = "false";
+
+	      tmp = (char *) xmalloc (*len + sizeof (str) + 2);
+	      memcpy (tmp, name, *len);
+	      free (name);
+	      name = tmp;
+
+	      memcpy (&name[*len], str, sizeof (str) - 1);
+	      name[*len + sizeof (str) - 1] = suffix;
+	      name[*len + sizeof (str)] = 0;
+	      *len += sizeof (str);
+	    }
+	  else
+	    {
+	      static const char str[] = "true";
+
+	      tmp = (char *) xmalloc (*len + sizeof (str) + 2);
+	      memcpy (tmp, name, *len);
+	      free (name);
+	      name = tmp;
+
+	      memcpy (&name[*len], str, sizeof (str) - 1);
+	      name[*len + sizeof (str) - 1] = suffix;
+	      name[*len + sizeof (str)] = 0;
+	      *len += sizeof (str);
+	    }
+	}
+      else
+	{
+	  char s[50];
+	  size_t s_len;
+
+	  if (TYPE_UNSIGNED (arg))
+	    sprintf (s, "%lu", TREE_INT_CST_ELT_CHECK (arg, 0));
+	  else
+	    sprintf (s, "%li", TREE_INT_CST_ELT_CHECK (arg, 0));
+
+	  s_len = strlen (s);
+
+	  tmp = (char *) xmalloc (*len + s_len + 2);
+	  memcpy (tmp, name, *len);
+	  free (name);
+	  name = tmp;
+
+	  memcpy (&name[*len], s, s_len);
+	  name[*len + s_len] = suffix;
+	  name[*len + s_len + 1] = 0;
+	  *len += s_len + 1;
+	}
+      break;
+
+    case REFERENCE_TYPE:
+      {
+	append_template_element (&name, len, TREE_TYPE (arg), '&');
+
+	tmp = (char *) xmalloc (*len + 2);
+	memcpy (tmp, name, *len);
+	free (name);
+	name = tmp;
+
+	name[*len] = suffix;
+	name[*len + 1] = 0;
+	(*len)++;
+
+	break;
+      }
+
+    case TYPE_ARGUMENT_PACK:
+      {
+	static const char str[] = "...";
+
+	tmp = (char *) xmalloc (*len + sizeof (str) + 2);
+	memcpy (tmp, name, *len);
+	free (name);
+	name = tmp;
+
+	memcpy (&name[*len], str, sizeof (str) - 1);
+	name[*len + sizeof (str) - 1] = suffix;
+	name[*len + sizeof (str)] = 0;
+	*len += sizeof (str);
+
+	break;
+      }
+
+    case FUNCTION_TYPE:
+      {
+	tree param = TYPE_ARG_TYPES (arg);
+
+	append_template_element (&name, len, TREE_TYPE (arg), '(');
+
+	if (!param || TREE_CODE (TREE_VALUE (param)) == VOID_TYPE)
+	  {
+	    tmp = (char *) xmalloc (*len + 3);
+	    memcpy (tmp, name, *len);
+	    free (name);
+	    name = tmp;
+
+	    name[*len] = ')';
+	    name[*len + 1] = suffix;
+	    name[*len + 2] = 0;
+
+	    *len += 2;
+	  }
+	else
+	  {
+	    while (param)
+	      {
+		if (TREE_CODE (TREE_VALUE (param)) == VOID_TYPE)
+		  break;
+
+		append_template_element (&name, len, TREE_VALUE (param),
+					 TREE_CHAIN (param)
+					 &&
+					 TREE_CODE (TREE_VALUE
+						    (TREE_CHAIN (param))) !=
+					 VOID_TYPE ? ',' : ')');
+
+		param = TREE_CHAIN (param);
+	      }
+
+	    tmp = (char *) xmalloc (*len + 2);
+	    memcpy (tmp, name, *len);
+	    free (name);
+	    name = tmp;
+
+	    name[*len] = suffix;
+	    name[*len + 1] = 0;
+
+	    (*len)++;
+	  }
+
+	break;
+      }
+
+    default:
+      tmp = (char *) xmalloc (*len + 3);
+      memcpy (tmp, name, *len);
+      free (name);
+      name = tmp;
+
+      name[*len] = '?';
+      name[*len + 1] = suffix;
+      name[*len + 2] = 0;
+      *len += 2;
+
+      break;
+    }
+
+  *n = name;
+}
+
 /* For a tree t, construct the name - namespaces, plus the
- * base name of the tree. */
+ * base name of the tree, plus the template information. */
 static char *
 get_tree_name (tree t)
 {
   char *name;
-  tree ns;
+  tree ns, tmpl, args;
 
   static const char anon_ns[] = "<anonymous>";
 
@@ -1588,6 +1840,96 @@ get_tree_name (tree t)
 
 	  name[s_len] = ':';
 	  name[s_len + 1] = ':';
+	}
+    }
+
+  /* Append template information */
+
+  if (TREE_CODE (t) == RECORD_TYPE && TYPE_LANG_SPECIFIC (t)
+      && CLASSTYPE_USE_TEMPLATE (t) && CLASSTYPE_TEMPLATE_INFO (t))
+    tmpl = CLASSTYPE_TEMPLATE_INFO (t);
+  else if (DECL_LANG_SPECIFIC (t) && DECL_USE_TEMPLATE (t)
+	   && DECL_TEMPLATE_INFO (t))
+    tmpl = DECL_TEMPLATE_INFO (t);
+  else
+    tmpl = NULL;
+
+  if (!tmpl || !PRIMARY_TEMPLATE_P (TI_TEMPLATE (tmpl)))
+    return name;
+
+  args = TI_ARGS (tmpl);
+
+  if (args)
+    {
+      size_t len = strlen (name);
+      char *tmp;
+      tree pack = NULL;
+
+      // If both scope and final part are templated, we're only interested
+      // in the final TREE_VEC.
+
+      if (TREE_VEC_LENGTH (args) > 0
+	  && TREE_CODE (TREE_VEC_ELT (args, 0)) == TREE_VEC)
+	args = TREE_VEC_ELT (args, TREE_VEC_LENGTH (args) - 1);
+
+      // If first element is a TYPE_ARGUMENT_PACK, extract the
+      // TREE_VEC from it.
+
+      if (TREE_VEC_LENGTH (args) > 0
+	  && TREE_CODE (TREE_VEC_ELT (args, 0)) == TYPE_ARGUMENT_PACK)
+	args = TREE_TYPE (TREE_VEC_ELT (args, 0));
+
+      if (TREE_VEC_LENGTH (args) == 0)
+	{
+	  tmp = (char *) xmalloc (len + 3);
+	  memcpy (tmp, name, len);
+	  free (name);
+
+	  tmp[len] = '<';
+	  tmp[len + 1] = '>';
+	  tmp[len + 2] = 0;
+
+	  return tmp;
+	}
+
+      tmp = (char *) xmalloc (len + 2);
+      memcpy (tmp, name, len);
+      free (name);
+      name = tmp;
+
+      name[len] = '<';
+      name[len + 1] = 0;
+      len++;
+
+      for (int i = 0; i < TREE_VEC_LENGTH (args); i++)
+	{
+	  if (TREE_CODE (TREE_VEC_ELT (args, i)) == TYPE_ARGUMENT_PACK)
+	    {
+	      pack = TREE_VEC_ELT (args, i);
+	      break;
+	    }
+
+	  append_template_element (&name, &len, TREE_VEC_ELT (args, i),
+				   ((int) i <
+				    TREE_VEC_LENGTH (args) - 1) ? ',' : '>');
+	}
+
+      if (pack)
+	{
+	  args = TREE_TYPE (pack);
+
+	  // If TYPE_ARGUMENT_PACK is last element but empty,
+	  // get rid of trailing comma
+	  if (TREE_VEC_LENGTH (args) == 0)
+	    name[strlen (name) - 1] = '>';
+
+	  for (int i = 0; i < TREE_VEC_LENGTH (args); i++)
+	    {
+	      append_template_element (&name, &len, TREE_VEC_ELT (args, i),
+				       ((int) i <
+					TREE_VEC_LENGTH (args) -
+					1) ? ',' : '>');
+	    }
 	}
     }
 
