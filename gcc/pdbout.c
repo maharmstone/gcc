@@ -71,6 +71,7 @@ static void pdbout_begin_block (unsigned int line ATTRIBUTE_UNUSED,
 				unsigned int blocknum);
 static void pdbout_end_block (unsigned int line ATTRIBUTE_UNUSED,
 			      unsigned int blocknum);
+static void pdbout_new_section (void);
 
 static struct pdb_type *find_type (tree t);
 static char *get_tree_name (tree t);
@@ -145,7 +146,7 @@ const struct gcc_debug_hooks pdb_debug_hooks = {
   pdbout_var_location,
   debug_nothing_tree,		/* inline_entry */
   debug_nothing_tree,		/* size_function */
-  debug_nothing_void,		/* switch_text_section */
+  pdbout_new_section,
   debug_nothing_tree_tree,	/* set_name */
   0,				/* start_end_main_source_file */
   TYPE_SYMTAB_IS_ADDRESS	/* tree_type_symtab_field */
@@ -157,8 +158,8 @@ pdbout_begin_prologue (unsigned int line ATTRIBUTE_UNUSED,
 		       unsigned int column ATTRIBUTE_UNUSED,
 		       const char *file ATTRIBUTE_UNUSED)
 {
-  fprintf (asm_out_file, FUNC_BEGIN_LABEL "%u:\n",
-	   current_function_funcdef_no);
+  fprintf (asm_out_file, FUNC_BEGIN_LABEL "%s%u:\n",
+	   in_cold_section_p ? "cold" : "", current_function_funcdef_no);
 }
 
 /* Add label after function end */
@@ -166,7 +167,8 @@ static void
 pdbout_end_epilogue (unsigned int line ATTRIBUTE_UNUSED,
 		     const char *file ATTRIBUTE_UNUSED)
 {
-  fprintf (asm_out_file, FUNC_END_LABEL "%u:\n", current_function_funcdef_no);
+  fprintf (asm_out_file, FUNC_END_LABEL "%s%u:\n",
+	   in_cold_section_p ? "cold" : "", current_function_funcdef_no);
 }
 
 /* Output DEFRANGESYMREGISTER or DEFRANGESYMREGISTERREL structure, describing
@@ -464,8 +466,8 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
 	}
       else
 	{
-	  fprintf (asm_out_file, "\t.long\t[.Lcvprocstart%u]-[.debug$S]\n",
-		   func->num);
+	  fprintf (asm_out_file, "\t.long\t[.Lcvprocstart%s%u]-[.debug$S]\n",
+		   func->cold ? "cold" : "", func->num);
 	}
 
       fprintf (asm_out_file, "\t.long\t[.Lcvblockend%u]-[.debug$S]\n",
@@ -497,61 +499,72 @@ pdbout_block (struct pdb_block *block, struct pdb_func *func)
 static void
 pdbout_proc32 (struct pdb_func *func)
 {
-  size_t name_len = func->name ? strlen (func->name) : 0;
-  uint16_t len = 40 + name_len, align;
+  /* Don't output function definition if it contains no lines. This can happen
+   * if the compiler creates a cold function consisting of just ud2. */
 
-  // start procedure
-
-  if (len % 4 != 0)
+  if (func->lines)
     {
-      align = 4 - (len % 4);
-      len += 4 - (len % 4);
+      size_t name_len = func->name ? strlen (func->name) : 0;
+      uint16_t len = 40 + name_len, align;
+
+
+      // start procedure
+
+      if (len % 4 != 0)
+	{
+	  align = 4 - (len % 4);
+	  len += 4 - (len % 4);
+	}
+      else
+	align = 0;
+
+      fprintf (asm_out_file, ".Lcvprocstart%s%u:\n",
+	      func->cold ? "cold" : "", func->num);
+      fprintf (asm_out_file, "\t.short\t0x%x\n",
+	      (uint16_t) (len - sizeof (uint16_t)));	// reclen
+      fprintf (asm_out_file, "\t.short\t0x%x\n",
+	      func->public_flag ? S_GPROC32 : S_LPROC32);
+      fprintf (asm_out_file, "\t.long\t0\n");	// pParent
+      fprintf (asm_out_file, "\t.long\t[.Lcvprocend%s%u]-[.debug$S]\n",
+	      func->cold ? "cold" : "", func->num);	// pEnd
+      fprintf (asm_out_file, "\t.long\t0\n");	// pNext
+      fprintf (asm_out_file,
+	      "\t.long\t[" FUNC_END_LABEL "%s%u]-[" FUNC_BEGIN_LABEL "%s%u]\n",
+	      func->cold ? "cold" : "", func->num,
+	      func->cold ? "cold" : "", func->num);	// len
+      fprintf (asm_out_file, "\t.long\t0\n");	// DbgStart
+      fprintf (asm_out_file, "\t.long\t0\n");	// DbgEnd
+      fprintf (asm_out_file, "\t.short\t0x%x\n",
+	       func->type ? func->type->id : 0);
+      fprintf (asm_out_file, "\t.short\t0\n");	// padding
+
+      fprintf (asm_out_file, "\t.secrel32\t" FUNC_BEGIN_LABEL "%s%u\n",
+	      func->cold ? "cold" : "", func->num);	// offset
+      fprintf (asm_out_file, "\t.secidx\t" FUNC_BEGIN_LABEL "%s%u\n",
+	      func->cold ? "cold" : "", func->num);	// section
+
+      fprintf (asm_out_file, "\t.byte\t0\n");	// flags
+
+      if (func->name)
+	ASM_OUTPUT_ASCII (asm_out_file, func->name, name_len + 1);
+      else
+	fprintf (asm_out_file, "\t.byte\t0\n");
+
+      for (unsigned int i = 0; i < align; i++)
+	{
+	  fprintf (asm_out_file, "\t.byte\t0\n");
+	}
+
+      pdbout_block (&func->block, func);
+
+      // end procedure
+
+      fprintf (asm_out_file, ".Lcvprocend%s%u:\n",
+	      func->cold ? "cold" : "", func->num);
+
+      fprintf (asm_out_file, "\t.short\t0x2\n");
+      fprintf (asm_out_file, "\t.short\t0x%x\n", S_END);
     }
-  else
-    align = 0;
-
-  fprintf (asm_out_file, ".Lcvprocstart%u:\n", func->num);
-  fprintf (asm_out_file, "\t.short\t0x%x\n",
-	   (uint16_t) (len - sizeof (uint16_t)));	// reclen
-  fprintf (asm_out_file, "\t.short\t0x%x\n",
-	   func->public_flag ? S_GPROC32 : S_LPROC32);
-  fprintf (asm_out_file, "\t.long\t0\n");	// pParent
-  fprintf (asm_out_file, "\t.long\t[.Lcvprocend%u]-[.debug$S]\n",
-	   func->num);	// pEnd
-  fprintf (asm_out_file, "\t.long\t0\n");	// pNext
-  fprintf (asm_out_file,
-	   "\t.long\t[" FUNC_END_LABEL "%u]-[" FUNC_BEGIN_LABEL "%u]\n",
-	   func->num, func->num);	// len
-  fprintf (asm_out_file, "\t.long\t0\n");	// DbgStart
-  fprintf (asm_out_file, "\t.long\t0\n");	// DbgEnd
-  fprintf (asm_out_file, "\t.short\t0x%x\n", func->type ? func->type->id : 0);
-  fprintf (asm_out_file, "\t.short\t0\n");	// padding
-
-  fprintf (asm_out_file, "\t.secrel32\t" FUNC_BEGIN_LABEL "%u\n",
-	   func->num);	// offset
-  fprintf (asm_out_file, "\t.secidx\t" FUNC_BEGIN_LABEL "%u\n",
-	   func->num);	// section
-
-  fprintf (asm_out_file, "\t.byte\t0\n");	// flags
-
-  if (func->name)
-    ASM_OUTPUT_ASCII (asm_out_file, func->name, name_len + 1);
-  else
-    fprintf (asm_out_file, "\t.byte\t0\n");
-
-  for (unsigned int i = 0; i < align; i++)
-    {
-      fprintf (asm_out_file, "\t.byte\t0\n");
-    }
-
-  pdbout_block (&func->block, func);
-
-  // end procedure
-
-  fprintf (asm_out_file, ".Lcvprocend%u:\n", func->num);
-
-  fprintf (asm_out_file, "\t.short\t0x2\n");
-  fprintf (asm_out_file, "\t.short\t0x%x\n", S_END);
 
   while (func->local_vars)
     {
@@ -657,15 +670,30 @@ write_line_numbers ()
 	{
 	  struct pdb_line *l, *last_line;
 	  unsigned int num_entries = 0, source_file, first_entry;
+	  section *sect;
 
 	  source_file = func->lines->source_file;
+	  sect = func->lines->sect;
 
 	  l = last_line = func->lines;
-	  while (l && l->source_file == source_file)
+	  while (l && l->source_file == source_file && l->sect == sect)
 	    {
 	      num_entries++;
 	      last_line = l;
 	      l = l->next;
+	    }
+
+	  /* If pdb_line has a NULL section, it's a sentinel at the end of
+	   * the current section - skip it and move on. */
+	  if (!sect)
+	    {
+	      struct pdb_line *n = func->lines->next;
+
+	      free (func->lines);
+
+	      func->lines = n;
+
+	      continue;
 	    }
 
 	  first_entry = func->lines->entry;
@@ -682,17 +710,19 @@ write_line_numbers ()
 
 	  fprintf (asm_out_file, "\t.short\t0\n");	// flags
 
-	  // next section of function is another source file
+	  // next part of function is another source file or section
 	  if (last_line->next)
 	    {
+	      // length
 	      fprintf (asm_out_file, "\t.long\t[.Lline%u]-[.Lline%u]\n",
-		       last_line->next->entry, first_entry);	// length
+		       last_line->next->entry, first_entry);
 	    }
 	  else
 	    {
+	      // length
 	      fprintf (asm_out_file,
-		       "\t.long\t[" FUNC_END_LABEL "%u]-[.Lline%u]\n",
-		       func->num, first_entry);	// length
+		       "\t.long\t[" FUNC_END_LABEL "%s%u]-[.Lline%u]\n",
+		       func->cold ? "cold" : "", func->num, first_entry);
 	    }
 
 	  // file ID (0x18 is size of checksum struct)
@@ -701,7 +731,7 @@ write_line_numbers ()
 	  // length of file block
 	  fprintf (asm_out_file, "\t.long\t0x%x\n", 0xc + (num_entries * 8));
 
-	  while (func->lines && func->lines->source_file == source_file)
+	  while (func->lines && func->lines->source_file == source_file && func->lines->sect == sect)
 	    {
 	      struct pdb_line *n = func->lines->next;
 
@@ -2406,6 +2436,7 @@ pdbout_begin_function (tree func)
   f->lines = f->last_line = NULL;
   f->local_vars = f->last_local_var = NULL;
   f->var_locs = f->last_var_loc = NULL;
+  f->cold = in_cold_section_p;
 
   f->block.next = NULL;
   f->block.parent = NULL;
@@ -4247,6 +4278,7 @@ pdbout_source_line (unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
   ent->line = line;
   ent->entry = num_line_number_entries;
   ent->source_file = source_file;
+  ent->sect = current_function_section ();
 
   if (cur_func->last_line)
     cur_func->last_line->next = ent;
@@ -4254,7 +4286,13 @@ pdbout_source_line (unsigned int line, unsigned int column ATTRIBUTE_UNUSED,
   cur_func->last_line = ent;
 
   if (!cur_func->lines)
-    cur_func->lines = ent;
+    {
+      if (cur_func->cold)
+	fprintf (asm_out_file, FUNC_BEGIN_LABEL "cold%u:\n",
+		 current_function_funcdef_no);
+
+      cur_func->lines = ent;
+    }
 
   fprintf (asm_out_file, ".Lline%u:\n", num_line_number_entries);
 
@@ -5148,6 +5186,9 @@ add_local (const char *name, tree t, struct pdb_type *type, rtx orig_rtl,
   size_t name_len = strlen (name);
   rtx rtl;
 
+  if (cur_func->cold)
+    return;
+
   plv =
     (struct pdb_local_var *) xmalloc (offsetof (struct pdb_local_var, name) +
 				      name_len + 1);
@@ -5286,7 +5327,7 @@ pdbout_var_location (rtx_insn * loc_note)
   tree var;
   struct pdb_var_location *var_loc;
 
-  if (!cur_func)
+  if (!cur_func || cur_func->cold)
     return;
 
   if (!NOTE_P (loc_note))
@@ -5399,4 +5440,73 @@ pdbout_end_block (unsigned int line ATTRIBUTE_UNUSED, unsigned int blocknum)
   fprintf (asm_out_file, ".Lblockend%u:\n", blocknum);
 
   cur_block = cur_block->parent;
+}
+
+/* We're switching sections mid-function - this happens when GCC moves part
+ * of a code path to .text.unlikely, such as an if block ending with abort().
+ * Create a new function with ".cold" at the end to accommodate this. */
+static void
+pdbout_new_section (void)
+{
+  struct pdb_line *ent;
+  struct pdb_func *f;
+
+  static const char cold_suf[] = ".cold";
+
+  if (!cur_func)
+    return;
+
+  // add line number for end of current section
+
+  ent = (struct pdb_line *) xmalloc (sizeof (struct pdb_line));
+
+  ent->next = NULL;
+  ent->line = 0;
+  ent->entry = num_line_number_entries;
+  ent->source_file = 0;
+  ent->sect = NULL;
+
+  if (cur_func->last_line)
+    cur_func->last_line->next = ent;
+
+  cur_func->last_line = ent;
+
+  if (!cur_func->lines)
+    cur_func->lines = ent;
+
+  fprintf (asm_out_file, ".Lline%u:\n", num_line_number_entries);
+
+  num_line_number_entries++;
+
+  // end current function
+
+  fprintf (asm_out_file, FUNC_END_LABEL "%u:\n", current_function_funcdef_no);
+
+  // start cold function
+
+  f = (struct pdb_func *) xmalloc (sizeof (struct pdb_func));
+
+  f->next = funcs;
+
+  f->name = (char *) xmalloc (strlen (cur_func->name) + sizeof (cold_suf));
+  strcpy (f->name, cur_func->name);
+  strcat (f->name, cold_suf);
+
+  f->num = current_function_funcdef_no;
+  f->public_flag = cur_func->public_flag;
+  f->type = cur_func->type;
+  f->lines = f->last_line = NULL;
+  f->local_vars = f->last_local_var = NULL;
+  f->var_locs = f->last_var_loc = NULL;
+  f->cold = in_cold_section_p;
+
+  f->block.next = NULL;
+  f->block.parent = NULL;
+  f->block.num = 0;
+  f->block.children = f->block.last_child = NULL;
+
+  funcs = f;
+
+  cur_func = f;
+  cur_block = &f->block;
 }
