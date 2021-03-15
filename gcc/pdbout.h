@@ -21,6 +21,7 @@
 #define GCC_PDBOUT_H 1
 
 #define S_END				0x0006
+#define LF_PROCEDURE			0x1008
 #define S_BLOCK32			0x1103
 #define S_REGISTER			0x1106
 #define S_BPREL32			0x110b
@@ -32,6 +33,7 @@
 #define S_LOCAL				0x113e
 #define S_DEFRANGE_REGISTER		0x1141
 #define S_DEFRANGE_REGISTER_REL		0x1145
+#define LF_ARGLIST			0x1201
 
 /* Format version as of MSVC 7 */
 #define CV_SIGNATURE_C13	4
@@ -122,6 +124,21 @@ struct pdb_global_var
   struct pdb_type *type;
 };
 
+struct pdb_arglist
+{
+  unsigned int count;
+  struct pdb_type *args[1];
+};
+
+struct pdb_proc
+{
+  struct pdb_type *return_type;
+  uint8_t calling_convention;
+  uint8_t attributes;
+  uint16_t num_args;
+  struct pdb_type *arg_list;
+};
+
 struct pdb_type
 {
   struct pdb_type *next;
@@ -178,6 +195,12 @@ struct pdb_type
 #define CV_TM_NPTR			1
 #define CV_TM_NPTR32			4
 #define CV_TM_NPTR64			6
+
+// from CV_call_e in cvdump
+#define CV_CALL_NEAR_C		0x00
+#define CV_CALL_NEAR_FAST	0x04
+#define CV_CALL_NEAR_STD	0x07
+#define CV_CALL_THISCALL	0x0b
 
 struct pdb_type_tree_hasher : nofree_ptr_hash <struct pdb_type>
 {
